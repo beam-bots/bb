@@ -1,0 +1,6 @@
+kind: template
+load: elixir-lib.yaml
+data:
+  nerves_enabled: false
+  nerves_artifact_enabled: false
+  hex_release_enabled: false
