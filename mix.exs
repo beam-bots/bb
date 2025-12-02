@@ -9,14 +9,17 @@ defmodule Kinetix.MixProject do
 
   def project do
     [
+      aliases: aliases(),
       app: :kinetix,
-      version: @version,
+      consolidate_protocols: Mix.env() == :prod,
+      deps: deps(),
       description: @moduledoc,
-      package: package(),
       docs: docs(),
       elixir: "~> 1.19",
+      elixirc_paths: elixirc_paths(Mix.env()),
+      package: package(),
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      version: @version
     ]
   end
 
@@ -45,16 +48,31 @@ defmodule Kinetix.MixProject do
     ]
   end
 
+  defp aliases do
+    [
+      "spark.formatter": "spark.formatter --extensions Kinetix.Dsl",
+      "spark.cheat_sheets": "spark.cheat_sheets --extensions Kinetix.Dsl"
+    ]
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:credo, "~> 1.7", only: [:dev, :test]},
-      {:dialyxir, "~> 1.4", only: [:dev, :test]},
-      {:ex_check, "~> 0.16", only: [:dev, :test]},
-      {:ex_doc, ">= 0.0.0", only: [:dev, :test]},
-      {:git_ops, "~> 2.9", only: [:dev, :test]},
-      {:igniter, "~> 0.6", only: [:dev, :test]},
-      {:mix_audit, "~> 2.1", only: [:dev, :test]}
+      {:ex_cldr_numbers, "~> 2.36"},
+      {:ex_cldr_units, "~> 3.0"},
+      {:spark, "~> 2.3"},
+
+      # dev/test
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},
+      {:ex_doc, ">= 0.0.0", only: [:dev, :test], runtime: false},
+      {:git_ops, "~> 2.9", only: [:dev, :test], runtime: false},
+      {:igniter, "~> 0.6", only: [:dev, :test], runtime: false},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
     ]
   end
+
+  defp elixirc_paths(env) when env in [:dev, :test], do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 end

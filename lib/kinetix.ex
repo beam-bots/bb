@@ -2,17 +2,5 @@ defmodule Kinetix do
   @moduledoc """
   Documentation for `Kinetix`.
   """
-
-  @doc """
-  Hello world.
-
-  ## Examples
-
-      iex> Kinetix.hello()
-      :world
-
-  """
-  def hello do
-    :world
-  end
+  use Spark.Dsl, default_extensions: [extensions: [Kinetix.Dsl]]
 end
