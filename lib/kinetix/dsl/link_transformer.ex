@@ -9,6 +9,16 @@ defmodule Kinetix.Dsl.LinkTransformer do
 
   @doc false
   @impl true
+  def after?(Kinetix.Dsl.DefaultNameTransformer), do: true
+  def after?(_), do: false
+
+  @doc false
+  @impl true
+  def before?(Kinetix.Dsl.SupervisorTransformer), do: true
+  def before?(_), do: false
+
+  @doc false
+  @impl true
   def transform(dsl) do
     dsl
     |> Transformer.get_entities([:robot])

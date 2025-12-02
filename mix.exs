@@ -60,6 +60,7 @@ defmodule Kinetix.MixProject do
     [
       {:ex_cldr_numbers, "~> 2.36"},
       {:ex_cldr_units, "~> 3.0"},
+      {:nx, "~> 0.10"},
       {:spark, "~> 2.3"},
 
       # dev/test

@@ -569,6 +569,7 @@ defmodule Kinetix.Dsl do
     transformers: [
       __MODULE__.DefaultNameTransformer,
       __MODULE__.LinkTransformer,
-      __MODULE__.SupervisorTransformer
+      __MODULE__.SupervisorTransformer,
+      __MODULE__.RobotTransformer
     ]
 end
