@@ -566,5 +566,9 @@ defmodule Kinetix.Dsl do
 
   use Spark.Dsl.Extension,
     sections: [@robot],
-    transformers: [__MODULE__.DefaultNameTransformer, __MODULE__.LinkTransformer]
+    transformers: [
+      __MODULE__.DefaultNameTransformer,
+      __MODULE__.LinkTransformer,
+      __MODULE__.SupervisorTransformer
+    ]
 end
