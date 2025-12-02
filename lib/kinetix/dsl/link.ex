@@ -7,6 +7,7 @@ defmodule Kinetix.Dsl.Link do
             name: nil,
             collisions: [],
             joints: [],
+            sensors: [],
             visual: nil,
             inertial: nil
 
@@ -18,6 +19,7 @@ defmodule Kinetix.Dsl.Link do
           name: atom,
           collisions: [Kinetix.Dsl.Collision.t()],
           joints: [Kinetix.Dsl.Joint.t()],
+          sensors: [Kinetix.Dsl.Sensor.t()],
           visual: Kinetix.Dsl.Visual.t(),
           inertial: nil | Kinetix.Dsl.Inertial.t()
         }

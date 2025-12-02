@@ -10,6 +10,7 @@ The DSL extension for describing robot properties and topologies.
 Describe universal robot properties
 
 ### Nested DSLs
+ * [settings](#robot-settings)
  * [link](#robot-link)
    * inertial
      * origin
@@ -29,11 +30,13 @@ Describe universal robot properties
      * cylinder
      * sphere
      * mesh
+   * sensor
  * [joint](#robot-joint)
    * origin
    * axis
    * dynamics
    * limit
+ * [sensor](#robot-sensor)
 
 
 
@@ -44,6 +47,24 @@ Describe universal robot properties
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#robot-name){: #robot-name } | `atom` |  | The name of the robot, defaults to the name of the defining module |
+
+
+### robot.settings
+System-wide settings
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`registry_module`](#robot-settings-registry_module){: #robot-settings-registry_module } | `module` | `Registry` | The registry module to use |
+| [`supervisor_module`](#robot-settings-supervisor_module){: #robot-settings-supervisor_module } | `module` | `Supervisor` | The supervisor module to use |
+
+
 
 
 
@@ -75,6 +96,7 @@ A kinematic link (ie solid body).
    * cylinder
    * sphere
    * mesh
+ * [sensor](#robot-link-sensor)
 
 
 
@@ -586,6 +608,34 @@ Target: `Kinetix.Dsl.Mesh`
 
 Target: `Kinetix.Dsl.Collision`
 
+### robot.link.sensor
+```elixir
+sensor name, child_spec
+```
+
+
+A sensor attached to the robot or a specific link.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-link-sensor-name){: #robot-link-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
+| [`child_spec`](#robot-link-sensor-child_spec){: #robot-link-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Sensor`
+
 
 
 
@@ -739,6 +789,34 @@ Target: `Kinetix.Dsl.Limit`
 ### Introspection
 
 Target: `Kinetix.Dsl.Joint`
+
+### robot.sensor
+```elixir
+sensor name, child_spec
+```
+
+
+A sensor attached to the robot or a specific link.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-sensor-name){: #robot-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
+| [`child_spec`](#robot-sensor-child_spec){: #robot-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Sensor`
 
 
 

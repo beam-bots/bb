@@ -1,0 +1,107 @@
+defmodule Kinetix.SensorTest do
+  use ExUnit.Case, async: true
+  alias Kinetix.Dsl.{Info, Link, Sensor}
+
+  describe "robot-level sensor" do
+    defmodule RobotLevelSensorRobot do
+      @moduledoc false
+      use Kinetix
+
+      robot do
+        link :base_link do
+        end
+
+        sensor :camera, MySensor
+      end
+    end
+
+    test "sensor defined at robot level" do
+      entities = Info.robot(RobotLevelSensorRobot)
+      sensor = Enum.find(entities, &is_struct(&1, Sensor))
+      assert sensor.name == :camera
+      assert sensor.child_spec == MySensor
+    end
+  end
+
+  describe "link-level sensor" do
+    defmodule LinkSensorRobot do
+      @moduledoc false
+      use Kinetix
+
+      robot do
+        link :base_link do
+          sensor :imu, {MySensor, frequency: 100}
+        end
+      end
+    end
+
+    test "sensor attached to link with module and args" do
+      [link] = Info.robot(LinkSensorRobot)
+      [sensor] = link.sensors
+      assert is_struct(sensor, Sensor)
+      assert sensor.name == :imu
+      assert sensor.child_spec == {MySensor, [frequency: 100]}
+    end
+  end
+
+  describe "multiple sensors" do
+    defmodule MultipleSensorsRobot do
+      @moduledoc false
+      use Kinetix
+
+      robot do
+        link :base_link do
+          sensor :imu, ImuSensor
+          sensor :gps, {GpsSensor, port: "/dev/ttyUSB0"}
+        end
+
+        sensor :camera, CameraSensor
+      end
+    end
+
+    test "multiple sensors on a single link" do
+      entities = Info.robot(MultipleSensorsRobot)
+      [link] = Enum.filter(entities, &is_struct(&1, Link))
+      assert length(link.sensors) == 2
+    end
+
+    test "sensors at both link and robot level" do
+      entities = Info.robot(MultipleSensorsRobot)
+      robot_sensors = Enum.filter(entities, &is_struct(&1, Sensor))
+      assert length(robot_sensors) == 1
+      assert hd(robot_sensors).name == :camera
+    end
+  end
+
+  describe "nested link sensors" do
+    defmodule NestedLinkSensorRobot do
+      @moduledoc false
+      use Kinetix
+
+      robot do
+        link :base_link do
+          sensor :base_sensor, BaseSensor
+
+          joint :joint1 do
+            type :fixed
+
+            link :child_link do
+              sensor :child_sensor, ChildSensor
+            end
+          end
+        end
+      end
+    end
+
+    test "sensors in nested links" do
+      [base_link] = Info.robot(NestedLinkSensorRobot)
+      assert length(base_link.sensors) == 1
+      assert hd(base_link.sensors).name == :base_sensor
+
+      [joint] = base_link.joints
+      child_link = joint.link
+      assert length(child_link.sensors) == 1
+      assert hd(child_link.sensors).name == :child_sensor
+    end
+  end
+end

@@ -460,6 +460,27 @@ defmodule Kinetix.Dsl do
     ]
   }
 
+  @sensor %Entity{
+    name: :sensor,
+    describe: "A sensor attached to the robot or a specific link.",
+    target: Kinetix.Dsl.Sensor,
+    identifier: :name,
+    args: [:name, :child_spec],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the sensor"
+      ],
+      child_spec: [
+        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
+        required: true,
+        doc:
+          "The child specification for the sensor process. Either a module or `{module, keyword_list}`"
+      ]
+    ]
+  }
+
   @link %Entity{
     name: :link,
     describe: """
@@ -470,7 +491,13 @@ defmodule Kinetix.Dsl do
     imports: [Kinetix.Unit],
     args: [:name],
     recursive_as: :link,
-    entities: [joints: [], inertial: [@inertial], visual: [@visual], collisions: [@collision]],
+    entities: [
+      joints: [],
+      inertial: [@inertial],
+      visual: [@visual],
+      collisions: [@collision],
+      sensors: [@sensor]
+    ],
     singleton_entity_keys: [:visual, :inertial],
     schema: [
       name: [
@@ -480,23 +507,41 @@ defmodule Kinetix.Dsl do
     ]
   }
 
-  @sections [
-    %Section{
-      name: :robot,
-      describe: "Describe universal robot properties",
-      entities: [@link, @joint],
-      imports: [Kinetix.Unit],
-      schema: [
-        name: [
-          type: :atom,
-          required: false,
-          doc: "The name of the robot, defaults to the name of the defining module"
-        ]
+  @settings %Section{
+    name: :settings,
+    describe: "System-wide settings",
+    schema: [
+      registry_module: [
+        type: :module,
+        doc: "The registry module to use",
+        required: false,
+        default: Registry
+      ],
+      supervisor_module: [
+        type: :module,
+        doc: "The supervisor module to use",
+        required: false,
+        default: Supervisor
       ]
-    }
-  ]
+    ]
+  }
+
+  @robot %Section{
+    name: :robot,
+    describe: "Describe universal robot properties",
+    entities: [@link, @joint, @sensor],
+    imports: [Kinetix.Unit],
+    sections: [@settings],
+    schema: [
+      name: [
+        type: :atom,
+        required: false,
+        doc: "The name of the robot, defaults to the name of the defining module"
+      ]
+    ]
+  }
 
   use Spark.Dsl.Extension,
-    sections: @sections,
+    sections: [@robot],
     transformers: [__MODULE__.DefaultNameTransformer, __MODULE__.LinkTransformer]
 end
