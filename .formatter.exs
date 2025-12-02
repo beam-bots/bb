@@ -1,4 +1,6 @@
 spark_locals_without_parens = [
+  actuator: 2,
+  actuator: 3,
   alpha: 1,
   axis: 0,
   axis: 1,

@@ -36,6 +36,8 @@ Describe universal robot properties
    * axis
    * dynamics
    * limit
+   * sensor
+   * actuator
  * [sensor](#robot-sensor)
 
 
@@ -614,7 +616,7 @@ sensor name, child_spec
 ```
 
 
-A sensor attached to the robot or a specific link.
+A sensor attached to the robot, a link, or a joint.
 
 
 
@@ -657,6 +659,8 @@ A kinematic joint between a parent link and a child link.
  * [axis](#robot-joint-axis)
  * [dynamics](#robot-joint-dynamics)
  * [limit](#robot-joint-limit)
+ * [sensor](#robot-joint-sensor)
+ * [actuator](#robot-joint-actuator)
 
 
 
@@ -783,6 +787,62 @@ Limits applied to joint movement
 
 Target: `Kinetix.Dsl.Limit`
 
+### robot.joint.sensor
+```elixir
+sensor name, child_spec
+```
+
+
+A sensor attached to the robot, a link, or a joint.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-joint-sensor-name){: #robot-joint-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
+| [`child_spec`](#robot-joint-sensor-child_spec){: #robot-joint-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Sensor`
+
+### robot.joint.actuator
+```elixir
+actuator name, child_spec
+```
+
+
+An actuator attached to a joint.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-joint-actuator-name){: #robot-joint-actuator-name .spark-required} | `atom` |  | A unique name for the actuator |
+| [`child_spec`](#robot-joint-actuator-child_spec){: #robot-joint-actuator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the actuator process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Actuator`
+
 
 
 
@@ -796,7 +856,7 @@ sensor name, child_spec
 ```
 
 
-A sensor attached to the robot or a specific link.
+A sensor attached to the robot, a link, or a joint.
 
 
 

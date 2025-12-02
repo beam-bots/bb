@@ -10,9 +10,11 @@ defmodule Kinetix.Dsl.Joint do
             axis: nil,
             link: nil,
             dynamics: nil,
-            limit: nil
+            limit: nil,
+            sensors: [],
+            actuators: []
 
-  alias Kinetix.Dsl.{Axis, Dynamics, Limit, Link, Origin}
+  alias Kinetix.Dsl.{Actuator, Axis, Dynamics, Limit, Link, Origin, Sensor}
   alias Spark.Dsl.Entity
 
   @type t :: %__MODULE__{
@@ -24,6 +26,8 @@ defmodule Kinetix.Dsl.Joint do
           axis: nil | Axis.t(),
           link: Link.t(),
           dynamics: nil | Dynamics.t(),
-          limit: nil | Limit.t()
+          limit: nil | Limit.t(),
+          sensors: [Sensor.t()],
+          actuators: [Actuator.t()]
         }
 end

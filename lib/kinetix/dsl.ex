@@ -141,6 +141,48 @@ defmodule Kinetix.Dsl do
     ]
   }
 
+  @sensor %Entity{
+    name: :sensor,
+    describe: "A sensor attached to the robot, a link, or a joint.",
+    target: Kinetix.Dsl.Sensor,
+    identifier: :name,
+    args: [:name, :child_spec],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the sensor"
+      ],
+      child_spec: [
+        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
+        required: true,
+        doc:
+          "The child specification for the sensor process. Either a module or `{module, keyword_list}`"
+      ]
+    ]
+  }
+
+  @actuator %Entity{
+    name: :actuator,
+    describe: "An actuator attached to a joint.",
+    target: Kinetix.Dsl.Actuator,
+    identifier: :name,
+    args: [:name, :child_spec],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the actuator"
+      ],
+      child_spec: [
+        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
+        required: true,
+        doc:
+          "The child specification for the actuator process. Either a module or `{module, keyword_list}`"
+      ]
+    ]
+  }
+
   @joint %Entity{
     name: :joint,
     describe: """
@@ -169,7 +211,9 @@ defmodule Kinetix.Dsl do
         }
       ],
       dynamics: [@dynamics],
-      limit: [@limit]
+      limit: [@limit],
+      sensors: [@sensor],
+      actuators: [@actuator]
     ],
     recursive_as: :joints,
     singleton_entity_keys: [:dynamics, :origin, :axis, :link, :limit],
@@ -456,27 +500,6 @@ defmodule Kinetix.Dsl do
         type: :atom,
         doc: "An optional name of the link geometry",
         required: false
-      ]
-    ]
-  }
-
-  @sensor %Entity{
-    name: :sensor,
-    describe: "A sensor attached to the robot or a specific link.",
-    target: Kinetix.Dsl.Sensor,
-    identifier: :name,
-    args: [:name, :child_spec],
-    schema: [
-      name: [
-        type: :atom,
-        required: true,
-        doc: "A unique name for the sensor"
-      ],
-      child_spec: [
-        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
-        required: true,
-        doc:
-          "The child specification for the sensor process. Either a module or `{module, keyword_list}`"
       ]
     ]
   }

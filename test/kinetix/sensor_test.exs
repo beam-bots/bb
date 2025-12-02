@@ -104,4 +104,81 @@ defmodule Kinetix.SensorTest do
       assert hd(child_link.sensors).name == :child_sensor
     end
   end
+
+  describe "joint-level sensor" do
+    defmodule JointSensorRobot do
+      @moduledoc false
+      use Kinetix
+
+      robot do
+        link :base_link do
+          joint :shoulder do
+            type :revolute
+
+            sensor :encoder, {Encoder, bus: :i2c1}
+
+            limit do
+              effort(~u(10 newton_meter))
+              velocity(~u(100 degree_per_second))
+            end
+
+            link :arm do
+            end
+          end
+        end
+      end
+    end
+
+    test "sensor attached to joint" do
+      [link] = Info.robot(JointSensorRobot)
+      [joint] = link.joints
+      [sensor] = joint.sensors
+      assert is_struct(sensor, Sensor)
+      assert sensor.name == :encoder
+      assert sensor.child_spec == {Encoder, [bus: :i2c1]}
+    end
+  end
+
+  describe "sensors on links, joints, and robot" do
+    defmodule MixedSensorsRobot do
+      @moduledoc false
+      use Kinetix
+
+      robot do
+        link :base_link do
+          sensor :link_sensor, LinkSensor
+
+          joint :shoulder do
+            type :revolute
+
+            sensor :joint_sensor, JointSensor
+
+            limit do
+              effort(~u(10 newton_meter))
+              velocity(~u(100 degree_per_second))
+            end
+
+            link :arm do
+            end
+          end
+        end
+
+        sensor :robot_sensor, RobotSensor
+      end
+    end
+
+    test "sensors at all levels" do
+      entities = Info.robot(MixedSensorsRobot)
+      [link] = Enum.filter(entities, &is_struct(&1, Link))
+      [robot_sensor] = Enum.filter(entities, &is_struct(&1, Sensor))
+
+      assert robot_sensor.name == :robot_sensor
+      assert length(link.sensors) == 1
+      assert hd(link.sensors).name == :link_sensor
+
+      [joint] = link.joints
+      assert length(joint.sensors) == 1
+      assert hd(joint.sensors).name == :joint_sensor
+    end
+  end
 end
