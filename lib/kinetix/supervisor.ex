@@ -45,6 +45,7 @@ defmodule Kinetix.Supervisor do
     entities = Info.robot(robot_module)
 
     registry_child = [{reg_mod, keys: :unique, name: Kinetix.Process.registry_name(robot_module)}]
+    pubsub_child = [{reg_mod, keys: :duplicate, name: Kinetix.PubSub.registry_name(robot_module)}]
 
     robot_sensor_children =
       entities
@@ -60,6 +61,6 @@ defmodule Kinetix.Supervisor do
         {Kinetix.LinkSupervisor, {robot_module, link, [], opts}}
       end)
 
-    registry_child ++ robot_sensor_children ++ link_children
+    registry_child ++ pubsub_child ++ robot_sensor_children ++ link_children
   end
 end
