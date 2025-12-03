@@ -613,12 +613,93 @@ defmodule Kinetix.Dsl do
     entities: [@controller]
   }
 
+  @command_argument %Entity{
+    name: :argument,
+    describe: "An argument for the command.",
+    target: Kinetix.Dsl.Command.Argument,
+    identifier: :name,
+    args: [:name, :type],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the argument"
+      ],
+      type: [
+        type: {:or, [:atom, :module]},
+        required: true,
+        doc: "The type of the argument (e.g., `:float`, `:integer`, `Kinetix.Pose`)"
+      ],
+      required: [
+        type: :boolean,
+        required: false,
+        default: false,
+        doc: "Whether this argument is required"
+      ],
+      default: [
+        type: :any,
+        required: false,
+        doc: "Default value if not provided"
+      ],
+      doc: [
+        type: :string,
+        required: false,
+        doc: "Documentation for the argument"
+      ]
+    ]
+  }
+
+  @command %Entity{
+    name: :command,
+    describe: """
+    A command that can be executed on the robot.
+
+    Commands follow the Goal → Feedback → Result pattern and integrate with
+    the robot's state machine to control when they can run.
+    """,
+    target: Kinetix.Dsl.Command,
+    identifier: :name,
+    args: [:name],
+    entities: [arguments: [@command_argument]],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the command"
+      ],
+      handler: [
+        type: :module,
+        required: true,
+        doc: "The handler module implementing the `Kinetix.Command` behaviour"
+      ],
+      timeout: [
+        type: {:or, [:pos_integer, {:in, [:infinity]}]},
+        required: false,
+        default: :infinity,
+        doc: "Timeout for command execution in milliseconds"
+      ],
+      allowed_states: [
+        type: {:list, :atom},
+        required: false,
+        default: [:idle],
+        doc:
+          "Robot states in which this command can run. If `:executing` is included, the command can preempt running commands."
+      ]
+    ]
+  }
+
+  @commands_section %Section{
+    name: :commands,
+    describe: "Robot commands with Goal → Feedback → Result semantics",
+    entities: [@command]
+  }
+
   @robot %Section{
     name: :robot,
     describe: "Describe universal robot properties",
     entities: [@link, @joint],
     imports: [Kinetix.Unit],
-    sections: [@settings, @robot_sensors_section, @controllers_section],
+    sections: [@settings, @robot_sensors_section, @controllers_section, @commands_section],
     schema: [
       name: [
         type: :atom,

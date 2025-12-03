@@ -6,7 +6,9 @@ defmodule Kinetix.Dsl.UniquenessTransformer do
   @moduledoc """
   Validates that all entity names are globally unique across the robot.
 
-  This includes links, joints, sensors, actuators, and controllers.
+  This includes links, joints, sensors, actuators, and controllers - all entities
+  that get registered in the process registry. Commands are not included since
+  they're not registered processes.
   """
   use Spark.Dsl.Transformer
   alias Kinetix.Dsl.{Controller, Joint, Link, Sensor}

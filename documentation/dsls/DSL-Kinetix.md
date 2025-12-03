@@ -15,6 +15,9 @@ Describe universal robot properties
    * sensor
  * [controllers](#robot-controllers)
    * controller
+ * [commands](#robot-commands)
+   * command
+     * argument
  * [link](#robot-link)
    * inertial
      * origin
@@ -149,6 +152,91 @@ A controller process at the robot level.
 ### Introspection
 
 Target: `Kinetix.Dsl.Controller`
+
+
+### robot.commands
+Robot commands with Goal → Feedback → Result semantics
+
+### Nested DSLs
+ * [command](#robot-commands-command)
+   * argument
+
+
+
+
+
+### robot.commands.command
+```elixir
+command name
+```
+
+
+A command that can be executed on the robot.
+
+Commands follow the Goal → Feedback → Result pattern and integrate with
+the robot's state machine to control when they can run.
+
+
+### Nested DSLs
+ * [argument](#robot-commands-command-argument)
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-commands-command-name){: #robot-commands-command-name .spark-required} | `atom` |  | A unique name for the command |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`handler`](#robot-commands-command-handler){: #robot-commands-command-handler .spark-required} | `module` |  | The handler module implementing the `Kinetix.Command` behaviour |
+| [`timeout`](#robot-commands-command-timeout){: #robot-commands-command-timeout } | `pos_integer \| :infinity` | `:infinity` | Timeout for command execution in milliseconds |
+| [`allowed_states`](#robot-commands-command-allowed_states){: #robot-commands-command-allowed_states } | `list(atom)` | `[:idle]` | Robot states in which this command can run. If `:executing` is included, the command can preempt running commands. |
+
+
+### robot.commands.command.argument
+```elixir
+argument name, type
+```
+
+
+An argument for the command.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-commands-command-argument-name){: #robot-commands-command-argument-name .spark-required} | `atom` |  | A unique name for the argument |
+| [`type`](#robot-commands-command-argument-type){: #robot-commands-command-argument-type .spark-required} | `atom \| module` |  | The type of the argument (e.g., `:float`, `:integer`, `Kinetix.Pose`) |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`required`](#robot-commands-command-argument-required){: #robot-commands-command-argument-required } | `boolean` | `false` | Whether this argument is required |
+| [`default`](#robot-commands-command-argument-default){: #robot-commands-command-argument-default } | `any` |  | Default value if not provided |
+| [`doc`](#robot-commands-command-argument-doc){: #robot-commands-command-argument-doc } | `String.t` |  | Documentation for the argument |
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Command.Argument`
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Command`
 
 
 
