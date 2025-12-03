@@ -716,6 +716,7 @@ defmodule Kinetix.Dsl do
       __MODULE__.LinkTransformer,
       __MODULE__.SupervisorTransformer,
       __MODULE__.UniquenessTransformer,
-      __MODULE__.RobotTransformer
+      __MODULE__.RobotTransformer,
+      __MODULE__.CommandTransformer
     ]
 end

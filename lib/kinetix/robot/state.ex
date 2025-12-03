@@ -218,8 +218,30 @@ defmodule Kinetix.Robot.State do
     end
   end
 
+  @doc """
+  Get the current robot state machine state.
+
+  Returns the state atom (e.g., `:disarmed`, `:idle`, `:executing`).
+  """
+  @spec get_robot_state(t()) :: atom()
+  def get_robot_state(%__MODULE__{table: table}) do
+    case :ets.lookup(table, :robot_state) do
+      [{:robot_state, state}] -> state
+      [] -> :disarmed
+    end
+  end
+
+  @doc """
+  Set the robot state machine state.
+  """
+  @spec set_robot_state(t(), atom()) :: :ok
+  def set_robot_state(%__MODULE__{table: table}, state) when is_atom(state) do
+    :ets.insert(table, {:robot_state, state})
+    :ok
+  end
+
   defp initialise_joints(%__MODULE__{table: table, robot: robot}) do
-    entries =
+    joint_entries =
       robot.joints
       |> Map.keys()
       |> Enum.flat_map(fn joint_name ->
@@ -229,6 +251,7 @@ defmodule Kinetix.Robot.State do
         ]
       end)
 
+    entries = [{:robot_state, :disarmed} | joint_entries]
     :ets.insert(table, entries)
   end
 end
