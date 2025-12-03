@@ -48,20 +48,24 @@ defmodule Kinetix.Command do
         end
 
         @impl true
-        def handle_execute(robot_state, state) do
-          # Start navigation
+        def handle_execute(robot_state, runtime, state) do
+          # Spawn async navigation work that reports back to runtime
+          Task.start(fn ->
+            result = navigate_to(state.target)
+            send(runtime, {:navigation_complete, result})
+          end)
           {:executing, state}
         end
 
         @impl true
-        def handle_cancel(robot_state, state) do
+        def handle_cancel(robot_state, runtime, state) do
           # Gracefully stop
           {:canceled, :stopped, state}
         end
 
         @impl true
-        def handle_info(:arrived, robot_state, state) do
-          {:succeeded, :arrived, state}
+        def handle_info({:navigation_complete, result}, robot_state, runtime, state) do
+          {:succeeded, result, state}
         end
       end
   """
@@ -98,14 +102,15 @@ defmodule Kinetix.Command do
   Begin executing the accepted goal.
 
   Called after the goal is accepted. The handler should start any async work
-  needed to achieve the goal.
+  needed to achieve the goal. The `runtime` pid is provided so handlers can
+  spawn processes that send messages back for processing via `handle_info/4`.
 
   Returns:
   - `{:executing, new_state}` - Execution in progress, wait for handle_info
   - `{:succeeded, result, new_state}` - Immediately completed successfully
   - `{:aborted, reason, new_state}` - Failed to start execution
   """
-  @callback handle_execute(RobotState.t(), handler_state()) ::
+  @callback handle_execute(RobotState.t(), runtime :: pid(), handler_state()) ::
               {:executing, handler_state()}
               | {:succeeded, result(), handler_state()}
               | {:aborted, reason(), handler_state()}
@@ -114,14 +119,15 @@ defmodule Kinetix.Command do
   Handle a cancellation request.
 
   Called when the caller requests cancellation. The handler should begin
-  graceful shutdown of the command.
+  graceful shutdown of the command. The `runtime` pid is provided for
+  spawning async cleanup work.
 
   Returns:
   - `{:canceling, new_state}` - Starting cancellation, wait for handle_info
   - `{:canceled, result, new_state}` - Immediately cancelled
   - `{:aborted, reason, new_state}` - Cannot cancel cleanly, aborted instead
   """
-  @callback handle_cancel(RobotState.t(), handler_state()) ::
+  @callback handle_cancel(RobotState.t(), runtime :: pid(), handler_state()) ::
               {:canceling, handler_state()}
               | {:canceled, result(), handler_state()}
               | {:aborted, reason(), handler_state()}
@@ -129,8 +135,10 @@ defmodule Kinetix.Command do
   @doc """
   Handle async messages during execution.
 
-  Called for any messages sent to the command handler during execution.
-  Use this to process sensor data, timer events, or completion notifications.
+  Called for any messages sent to the runtime during command execution.
+  Use this to process sensor data, timer events, or completion notifications
+  from spawned processes. The `runtime` pid is provided for spawning
+  additional async work if needed.
 
   Returns:
   - `{:executing, new_state}` - Still executing
@@ -138,7 +146,7 @@ defmodule Kinetix.Command do
   - `{:aborted, reason, new_state}` - Failed during execution
   - `{:canceled, result, new_state}` - Cancellation completed (only valid when canceling)
   """
-  @callback handle_info(msg :: term(), RobotState.t(), handler_state()) ::
+  @callback handle_info(msg :: term(), RobotState.t(), runtime :: pid(), handler_state()) ::
               {:executing, handler_state()}
               | {:succeeded, result(), handler_state()}
               | {:aborted, reason(), handler_state()}

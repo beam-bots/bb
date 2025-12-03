@@ -240,7 +240,7 @@ defmodule Kinetix.Robot.Runtime do
   def handle_info(msg, %{current_execution: %Execution{} = exec} = state) do
     {handler_mod, handler_state} = Map.fetch!(state.handlers, exec.command_name)
 
-    case handler_mod.handle_info(msg, state.robot_state, handler_state) do
+    case handler_mod.handle_info(msg, state.robot_state, self(), handler_state) do
       {:executing, new_handler_state} ->
         state = update_handler_state(state, exec.command_name, new_handler_state)
         {:noreply, state}
@@ -318,7 +318,7 @@ defmodule Kinetix.Robot.Runtime do
   end
 
   defp start_execution(state, exec, handler_mod, handler_state) do
-    case handler_mod.handle_execute(state.robot_state, handler_state) do
+    case handler_mod.handle_execute(state.robot_state, self(), handler_state) do
       {:executing, new_handler_state} ->
         exec = %{exec | status: :executing, handler_state: new_handler_state}
         state = update_handler_state(state, exec.command_name, new_handler_state)
@@ -349,7 +349,7 @@ defmodule Kinetix.Robot.Runtime do
     exec = state.current_execution
     {handler_mod, handler_state} = Map.fetch!(state.handlers, exec.command_name)
 
-    case handler_mod.handle_cancel(state.robot_state, handler_state) do
+    case handler_mod.handle_cancel(state.robot_state, self(), handler_state) do
       {:canceling, new_handler_state} ->
         exec = %{exec | status: :canceling}
         state = update_handler_state(state, exec.command_name, new_handler_state)
