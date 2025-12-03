@@ -24,18 +24,18 @@ defmodule Kinetix.ControllerTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        controllers do
-          controller(:path_follower, Kinetix.ControllerTest.TestGenServer)
-        end
+      controllers do
+        controller(:path_follower, Kinetix.ControllerTest.TestGenServer)
+      end
 
+      topology do
         link :base_link do
         end
       end
     end
 
     test "controller defined at robot level" do
-      controllers = Info.robot_controllers(SingleControllerRobot)
+      controllers = Info.controllers(SingleControllerRobot)
       assert length(controllers) == 1
 
       [controller] = controllers
@@ -50,18 +50,18 @@ defmodule Kinetix.ControllerTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        controllers do
-          controller(:velocity_smoother, {Kinetix.ControllerTest.TestGenServer, max_accel: 1.0})
-        end
+      controllers do
+        controller(:velocity_smoother, {Kinetix.ControllerTest.TestGenServer, max_accel: 1.0})
+      end
 
+      topology do
         link :base_link do
         end
       end
     end
 
     test "controller with module and args" do
-      [controller] = Info.robot_controllers(ControllerWithOptionsRobot)
+      [controller] = Info.controllers(ControllerWithOptionsRobot)
       assert controller.name == :velocity_smoother
       assert controller.child_spec == {Kinetix.ControllerTest.TestGenServer, [max_accel: 1.0]}
     end
@@ -72,19 +72,19 @@ defmodule Kinetix.ControllerTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        controllers do
-          controller(:path_follower, Kinetix.ControllerTest.TestGenServer)
-          controller(:velocity_smoother, {Kinetix.ControllerTest.TestGenServer, max_accel: 1.0})
-        end
+      controllers do
+        controller(:path_follower, Kinetix.ControllerTest.TestGenServer)
+        controller(:velocity_smoother, {Kinetix.ControllerTest.TestGenServer, max_accel: 1.0})
+      end
 
+      topology do
         link :base_link do
         end
       end
     end
 
     test "multiple controllers defined" do
-      controllers = Info.robot_controllers(MultipleControllersRobot)
+      controllers = Info.controllers(MultipleControllersRobot)
       assert length(controllers) == 2
 
       names = Enum.map(controllers, & &1.name)
@@ -98,11 +98,11 @@ defmodule Kinetix.ControllerTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        controllers do
-          controller(:test_controller, {Kinetix.ControllerTest.TestGenServer, value: 42})
-        end
+      controllers do
+        controller(:test_controller, {Kinetix.ControllerTest.TestGenServer, value: 42})
+      end
 
+      topology do
         link :base_link do
         end
       end
@@ -133,15 +133,15 @@ defmodule Kinetix.ControllerTest do
         defmodule ControllerSensorSameName do
           use Kinetix
 
-          robot do
-            robot_sensors do
-              sensor :duplicate, Kinetix.ControllerTest.TestGenServer
-            end
+          sensors do
+            sensor :duplicate, Kinetix.ControllerTest.TestGenServer
+          end
 
-            controllers do
-              controller(:duplicate, Kinetix.ControllerTest.TestGenServer)
-            end
+          controllers do
+            controller(:duplicate, Kinetix.ControllerTest.TestGenServer)
+          end
 
+          topology do
             link :base_link do
             end
           end
@@ -154,11 +154,11 @@ defmodule Kinetix.ControllerTest do
         defmodule ControllerLinkSameName do
           use Kinetix
 
-          robot do
-            controllers do
-              controller(:base_link, Kinetix.ControllerTest.TestGenServer)
-            end
+          controllers do
+            controller(:base_link, Kinetix.ControllerTest.TestGenServer)
+          end
 
+          topology do
             link :base_link do
             end
           end

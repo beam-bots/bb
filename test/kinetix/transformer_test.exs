@@ -11,14 +11,14 @@ defmodule Kinetix.TransformerTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link do
         end
       end
     end
 
     test "links without names get auto-named" do
-      [link] = Info.robot(AutoNamedLinkRobot)
+      [link] = Info.topology(AutoNamedLinkRobot)
       assert link.name == :link_0
     end
 
@@ -26,7 +26,7 @@ defmodule Kinetix.TransformerTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base do
           joint do
             type :fixed
@@ -37,7 +37,7 @@ defmodule Kinetix.TransformerTest do
     end
 
     test "joints without names get auto-named" do
-      [link] = Info.robot(AutoNamedJointRobot)
+      [link] = Info.topology(AutoNamedJointRobot)
       [joint] = link.joints
       assert joint.name == :joint_0
     end
@@ -50,7 +50,7 @@ defmodule Kinetix.TransformerTest do
           @moduledoc false
           use Kinetix
 
-          robot do
+          topology do
             link :link_a
             link :link_b
           end
@@ -66,7 +66,7 @@ defmodule Kinetix.TransformerTest do
           @moduledoc false
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               joint :orphan do
                 type :fixed
@@ -85,7 +85,7 @@ defmodule Kinetix.TransformerTest do
           @moduledoc false
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               joint :j1 do
                 type :revolute
@@ -103,7 +103,7 @@ defmodule Kinetix.TransformerTest do
           @moduledoc false
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               joint :j1 do
                 type :prismatic
@@ -125,7 +125,7 @@ defmodule Kinetix.TransformerTest do
                        @moduledoc false
                        use Kinetix
 
-                       robot do
+                       topology do
                          link :base do
                            joint :j1 do
                              type :revolute
@@ -155,7 +155,7 @@ defmodule Kinetix.TransformerTest do
                        @moduledoc false
                        use Kinetix
 
-                       robot do
+                       topology do
                          link :base do
                            joint :j1 do
                              type :prismatic
@@ -185,7 +185,7 @@ defmodule Kinetix.TransformerTest do
                        @moduledoc false
                        use Kinetix
 
-                       robot do
+                       topology do
                          link :base do
                            joint :j1 do
                              type :fixed
@@ -210,7 +210,7 @@ defmodule Kinetix.TransformerTest do
           @moduledoc false
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               joint :j1 do
                 type :revolute
@@ -236,7 +236,7 @@ defmodule Kinetix.TransformerTest do
           @moduledoc false
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               joint :j1 do
                 type :prismatic
@@ -264,7 +264,7 @@ defmodule Kinetix.TransformerTest do
           @moduledoc false
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               visual do
                 box do
@@ -296,7 +296,7 @@ defmodule Kinetix.TransformerTest do
           @moduledoc false
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               visual do
                 box do

@@ -12,7 +12,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           inertial do
             mass(~u(1.5 kilogram))
@@ -37,13 +37,13 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "inertial with mass compiles" do
-      [link] = Info.robot(InertialRobot)
+      [link] = Info.topology(InertialRobot)
       assert is_struct(link.inertial, Inertial)
       assert link.inertial.mass == ~u(1.5 kilogram)
     end
 
     test "inertial with origin (centre of mass offset)" do
-      [link] = Info.robot(InertialRobot)
+      [link] = Info.topology(InertialRobot)
       assert is_struct(link.inertial.origin, Origin)
       assert link.inertial.origin.x == ~u(0.1 meter)
       assert link.inertial.origin.y == ~u(0.2 meter)
@@ -51,7 +51,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "inertial with full inertia tensor" do
-      [link] = Info.robot(InertialRobot)
+      [link] = Info.topology(InertialRobot)
       assert is_struct(link.inertial.inertia, Inertia)
       assert link.inertial.inertia.ixx == ~u(0.001 kilogram_square_meter)
       assert link.inertial.inertia.iyy == ~u(0.002 kilogram_square_meter)
@@ -63,7 +63,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           inertial do
             mass(~u(2 kilogram))
@@ -73,7 +73,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "inertial without origin compiles" do
-      [link] = Info.robot(InertialWithoutOriginRobot)
+      [link] = Info.topology(InertialWithoutOriginRobot)
       assert is_struct(link.inertial, Inertial)
       assert link.inertial.mass == ~u(2 kilogram)
       assert is_nil(link.inertial.origin)
@@ -85,7 +85,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           visual do
             origin do
@@ -103,7 +103,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "visual with box geometry" do
-      [link] = Info.robot(VisualBoxRobot)
+      [link] = Info.topology(VisualBoxRobot)
       assert is_struct(link.visual, Visual)
       assert link.visual.geometry.x == ~u(0.1 meter)
       assert link.visual.geometry.y == ~u(0.2 meter)
@@ -111,7 +111,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "visual with origin offset" do
-      [link] = Info.robot(VisualBoxRobot)
+      [link] = Info.topology(VisualBoxRobot)
       assert link.visual.origin.z == ~u(0.05 meter)
     end
 
@@ -119,7 +119,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           visual do
             cylinder do
@@ -132,7 +132,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "visual with cylinder geometry" do
-      [link] = Info.robot(VisualCylinderRobot)
+      [link] = Info.topology(VisualCylinderRobot)
       assert link.visual.geometry.radius == ~u(0.05 meter)
       assert link.visual.geometry.height == ~u(0.3 meter)
     end
@@ -141,7 +141,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           visual do
             sphere do
@@ -153,7 +153,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "visual with sphere geometry" do
-      [link] = Info.robot(VisualSphereRobot)
+      [link] = Info.topology(VisualSphereRobot)
       assert link.visual.geometry.radius == ~u(0.1 meter)
     end
 
@@ -161,7 +161,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           visual do
             mesh do
@@ -174,7 +174,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "visual with mesh geometry" do
-      [link] = Info.robot(VisualMeshRobot)
+      [link] = Info.topology(VisualMeshRobot)
       assert link.visual.geometry.filename == "meshes/base_link.stl"
       assert link.visual.geometry.scale == 0.001
     end
@@ -183,7 +183,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           visual do
             box do
@@ -208,12 +208,12 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "visual with material (name only)" do
-      [link] = Info.robot(VisualWithMaterialRobot)
+      [link] = Info.topology(VisualWithMaterialRobot)
       assert link.visual.material.name == :steel
     end
 
     test "visual with material and colour" do
-      [link] = Info.robot(VisualWithMaterialRobot)
+      [link] = Info.topology(VisualWithMaterialRobot)
       assert link.visual.material.color.red == 0.8
       assert link.visual.material.color.green == 0.8
       assert link.visual.material.color.blue == 0.8
@@ -224,7 +224,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           visual do
             box do
@@ -246,7 +246,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "visual with material and texture" do
-      [link] = Info.robot(VisualWithTextureRobot)
+      [link] = Info.topology(VisualWithTextureRobot)
       assert link.visual.material.texture.filename == "textures/wood.png"
     end
   end
@@ -256,7 +256,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           collision do
             name :base_collision
@@ -276,26 +276,26 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "single collision geometry" do
-      [link] = Info.robot(SingleCollisionRobot)
+      [link] = Info.topology(SingleCollisionRobot)
       assert length(link.collisions) == 1
       [collision] = link.collisions
       assert is_struct(collision, Collision)
     end
 
     test "collision with explicit name" do
-      [link] = Info.robot(SingleCollisionRobot)
+      [link] = Info.topology(SingleCollisionRobot)
       [collision] = link.collisions
       assert collision.name == :base_collision
     end
 
     test "collision with origin offset" do
-      [link] = Info.robot(SingleCollisionRobot)
+      [link] = Info.topology(SingleCollisionRobot)
       [collision] = link.collisions
       assert collision.origin.z == ~u(0.05 meter)
     end
 
     test "collision with box geometry" do
-      [link] = Info.robot(SingleCollisionRobot)
+      [link] = Info.topology(SingleCollisionRobot)
       [collision] = link.collisions
       assert collision.geometry.x == ~u(0.12 meter)
     end
@@ -304,7 +304,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           collision do
             box do
@@ -328,7 +328,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "multiple collision geometries on one link" do
-      [link] = Info.robot(MultipleCollisionsRobot)
+      [link] = Info.topology(MultipleCollisionsRobot)
       assert length(link.collisions) == 2
     end
 
@@ -336,7 +336,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           collision do
             cylinder do
@@ -349,7 +349,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "collision with cylinder geometry" do
-      [link] = Info.robot(CollisionCylinderRobot)
+      [link] = Info.topology(CollisionCylinderRobot)
       [collision] = link.collisions
       assert collision.geometry.radius == ~u(0.1 meter)
       assert collision.geometry.height == ~u(0.5 meter)
@@ -359,7 +359,7 @@ defmodule Kinetix.LinkPropertiesTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           collision do
             mesh do
@@ -371,7 +371,7 @@ defmodule Kinetix.LinkPropertiesTest do
     end
 
     test "collision with mesh geometry" do
-      [link] = Info.robot(CollisionMeshRobot)
+      [link] = Info.topology(CollisionMeshRobot)
       [collision] = link.collisions
       assert collision.geometry.filename == "meshes/collision.stl"
       assert collision.geometry.scale == 1

@@ -559,31 +559,10 @@ defmodule Kinetix.Dsl do
     ]
   }
 
-  @robot_sensor %Entity{
-    name: :sensor,
-    describe: "A sensor attached at the robot level.",
-    target: Kinetix.Dsl.Sensor,
-    identifier: :name,
-    args: [:name, :child_spec],
-    schema: [
-      name: [
-        type: :atom,
-        required: true,
-        doc: "A unique name for the sensor"
-      ],
-      child_spec: [
-        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
-        required: true,
-        doc:
-          "The child specification for the sensor process. Either a module or `{module, keyword_list}`"
-      ]
-    ]
-  }
-
-  @robot_sensors_section %Section{
-    name: :robot_sensors,
+  @sensors %Section{
+    name: :sensors,
     describe: "Robot-level sensors",
-    entities: [@robot_sensor]
+    entities: [@sensor]
   }
 
   @controller %Entity{
@@ -607,7 +586,7 @@ defmodule Kinetix.Dsl do
     ]
   }
 
-  @controllers_section %Section{
+  @controllers %Section{
     name: :controllers,
     describe: "Robot-level controllers",
     entities: [@controller]
@@ -688,7 +667,7 @@ defmodule Kinetix.Dsl do
     ]
   }
 
-  @commands_section %Section{
+  @commands %Section{
     name: :commands,
     describe: "Robot commands with Goal → Feedback → Result semantics",
     entities: [@command]
@@ -697,9 +676,7 @@ defmodule Kinetix.Dsl do
   @robot %Section{
     name: :robot,
     describe: "Describe universal robot properties",
-    entities: [@link, @joint],
     imports: [Kinetix.Unit],
-    sections: [@settings, @robot_sensors_section, @controllers_section, @commands_section],
     schema: [
       name: [
         type: :atom,
@@ -709,8 +686,14 @@ defmodule Kinetix.Dsl do
     ]
   }
 
+  @topology %Section{
+    name: :topology,
+    describe: "Robot topology",
+    entities: [@link, @joint]
+  }
+
   use Spark.Dsl.Extension,
-    sections: [@robot],
+    sections: [@robot, @topology, @settings, @sensors, @controllers, @commands],
     transformers: [
       __MODULE__.DefaultNameTransformer,
       __MODULE__.LinkTransformer,

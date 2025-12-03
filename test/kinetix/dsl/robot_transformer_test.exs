@@ -11,7 +11,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
         defmodule DuplicateLinkNames do
           use Kinetix
 
-          robot do
+          topology do
             link :duplicate do
               joint :joint1 do
                 type :fixed
@@ -28,7 +28,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
         defmodule LinkJointSameName do
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               joint :shared_name do
                 type :fixed
@@ -45,7 +45,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
         defmodule DuplicateSensorNames do
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               sensor :my_sensor, MySensor
 
@@ -67,7 +67,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
         defmodule SensorLinkSameName do
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               sensor :base, MySensor
             end
@@ -81,7 +81,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
         defmodule DuplicateActuatorNames do
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               joint :j1 do
                 type :revolute
@@ -119,7 +119,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
         defmodule ActuatorJointSameName do
           use Kinetix
 
-          robot do
+          topology do
             link :base do
               joint :shoulder do
                 type :revolute
@@ -143,11 +143,11 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
         defmodule RobotSensorLinkSameName do
           use Kinetix
 
-          robot do
-            robot_sensors do
-              sensor :base, MySensor
-            end
+          sensors do
+            sensor :base, MySensor
+          end
 
+          topology do
             link :base
           end
         end
@@ -158,11 +158,11 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
       defmodule UniqueNamesRobot do
         use Kinetix
 
-        robot do
-          robot_sensors do
-            sensor :robot_sensor, MySensor
-          end
+        sensors do
+          sensor :robot_sensor, MySensor
+        end
 
+        topology do
           link :base do
             sensor :base_sensor, MySensor
 

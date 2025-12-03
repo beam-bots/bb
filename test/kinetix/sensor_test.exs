@@ -11,18 +11,18 @@ defmodule Kinetix.SensorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        robot_sensors do
-          sensor :camera, MySensor
-        end
+      sensors do
+        sensor :camera, MySensor
+      end
 
+      topology do
         link :base_link do
         end
       end
     end
 
     test "sensor defined at robot level" do
-      sensors = Info.robot_robot_sensors(RobotLevelSensorRobot)
+      sensors = Info.sensors(RobotLevelSensorRobot)
       sensor = Enum.find(sensors, &is_struct(&1, Sensor))
       assert sensor.name == :camera
       assert sensor.child_spec == MySensor
@@ -34,7 +34,7 @@ defmodule Kinetix.SensorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           sensor :imu, {MySensor, frequency: 100}
         end
@@ -42,7 +42,7 @@ defmodule Kinetix.SensorTest do
     end
 
     test "sensor attached to link with module and args" do
-      [link] = Info.robot(LinkSensorRobot)
+      [link] = Info.topology(LinkSensorRobot)
       [sensor] = link.sensors
       assert is_struct(sensor, Sensor)
       assert sensor.name == :imu
@@ -55,11 +55,11 @@ defmodule Kinetix.SensorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        robot_sensors do
-          sensor :camera, CameraSensor
-        end
+      sensors do
+        sensor :camera, CameraSensor
+      end
 
+      topology do
         link :base_link do
           sensor :imu, ImuSensor
           sensor :gps, {GpsSensor, port: "/dev/ttyUSB0"}
@@ -68,13 +68,13 @@ defmodule Kinetix.SensorTest do
     end
 
     test "multiple sensors on a single link" do
-      entities = Info.robot(MultipleSensorsRobot)
+      entities = Info.topology(MultipleSensorsRobot)
       [link] = Enum.filter(entities, &is_struct(&1, Link))
       assert length(link.sensors) == 2
     end
 
     test "sensors at both link and robot level" do
-      robot_sensors = Info.robot_robot_sensors(MultipleSensorsRobot)
+      robot_sensors = Info.sensors(MultipleSensorsRobot)
       assert length(robot_sensors) == 1
       assert hd(robot_sensors).name == :camera
     end
@@ -85,7 +85,7 @@ defmodule Kinetix.SensorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           sensor :base_sensor, BaseSensor
 
@@ -101,7 +101,7 @@ defmodule Kinetix.SensorTest do
     end
 
     test "sensors in nested links" do
-      [base_link] = Info.robot(NestedLinkSensorRobot)
+      [base_link] = Info.topology(NestedLinkSensorRobot)
       assert length(base_link.sensors) == 1
       assert hd(base_link.sensors).name == :base_sensor
 
@@ -117,7 +117,7 @@ defmodule Kinetix.SensorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :shoulder do
             type :revolute
@@ -137,7 +137,7 @@ defmodule Kinetix.SensorTest do
     end
 
     test "sensor attached to joint" do
-      [link] = Info.robot(JointSensorRobot)
+      [link] = Info.topology(JointSensorRobot)
       [joint] = link.joints
       [sensor] = joint.sensors
       assert is_struct(sensor, Sensor)
@@ -151,11 +151,11 @@ defmodule Kinetix.SensorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        robot_sensors do
-          sensor :robot_sensor, RobotSensor
-        end
+      sensors do
+        sensor :robot_sensor, RobotSensor
+      end
 
+      topology do
         link :base_link do
           sensor :link_sensor, LinkSensor
 
@@ -177,9 +177,9 @@ defmodule Kinetix.SensorTest do
     end
 
     test "sensors at all levels" do
-      entities = Info.robot(MixedSensorsRobot)
+      entities = Info.topology(MixedSensorsRobot)
       [link] = Enum.filter(entities, &is_struct(&1, Link))
-      [robot_sensor] = Info.robot_robot_sensors(MixedSensorsRobot)
+      [robot_sensor] = Info.sensors(MixedSensorsRobot)
 
       assert robot_sensor.name == :robot_sensor
       assert length(link.sensors) == 1

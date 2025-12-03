@@ -32,7 +32,7 @@ defmodule Kinetix.Dsl.RobotTransformer do
     module = Transformer.get_persisted(dsl, :module)
 
     dsl
-    |> Transformer.get_entities([:robot])
+    |> Transformer.get_entities([:topology])
     |> Enum.filter(&is_struct(&1, Link))
     |> case do
       [] ->

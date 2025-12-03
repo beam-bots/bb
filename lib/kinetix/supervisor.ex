@@ -49,8 +49,6 @@ defmodule Kinetix.Supervisor do
   end
 
   defp build_children(robot_module, settings, opts) do
-    entities = Info.robot(robot_module)
-
     registry_child =
       {settings.registry_module,
        Keyword.merge(settings.registry_options,
@@ -75,7 +73,7 @@ defmodule Kinetix.Supervisor do
     # Sensors from the robot_sensors section
     robot_sensor_children =
       robot_module
-      |> Info.robot_robot_sensors()
+      |> Info.sensors()
       |> Enum.map(fn sensor ->
         Kinetix.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [])
       end)
@@ -83,14 +81,15 @@ defmodule Kinetix.Supervisor do
     # Controllers from the controllers section
     controller_children =
       robot_module
-      |> Info.robot_controllers()
+      |> Info.controllers()
       |> Enum.map(fn controller ->
         Kinetix.Process.child_spec(robot_module, controller.name, controller.child_spec, [])
       end)
 
     # Links remain as entities at robot level
     link_children =
-      entities
+      robot_module
+      |> Info.topology()
       |> Enum.filter(&is_struct(&1, Link))
       |> Enum.map(fn link ->
         {Kinetix.LinkSupervisor, {robot_module, link, [], opts}}

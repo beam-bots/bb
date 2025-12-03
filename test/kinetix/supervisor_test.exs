@@ -23,7 +23,7 @@ defmodule Kinetix.SupervisorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
         end
       end
@@ -56,11 +56,11 @@ defmodule Kinetix.SupervisorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        robot_sensors do
-          sensor :camera, Kinetix.SupervisorTest.TestGenServer
-        end
+      sensors do
+        sensor :camera, Kinetix.SupervisorTest.TestGenServer
+      end
 
+      topology do
         link :base_link do
           sensor :imu, {Kinetix.SupervisorTest.TestGenServer, frequency: 100}
 
@@ -110,7 +110,7 @@ defmodule Kinetix.SupervisorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :shoulder do
             type :revolute
@@ -156,7 +156,7 @@ defmodule Kinetix.SupervisorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base do
           joint :shoulder do
             type :revolute
@@ -225,7 +225,7 @@ defmodule Kinetix.SupervisorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base do
           sensor :test_sensor, Kinetix.SupervisorTest.TestGenServer
         end

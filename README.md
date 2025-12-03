@@ -29,7 +29,7 @@ defmodule MyRobot do
   use Kinetix
   import Kinetix.Unit
 
-  robot do
+  topology do
     link :base do
       joint :shoulder, type: :revolute do
         origin x: ~u(0 meter), y: ~u(0 meter), z: ~u(0.1 meter)

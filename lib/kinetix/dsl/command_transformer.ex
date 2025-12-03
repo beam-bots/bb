@@ -50,7 +50,7 @@ defmodule Kinetix.Dsl.CommandTransformer do
   @doc false
   @impl true
   def transform(dsl) do
-    commands = Info.robot_commands(dsl)
+    commands = Info.commands(dsl)
 
     if Enum.empty?(commands) do
       {:ok, dsl}

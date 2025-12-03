@@ -4,7 +4,9 @@
 
 defmodule Kinetix.Dsl.Info do
   @moduledoc false
-  use Spark.InfoGenerator, extension: Kinetix.Dsl, sections: [:robot]
+  use Spark.InfoGenerator,
+    extension: Kinetix.Dsl,
+    sections: [:robot, :topology, :settings, :sensors, :controllers, :commands]
 
   alias Spark.Dsl.Extension
 
@@ -18,15 +20,14 @@ defmodule Kinetix.Dsl.Info do
         }
   def settings(robot_module) do
     registry_options =
-      Extension.get_opt(robot_module, [:robot, :settings], :registry_options) ||
+      Extension.get_opt(robot_module, [:settings], :registry_options) ||
         [partitions: System.schedulers_online()]
 
     %{
-      registry_module:
-        Extension.get_opt(robot_module, [:robot, :settings], :registry_module, Registry),
+      registry_module: Extension.get_opt(robot_module, [:settings], :registry_module, Registry),
       registry_options: registry_options,
       supervisor_module:
-        Extension.get_opt(robot_module, [:robot, :settings], :supervisor_module, Supervisor)
+        Extension.get_opt(robot_module, [:settings], :supervisor_module, Supervisor)
     }
   end
 end

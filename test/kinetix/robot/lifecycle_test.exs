@@ -34,24 +34,24 @@ defmodule Kinetix.Robot.LifecycleTest do
     use Kinetix
     import Kinetix.Unit
 
-    robot do
-      commands do
-        command :arm do
-          handler Kinetix.Command.Arm
-          allowed_states [:disarmed]
-        end
-
-        command :disarm do
-          handler Kinetix.Command.Disarm
-          allowed_states [:idle]
-        end
-
-        command :move do
-          handler Kinetix.Robot.LifecycleTest.MoveCommand
-          allowed_states [:idle]
-        end
+    commands do
+      command :arm do
+        handler Kinetix.Command.Arm
+        allowed_states [:disarmed]
       end
 
+      command :disarm do
+        handler Kinetix.Command.Disarm
+        allowed_states [:idle]
+      end
+
+      command :move do
+        handler Kinetix.Robot.LifecycleTest.MoveCommand
+        allowed_states [:idle]
+      end
+    end
+
+    topology do
       link :base do
         joint :shoulder do
           type :revolute

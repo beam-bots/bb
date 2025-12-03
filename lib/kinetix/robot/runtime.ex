@@ -241,7 +241,7 @@ defmodule Kinetix.Robot.Runtime do
 
     commands =
       robot_module
-      |> Info.robot_commands()
+      |> Info.commands()
       |> Map.new(&{&1.name, &1})
 
     state = %__MODULE__{

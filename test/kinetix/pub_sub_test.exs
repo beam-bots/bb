@@ -12,7 +12,7 @@ defmodule Kinetix.PubSubTest do
     @moduledoc false
     use Kinetix
 
-    robot do
+    topology do
       link :base_link do
         joint :shoulder do
           type :revolute

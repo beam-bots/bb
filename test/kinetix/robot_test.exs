@@ -12,7 +12,7 @@ defmodule Kinetix.RobotTest do
   defmodule SimpleArm do
     use Kinetix
 
-    robot do
+    topology do
       link :base do
         inertial do
           mass(~u(5 kilogram))

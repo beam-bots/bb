@@ -29,7 +29,7 @@ defmodule Kinetix.Robot.KinematicsTest do
     """
     use Kinetix
 
-    robot do
+    topology do
       link :base do
         joint :joint1 do
           type :revolute
@@ -96,7 +96,7 @@ defmodule Kinetix.Robot.KinematicsTest do
     """
     use Kinetix
 
-    robot do
+    topology do
       link :base do
         joint :shoulder do
           type :revolute
@@ -168,7 +168,7 @@ defmodule Kinetix.Robot.KinematicsTest do
     """
     use Kinetix
 
-    robot do
+    topology do
       link :base do
         joint :slider do
           type :prismatic

@@ -11,7 +11,7 @@ defmodule Kinetix.Dsl.UniquenessTransformer do
   they're not registered processes.
   """
   use Spark.Dsl.Transformer
-  alias Kinetix.Dsl.{Controller, Joint, Link, Sensor}
+  alias Kinetix.Dsl.{Controller, Info, Joint, Link, Sensor}
   alias Spark.Dsl.Transformer
   alias Spark.Error.DslError
 
@@ -31,7 +31,7 @@ defmodule Kinetix.Dsl.UniquenessTransformer do
     module = Transformer.get_persisted(dsl, :module)
 
     dsl
-    |> Transformer.get_entities([:robot])
+    |> Info.topology()
     |> Enum.filter(&is_struct(&1, Link))
     |> case do
       [] ->
@@ -60,7 +60,7 @@ defmodule Kinetix.Dsl.UniquenessTransformer do
         {:error,
          DslError.exception(
            module: module,
-           path: [:robot],
+           path: [:topology],
            message: """
            All entity names must be unique across the robot.
 
@@ -73,17 +73,17 @@ defmodule Kinetix.Dsl.UniquenessTransformer do
   end
 
   defp collect_all_names(root_link, dsl) do
-    # Robot-level sensors from the robot_sensors section
+    # Robot-level sensors from the robot sensors section
     robot_sensors =
       dsl
-      |> Transformer.get_entities([:robot, :robot_sensors])
+      |> Info.sensors()
       |> Enum.filter(&is_struct(&1, Sensor))
       |> Enum.map(& &1.name)
 
     # Robot-level controllers from the controllers section
     robot_controllers =
       dsl
-      |> Transformer.get_entities([:robot, :controllers])
+      |> Info.controllers()
       |> Enum.filter(&is_struct(&1, Controller))
       |> Enum.map(& &1.name)
 

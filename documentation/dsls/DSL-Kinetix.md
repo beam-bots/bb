@@ -9,16 +9,27 @@ The DSL extension for describing robot properties and topologies.
 ## robot
 Describe universal robot properties
 
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-name){: #robot-name } | `atom` |  | The name of the robot, defaults to the name of the defining module |
+
+
+
+
+
+
+## topology
+Robot topology
+
 ### Nested DSLs
- * [settings](#robot-settings)
- * [robot_sensors](#robot-robot_sensors)
-   * sensor
- * [controllers](#robot-controllers)
-   * controller
- * [commands](#robot-commands)
-   * command
-     * argument
- * [link](#robot-link)
+ * [link](#topology-link)
    * inertial
      * origin
      * inertia
@@ -38,7 +49,7 @@ Describe universal robot properties
      * sphere
      * mesh
    * sensor
- * [joint](#robot-joint)
+ * [joint](#topology-joint)
    * origin
    * axis
    * dynamics
@@ -50,197 +61,7 @@ Describe universal robot properties
 
 
 
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#robot-name){: #robot-name } | `atom` |  | The name of the robot, defaults to the name of the defining module |
-
-
-### robot.settings
-System-wide settings
-
-
-
-
-
-
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`registry_module`](#robot-settings-registry_module){: #robot-settings-registry_module } | `module` | `Registry` | The registry module to use |
-| [`registry_options`](#robot-settings-registry_options){: #robot-settings-registry_options } | `keyword` |  | Options passed to Registry.start_link/1. Defaults to `[partitions: System.schedulers_online()]` at runtime. |
-| [`supervisor_module`](#robot-settings-supervisor_module){: #robot-settings-supervisor_module } | `module` | `Supervisor` | The supervisor module to use |
-
-
-
-
-### robot.robot_sensors
-Robot-level sensors
-
-### Nested DSLs
- * [sensor](#robot-robot_sensors-sensor)
-
-
-
-
-
-### robot.robot_sensors.sensor
-```elixir
-sensor name, child_spec
-```
-
-
-A sensor attached at the robot level.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#robot-robot_sensors-sensor-name){: #robot-robot_sensors-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
-| [`child_spec`](#robot-robot_sensors-sensor-child_spec){: #robot-robot_sensors-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
-
-
-
-
-
-
-### Introspection
-
-Target: `Kinetix.Dsl.Sensor`
-
-
-### robot.controllers
-Robot-level controllers
-
-### Nested DSLs
- * [controller](#robot-controllers-controller)
-
-
-
-
-
-### robot.controllers.controller
-```elixir
-controller name, child_spec
-```
-
-
-A controller process at the robot level.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#robot-controllers-controller-name){: #robot-controllers-controller-name .spark-required} | `atom` |  | A unique name for the controller |
-| [`child_spec`](#robot-controllers-controller-child_spec){: #robot-controllers-controller-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the controller process. Either a module or `{module, keyword_list}` |
-
-
-
-
-
-
-### Introspection
-
-Target: `Kinetix.Dsl.Controller`
-
-
-### robot.commands
-Robot commands with Goal → Feedback → Result semantics
-
-### Nested DSLs
- * [command](#robot-commands-command)
-   * argument
-
-
-
-
-
-### robot.commands.command
-```elixir
-command name
-```
-
-
-A command that can be executed on the robot.
-
-Commands follow the Goal → Feedback → Result pattern and integrate with
-the robot's state machine to control when they can run.
-
-
-### Nested DSLs
- * [argument](#robot-commands-command-argument)
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#robot-commands-command-name){: #robot-commands-command-name .spark-required} | `atom` |  | A unique name for the command |
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`handler`](#robot-commands-command-handler){: #robot-commands-command-handler .spark-required} | `module` |  | The handler module implementing the `Kinetix.Command` behaviour |
-| [`timeout`](#robot-commands-command-timeout){: #robot-commands-command-timeout } | `pos_integer \| :infinity` | `:infinity` | Timeout for command execution in milliseconds |
-| [`allowed_states`](#robot-commands-command-allowed_states){: #robot-commands-command-allowed_states } | `list(atom)` | `[:idle]` | Robot states in which this command can run. If `:executing` is included, the command can preempt running commands. |
-
-
-### robot.commands.command.argument
-```elixir
-argument name, type
-```
-
-
-An argument for the command.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#robot-commands-command-argument-name){: #robot-commands-command-argument-name .spark-required} | `atom` |  | A unique name for the argument |
-| [`type`](#robot-commands-command-argument-type){: #robot-commands-command-argument-type .spark-required} | `atom \| module` |  | The type of the argument (e.g., `:float`, `:integer`, `Kinetix.Pose`) |
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`required`](#robot-commands-command-argument-required){: #robot-commands-command-argument-required } | `boolean` | `false` | Whether this argument is required |
-| [`default`](#robot-commands-command-argument-default){: #robot-commands-command-argument-default } | `any` |  | Default value if not provided |
-| [`doc`](#robot-commands-command-argument-doc){: #robot-commands-command-argument-doc } | `String.t` |  | Documentation for the argument |
-
-
-
-
-
-### Introspection
-
-Target: `Kinetix.Dsl.Command.Argument`
-
-
-
-
-### Introspection
-
-Target: `Kinetix.Dsl.Command`
-
-
-
-### robot.link
+### topology.link
 ```elixir
 link name
 ```
@@ -250,10 +71,10 @@ A kinematic link (ie solid body).
 
 
 ### Nested DSLs
- * [inertial](#robot-link-inertial)
+ * [inertial](#topology-link-inertial)
    * origin
    * inertia
- * [visual](#robot-link-visual)
+ * [visual](#topology-link-visual)
    * box
    * cylinder
    * sphere
@@ -262,13 +83,13 @@ A kinematic link (ie solid body).
      * color
      * texture
    * origin
- * [collision](#robot-link-collision)
+ * [collision](#topology-link-collision)
    * origin
    * box
    * cylinder
    * sphere
    * mesh
- * [sensor](#robot-link-sensor)
+ * [sensor](#topology-link-sensor)
 
 
 
@@ -277,19 +98,19 @@ A kinematic link (ie solid body).
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#robot-link-name){: #robot-link-name } | `atom` |  | The name of the link |
+| [`name`](#topology-link-name){: #topology-link-name } | `atom` |  | The name of the link |
 
 
 
-### robot.link.inertial
+### topology.link.inertial
 
 
 A link's mass, position of it's center of mass and it's central inertia properties
 
 
 ### Nested DSLs
- * [origin](#robot-link-inertial-origin)
- * [inertia](#robot-link-inertial-inertia)
+ * [origin](#topology-link-inertial-origin)
+ * [inertia](#topology-link-inertial-inertia)
 
 
 
@@ -299,10 +120,10 @@ A link's mass, position of it's center of mass and it's central inertia properti
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`mass`](#robot-link-inertial-mass){: #robot-link-inertial-mass .spark-required} | `any` |  | The mass of the link |
+| [`mass`](#topology-link-inertial-mass){: #topology-link-inertial-mass .spark-required} | `any` |  | The mass of the link |
 
 
-### robot.link.inertial.origin
+### topology.link.inertial.origin
 
 
 Specifies where the link's center of mass is located, relative to the link's reference frame
@@ -316,12 +137,12 @@ Specifies where the link's center of mass is located, relative to the link's ref
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#robot-link-inertial-origin-roll){: #robot-link-inertial-origin-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `x` axis |
-| [`pitch`](#robot-link-inertial-origin-pitch){: #robot-link-inertial-origin-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `y` axis |
-| [`yaw`](#robot-link-inertial-origin-yaw){: #robot-link-inertial-origin-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `z` axis |
-| [`x`](#robot-link-inertial-origin-x){: #robot-link-inertial-origin-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
-| [`y`](#robot-link-inertial-origin-y){: #robot-link-inertial-origin-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
-| [`z`](#robot-link-inertial-origin-z){: #robot-link-inertial-origin-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
+| [`roll`](#topology-link-inertial-origin-roll){: #topology-link-inertial-origin-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `x` axis |
+| [`pitch`](#topology-link-inertial-origin-pitch){: #topology-link-inertial-origin-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `y` axis |
+| [`yaw`](#topology-link-inertial-origin-yaw){: #topology-link-inertial-origin-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `z` axis |
+| [`x`](#topology-link-inertial-origin-x){: #topology-link-inertial-origin-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
+| [`y`](#topology-link-inertial-origin-y){: #topology-link-inertial-origin-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
+| [`z`](#topology-link-inertial-origin-z){: #topology-link-inertial-origin-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
 
 
 
@@ -331,7 +152,7 @@ Specifies where the link's center of mass is located, relative to the link's ref
 
 Target: `Kinetix.Dsl.Origin`
 
-### robot.link.inertial.inertia
+### topology.link.inertial.inertia
 
 
 How the link resists rotational motion.
@@ -346,12 +167,12 @@ How the link resists rotational motion.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`ixx`](#robot-link-inertial-inertia-ixx){: #robot-link-inertial-inertia-ixx .spark-required} | `any` |  | Resistance to rotation around the x-axis |
-| [`iyy`](#robot-link-inertial-inertia-iyy){: #robot-link-inertial-inertia-iyy .spark-required} | `any` |  | Resistance to rotation around the y-axis |
-| [`izz`](#robot-link-inertial-inertia-izz){: #robot-link-inertial-inertia-izz .spark-required} | `any` |  | Resistance to rotation around the z-axis |
-| [`ixy`](#robot-link-inertial-inertia-ixy){: #robot-link-inertial-inertia-ixy .spark-required} | `any` |  | Coupling between the x and y axes |
-| [`ixz`](#robot-link-inertial-inertia-ixz){: #robot-link-inertial-inertia-ixz .spark-required} | `any` |  | Coupling between the x and z axes |
-| [`iyz`](#robot-link-inertial-inertia-iyz){: #robot-link-inertial-inertia-iyz .spark-required} | `any` |  | Coupling between the y and z axes |
+| [`ixx`](#topology-link-inertial-inertia-ixx){: #topology-link-inertial-inertia-ixx .spark-required} | `any` |  | Resistance to rotation around the x-axis |
+| [`iyy`](#topology-link-inertial-inertia-iyy){: #topology-link-inertial-inertia-iyy .spark-required} | `any` |  | Resistance to rotation around the y-axis |
+| [`izz`](#topology-link-inertial-inertia-izz){: #topology-link-inertial-inertia-izz .spark-required} | `any` |  | Resistance to rotation around the z-axis |
+| [`ixy`](#topology-link-inertial-inertia-ixy){: #topology-link-inertial-inertia-ixy .spark-required} | `any` |  | Coupling between the x and y axes |
+| [`ixz`](#topology-link-inertial-inertia-ixz){: #topology-link-inertial-inertia-ixz .spark-required} | `any` |  | Coupling between the x and z axes |
+| [`iyz`](#topology-link-inertial-inertia-iyz){: #topology-link-inertial-inertia-iyz .spark-required} | `any` |  | Coupling between the y and z axes |
 
 
 
@@ -368,28 +189,28 @@ Target: `Kinetix.Dsl.Inertia`
 
 Target: `Kinetix.Dsl.Inertial`
 
-### robot.link.visual
+### topology.link.visual
 
 
 Visual attributes for a link.
 
 
 ### Nested DSLs
- * [box](#robot-link-visual-box)
- * [cylinder](#robot-link-visual-cylinder)
- * [sphere](#robot-link-visual-sphere)
- * [mesh](#robot-link-visual-mesh)
- * [material](#robot-link-visual-material)
+ * [box](#topology-link-visual-box)
+ * [cylinder](#topology-link-visual-cylinder)
+ * [sphere](#topology-link-visual-sphere)
+ * [mesh](#topology-link-visual-mesh)
+ * [material](#topology-link-visual-material)
    * color
    * texture
- * [origin](#robot-link-visual-origin)
+ * [origin](#topology-link-visual-origin)
 
 
 
 
 
 
-### robot.link.visual.box
+### topology.link.visual.box
 
 
 Box geometry
@@ -403,9 +224,9 @@ Box geometry
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`x`](#robot-link-visual-box-x){: #robot-link-visual-box-x .spark-required} | `any` |  | The length of the X axis side |
-| [`y`](#robot-link-visual-box-y){: #robot-link-visual-box-y .spark-required} | `any` |  | The length of the Y axis side |
-| [`z`](#robot-link-visual-box-z){: #robot-link-visual-box-z .spark-required} | `any` |  | The length of the Z axis side |
+| [`x`](#topology-link-visual-box-x){: #topology-link-visual-box-x .spark-required} | `any` |  | The length of the X axis side |
+| [`y`](#topology-link-visual-box-y){: #topology-link-visual-box-y .spark-required} | `any` |  | The length of the Y axis side |
+| [`z`](#topology-link-visual-box-z){: #topology-link-visual-box-z .spark-required} | `any` |  | The length of the Z axis side |
 
 
 
@@ -415,7 +236,7 @@ Box geometry
 
 Target: `Kinetix.Dsl.Box`
 
-### robot.link.visual.cylinder
+### topology.link.visual.cylinder
 
 
 A cylindrical geometry
@@ -432,8 +253,8 @@ The origin of the cylinder is the center.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`radius`](#robot-link-visual-cylinder-radius){: #robot-link-visual-cylinder-radius .spark-required} | `any` |  | The distance from the center to the circumference |
-| [`height`](#robot-link-visual-cylinder-height){: #robot-link-visual-cylinder-height .spark-required} | `any` |  | The height of the cylinder |
+| [`radius`](#topology-link-visual-cylinder-radius){: #topology-link-visual-cylinder-radius .spark-required} | `any` |  | The distance from the center to the circumference |
+| [`height`](#topology-link-visual-cylinder-height){: #topology-link-visual-cylinder-height .spark-required} | `any` |  | The height of the cylinder |
 
 
 
@@ -443,7 +264,7 @@ The origin of the cylinder is the center.
 
 Target: `Kinetix.Dsl.Cylinder`
 
-### robot.link.visual.sphere
+### topology.link.visual.sphere
 
 
 A spherical geometry
@@ -460,7 +281,7 @@ The origin of the sphere is its center.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`radius`](#robot-link-visual-sphere-radius){: #robot-link-visual-sphere-radius .spark-required} | `any` |  | The distance from the center of the sphere to your edge |
+| [`radius`](#topology-link-visual-sphere-radius){: #topology-link-visual-sphere-radius .spark-required} | `any` |  | The distance from the center of the sphere to your edge |
 
 
 
@@ -470,7 +291,7 @@ The origin of the sphere is its center.
 
 Target: `Kinetix.Dsl.Sphere`
 
-### robot.link.visual.mesh
+### topology.link.visual.mesh
 
 
 A mesh object specified by a filename
@@ -485,8 +306,8 @@ A mesh object specified by a filename
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`filename`](#robot-link-visual-mesh-filename){: #robot-link-visual-mesh-filename .spark-required} | `String.t` |  | The path to the 3D model |
-| [`scale`](#robot-link-visual-mesh-scale){: #robot-link-visual-mesh-scale } | `number` | `1` | A scale factor for the mest |
+| [`filename`](#topology-link-visual-mesh-filename){: #topology-link-visual-mesh-filename .spark-required} | `String.t` |  | The path to the 3D model |
+| [`scale`](#topology-link-visual-mesh-scale){: #topology-link-visual-mesh-scale } | `number` | `1` | A scale factor for the mest |
 
 
 
@@ -496,15 +317,15 @@ A mesh object specified by a filename
 
 Target: `Kinetix.Dsl.Mesh`
 
-### robot.link.visual.material
+### topology.link.visual.material
 
 
 The material of the visual element
 
 
 ### Nested DSLs
- * [color](#robot-link-visual-material-color)
- * [texture](#robot-link-visual-material-texture)
+ * [color](#topology-link-visual-material-color)
+ * [texture](#topology-link-visual-material-texture)
 
 
 
@@ -514,10 +335,10 @@ The material of the visual element
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#robot-link-visual-material-name){: #robot-link-visual-material-name .spark-required} | `atom` |  | The name of the material |
+| [`name`](#topology-link-visual-material-name){: #topology-link-visual-material-name .spark-required} | `atom` |  | The name of the material |
 
 
-### robot.link.visual.material.color
+### topology.link.visual.material.color
 
 
 The color of the meterial
@@ -532,10 +353,10 @@ The color of the meterial
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`red`](#robot-link-visual-material-color-red){: #robot-link-visual-material-color-red .spark-required} | `any` |  | The red element of the color |
-| [`green`](#robot-link-visual-material-color-green){: #robot-link-visual-material-color-green .spark-required} | `any` |  | The green element of the color |
-| [`blue`](#robot-link-visual-material-color-blue){: #robot-link-visual-material-color-blue .spark-required} | `any` |  | The blue element of the color |
-| [`alpha`](#robot-link-visual-material-color-alpha){: #robot-link-visual-material-color-alpha .spark-required} | `any` |  | The alpha element of the color |
+| [`red`](#topology-link-visual-material-color-red){: #topology-link-visual-material-color-red .spark-required} | `any` |  | The red element of the color |
+| [`green`](#topology-link-visual-material-color-green){: #topology-link-visual-material-color-green .spark-required} | `any` |  | The green element of the color |
+| [`blue`](#topology-link-visual-material-color-blue){: #topology-link-visual-material-color-blue .spark-required} | `any` |  | The blue element of the color |
+| [`alpha`](#topology-link-visual-material-color-alpha){: #topology-link-visual-material-color-alpha .spark-required} | `any` |  | The alpha element of the color |
 
 
 
@@ -545,7 +366,7 @@ The color of the meterial
 
 Target: `Kinetix.Dsl.Color`
 
-### robot.link.visual.material.texture
+### topology.link.visual.material.texture
 
 
 A texture to apply to the material
@@ -560,7 +381,7 @@ A texture to apply to the material
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`filename`](#robot-link-visual-material-texture-filename){: #robot-link-visual-material-texture-filename .spark-required} | `String.t` |  | The image file to use |
+| [`filename`](#topology-link-visual-material-texture-filename){: #topology-link-visual-material-texture-filename .spark-required} | `String.t` |  | The image file to use |
 
 
 
@@ -577,7 +398,7 @@ Target: `Kinetix.Dsl.Texture`
 
 Target: `Kinetix.Dsl.Material`
 
-### robot.link.visual.origin
+### topology.link.visual.origin
 
 
 The refrence frame of the visual element with respect to the reference frame of the link
@@ -591,12 +412,12 @@ The refrence frame of the visual element with respect to the reference frame of 
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#robot-link-visual-origin-roll){: #robot-link-visual-origin-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `x` axis |
-| [`pitch`](#robot-link-visual-origin-pitch){: #robot-link-visual-origin-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `y` axis |
-| [`yaw`](#robot-link-visual-origin-yaw){: #robot-link-visual-origin-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `z` axis |
-| [`x`](#robot-link-visual-origin-x){: #robot-link-visual-origin-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
-| [`y`](#robot-link-visual-origin-y){: #robot-link-visual-origin-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
-| [`z`](#robot-link-visual-origin-z){: #robot-link-visual-origin-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
+| [`roll`](#topology-link-visual-origin-roll){: #topology-link-visual-origin-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `x` axis |
+| [`pitch`](#topology-link-visual-origin-pitch){: #topology-link-visual-origin-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `y` axis |
+| [`yaw`](#topology-link-visual-origin-yaw){: #topology-link-visual-origin-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `z` axis |
+| [`x`](#topology-link-visual-origin-x){: #topology-link-visual-origin-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
+| [`y`](#topology-link-visual-origin-y){: #topology-link-visual-origin-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
+| [`z`](#topology-link-visual-origin-z){: #topology-link-visual-origin-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
 
 
 
@@ -613,18 +434,18 @@ Target: `Kinetix.Dsl.Origin`
 
 Target: `Kinetix.Dsl.Visual`
 
-### robot.link.collision
+### topology.link.collision
 
 
 The collision properties of a link.
 
 
 ### Nested DSLs
- * [origin](#robot-link-collision-origin)
- * [box](#robot-link-collision-box)
- * [cylinder](#robot-link-collision-cylinder)
- * [sphere](#robot-link-collision-sphere)
- * [mesh](#robot-link-collision-mesh)
+ * [origin](#topology-link-collision-origin)
+ * [box](#topology-link-collision-box)
+ * [cylinder](#topology-link-collision-cylinder)
+ * [sphere](#topology-link-collision-sphere)
+ * [mesh](#topology-link-collision-mesh)
 
 
 
@@ -634,10 +455,10 @@ The collision properties of a link.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#robot-link-collision-name){: #robot-link-collision-name } | `atom` |  | An optional name of the link geometry |
+| [`name`](#topology-link-collision-name){: #topology-link-collision-name } | `atom` |  | An optional name of the link geometry |
 
 
-### robot.link.collision.origin
+### topology.link.collision.origin
 
 
 The refrence frame of the collision element, relative to the reference frame of the link
@@ -651,12 +472,12 @@ The refrence frame of the collision element, relative to the reference frame of 
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#robot-link-collision-origin-roll){: #robot-link-collision-origin-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `x` axis |
-| [`pitch`](#robot-link-collision-origin-pitch){: #robot-link-collision-origin-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `y` axis |
-| [`yaw`](#robot-link-collision-origin-yaw){: #robot-link-collision-origin-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `z` axis |
-| [`x`](#robot-link-collision-origin-x){: #robot-link-collision-origin-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
-| [`y`](#robot-link-collision-origin-y){: #robot-link-collision-origin-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
-| [`z`](#robot-link-collision-origin-z){: #robot-link-collision-origin-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
+| [`roll`](#topology-link-collision-origin-roll){: #topology-link-collision-origin-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `x` axis |
+| [`pitch`](#topology-link-collision-origin-pitch){: #topology-link-collision-origin-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `y` axis |
+| [`yaw`](#topology-link-collision-origin-yaw){: #topology-link-collision-origin-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `z` axis |
+| [`x`](#topology-link-collision-origin-x){: #topology-link-collision-origin-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
+| [`y`](#topology-link-collision-origin-y){: #topology-link-collision-origin-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
+| [`z`](#topology-link-collision-origin-z){: #topology-link-collision-origin-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
 
 
 
@@ -666,7 +487,7 @@ The refrence frame of the collision element, relative to the reference frame of 
 
 Target: `Kinetix.Dsl.Origin`
 
-### robot.link.collision.box
+### topology.link.collision.box
 
 
 Box geometry
@@ -680,9 +501,9 @@ Box geometry
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`x`](#robot-link-collision-box-x){: #robot-link-collision-box-x .spark-required} | `any` |  | The length of the X axis side |
-| [`y`](#robot-link-collision-box-y){: #robot-link-collision-box-y .spark-required} | `any` |  | The length of the Y axis side |
-| [`z`](#robot-link-collision-box-z){: #robot-link-collision-box-z .spark-required} | `any` |  | The length of the Z axis side |
+| [`x`](#topology-link-collision-box-x){: #topology-link-collision-box-x .spark-required} | `any` |  | The length of the X axis side |
+| [`y`](#topology-link-collision-box-y){: #topology-link-collision-box-y .spark-required} | `any` |  | The length of the Y axis side |
+| [`z`](#topology-link-collision-box-z){: #topology-link-collision-box-z .spark-required} | `any` |  | The length of the Z axis side |
 
 
 
@@ -692,7 +513,7 @@ Box geometry
 
 Target: `Kinetix.Dsl.Box`
 
-### robot.link.collision.cylinder
+### topology.link.collision.cylinder
 
 
 A cylindrical geometry
@@ -709,8 +530,8 @@ The origin of the cylinder is the center.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`radius`](#robot-link-collision-cylinder-radius){: #robot-link-collision-cylinder-radius .spark-required} | `any` |  | The distance from the center to the circumference |
-| [`height`](#robot-link-collision-cylinder-height){: #robot-link-collision-cylinder-height .spark-required} | `any` |  | The height of the cylinder |
+| [`radius`](#topology-link-collision-cylinder-radius){: #topology-link-collision-cylinder-radius .spark-required} | `any` |  | The distance from the center to the circumference |
+| [`height`](#topology-link-collision-cylinder-height){: #topology-link-collision-cylinder-height .spark-required} | `any` |  | The height of the cylinder |
 
 
 
@@ -720,7 +541,7 @@ The origin of the cylinder is the center.
 
 Target: `Kinetix.Dsl.Cylinder`
 
-### robot.link.collision.sphere
+### topology.link.collision.sphere
 
 
 A spherical geometry
@@ -737,7 +558,7 @@ The origin of the sphere is its center.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`radius`](#robot-link-collision-sphere-radius){: #robot-link-collision-sphere-radius .spark-required} | `any` |  | The distance from the center of the sphere to your edge |
+| [`radius`](#topology-link-collision-sphere-radius){: #topology-link-collision-sphere-radius .spark-required} | `any` |  | The distance from the center of the sphere to your edge |
 
 
 
@@ -747,7 +568,7 @@ The origin of the sphere is its center.
 
 Target: `Kinetix.Dsl.Sphere`
 
-### robot.link.collision.mesh
+### topology.link.collision.mesh
 
 
 A mesh object specified by a filename
@@ -762,8 +583,8 @@ A mesh object specified by a filename
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`filename`](#robot-link-collision-mesh-filename){: #robot-link-collision-mesh-filename .spark-required} | `String.t` |  | The path to the 3D model |
-| [`scale`](#robot-link-collision-mesh-scale){: #robot-link-collision-mesh-scale } | `number` | `1` | A scale factor for the mest |
+| [`filename`](#topology-link-collision-mesh-filename){: #topology-link-collision-mesh-filename .spark-required} | `String.t` |  | The path to the 3D model |
+| [`scale`](#topology-link-collision-mesh-scale){: #topology-link-collision-mesh-scale } | `number` | `1` | A scale factor for the mest |
 
 
 
@@ -780,7 +601,7 @@ Target: `Kinetix.Dsl.Mesh`
 
 Target: `Kinetix.Dsl.Collision`
 
-### robot.link.sensor
+### topology.link.sensor
 ```elixir
 sensor name, child_spec
 ```
@@ -796,8 +617,8 @@ A sensor attached to the robot, a link, or a joint.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#robot-link-sensor-name){: #robot-link-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
-| [`child_spec`](#robot-link-sensor-child_spec){: #robot-link-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
+| [`name`](#topology-link-sensor-name){: #topology-link-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
+| [`child_spec`](#topology-link-sensor-child_spec){: #topology-link-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
 
 
 
@@ -815,7 +636,7 @@ Target: `Kinetix.Dsl.Sensor`
 
 Target: `Kinetix.Dsl.Link`
 
-### robot.joint
+### topology.joint
 ```elixir
 joint name
 ```
@@ -825,12 +646,12 @@ A kinematic joint between a parent link and a child link.
 
 
 ### Nested DSLs
- * [origin](#robot-joint-origin)
- * [axis](#robot-joint-axis)
- * [dynamics](#robot-joint-dynamics)
- * [limit](#robot-joint-limit)
- * [sensor](#robot-joint-sensor)
- * [actuator](#robot-joint-actuator)
+ * [origin](#topology-joint-origin)
+ * [axis](#topology-joint-axis)
+ * [dynamics](#topology-joint-dynamics)
+ * [limit](#topology-joint-limit)
+ * [sensor](#topology-joint-sensor)
+ * [actuator](#topology-joint-actuator)
 
 
 
@@ -839,15 +660,15 @@ A kinematic joint between a parent link and a child link.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#robot-joint-name){: #robot-joint-name } | `atom` |  | A unique name for the joint |
+| [`name`](#topology-joint-name){: #topology-joint-name } | `atom` |  | A unique name for the joint |
 ### Options
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`type`](#robot-joint-type){: #robot-joint-type } | `:revolute \| :continuous \| :prismatic \| :fixed \| :floating \| :planar` |  | Specifies the type of joint |
+| [`type`](#topology-joint-type){: #topology-joint-type } | `:revolute \| :continuous \| :prismatic \| :fixed \| :floating \| :planar` |  | Specifies the type of joint |
 
 
-### robot.joint.origin
+### topology.joint.origin
 
 
 This is the transform from the parent link to the child link. The joint is located at the origin of the child link, as shown in the figure above
@@ -862,12 +683,12 @@ This is the transform from the parent link to the child link. The joint is locat
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#robot-joint-origin-roll){: #robot-joint-origin-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `x` axis |
-| [`pitch`](#robot-joint-origin-pitch){: #robot-joint-origin-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `y` axis |
-| [`yaw`](#robot-joint-origin-yaw){: #robot-joint-origin-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `z` axis |
-| [`x`](#robot-joint-origin-x){: #robot-joint-origin-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
-| [`y`](#robot-joint-origin-y){: #robot-joint-origin-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
-| [`z`](#robot-joint-origin-z){: #robot-joint-origin-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
+| [`roll`](#topology-joint-origin-roll){: #topology-joint-origin-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `x` axis |
+| [`pitch`](#topology-joint-origin-pitch){: #topology-joint-origin-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `y` axis |
+| [`yaw`](#topology-joint-origin-yaw){: #topology-joint-origin-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the `z` axis |
+| [`x`](#topology-joint-origin-x){: #topology-joint-origin-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
+| [`y`](#topology-joint-origin-y){: #topology-joint-origin-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
+| [`z`](#topology-joint-origin-z){: #topology-joint-origin-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
 
 
 
@@ -877,7 +698,7 @@ This is the transform from the parent link to the child link. The joint is locat
 
 Target: `Kinetix.Dsl.Origin`
 
-### robot.joint.axis
+### topology.joint.axis
 
 
 The joint axis specified in the joint frame. This is the axis of rotation for revolute joints, the axis of translation for prismatic joints, and the surface normal for planar joints. The axis is specified in the joint frame of reference. Fixed and floating joints do not use the axis field
@@ -892,9 +713,9 @@ The joint axis specified in the joint frame. This is the axis of rotation for re
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`x`](#robot-joint-axis-x){: #robot-joint-axis-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
-| [`y`](#robot-joint-axis-y){: #robot-joint-axis-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
-| [`z`](#robot-joint-axis-z){: #robot-joint-axis-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
+| [`x`](#topology-joint-axis-x){: #topology-joint-axis-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
+| [`y`](#topology-joint-axis-y){: #topology-joint-axis-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
+| [`z`](#topology-joint-axis-z){: #topology-joint-axis-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
 
 
 
@@ -904,7 +725,7 @@ The joint axis specified in the joint frame. This is the axis of rotation for re
 
 Target: `Kinetix.Dsl.Axis`
 
-### robot.joint.dynamics
+### topology.joint.dynamics
 
 
 An element specifying physical properties of the joint. These values are used to specify modeling properties of the joint, particularly useful for simulation.
@@ -919,8 +740,8 @@ An element specifying physical properties of the joint. These values are used to
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`damping`](#robot-joint-dynamics-damping){: #robot-joint-dynamics-damping } | `any` |  | The physical damping value of the joint |
-| [`friction`](#robot-joint-dynamics-friction){: #robot-joint-dynamics-friction } | `any` |  | The physical static friction value of the joint |
+| [`damping`](#topology-joint-dynamics-damping){: #topology-joint-dynamics-damping } | `any` |  | The physical damping value of the joint |
+| [`friction`](#topology-joint-dynamics-friction){: #topology-joint-dynamics-friction } | `any` |  | The physical static friction value of the joint |
 
 
 
@@ -930,7 +751,7 @@ An element specifying physical properties of the joint. These values are used to
 
 Target: `Kinetix.Dsl.Dynamics`
 
-### robot.joint.limit
+### topology.joint.limit
 
 
 Limits applied to joint movement
@@ -944,10 +765,10 @@ Limits applied to joint movement
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`effort`](#robot-joint-limit-effort){: #robot-joint-limit-effort .spark-required} | `any` |  | The maximum effort - both positive and negative - that can be commanded to the joint |
-| [`velocity`](#robot-joint-limit-velocity){: #robot-joint-limit-velocity .spark-required} | `any` |  | Maximum velocity - both positive and negative - that can be commanded to the joint |
-| [`lower`](#robot-joint-limit-lower){: #robot-joint-limit-lower } | `any` |  | The lower joint limit |
-| [`upper`](#robot-joint-limit-upper){: #robot-joint-limit-upper } | `any` |  | The upper joint limit |
+| [`effort`](#topology-joint-limit-effort){: #topology-joint-limit-effort .spark-required} | `any` |  | The maximum effort - both positive and negative - that can be commanded to the joint |
+| [`velocity`](#topology-joint-limit-velocity){: #topology-joint-limit-velocity .spark-required} | `any` |  | Maximum velocity - both positive and negative - that can be commanded to the joint |
+| [`lower`](#topology-joint-limit-lower){: #topology-joint-limit-lower } | `any` |  | The lower joint limit |
+| [`upper`](#topology-joint-limit-upper){: #topology-joint-limit-upper } | `any` |  | The upper joint limit |
 
 
 
@@ -957,7 +778,7 @@ Limits applied to joint movement
 
 Target: `Kinetix.Dsl.Limit`
 
-### robot.joint.sensor
+### topology.joint.sensor
 ```elixir
 sensor name, child_spec
 ```
@@ -973,8 +794,8 @@ A sensor attached to the robot, a link, or a joint.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#robot-joint-sensor-name){: #robot-joint-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
-| [`child_spec`](#robot-joint-sensor-child_spec){: #robot-joint-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
+| [`name`](#topology-joint-sensor-name){: #topology-joint-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
+| [`child_spec`](#topology-joint-sensor-child_spec){: #topology-joint-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
 
 
 
@@ -985,7 +806,7 @@ A sensor attached to the robot, a link, or a joint.
 
 Target: `Kinetix.Dsl.Sensor`
 
-### robot.joint.actuator
+### topology.joint.actuator
 ```elixir
 actuator name, child_spec
 ```
@@ -1001,8 +822,8 @@ An actuator attached to a joint.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#robot-joint-actuator-name){: #robot-joint-actuator-name .spark-required} | `atom` |  | A unique name for the actuator |
-| [`child_spec`](#robot-joint-actuator-child_spec){: #robot-joint-actuator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the actuator process. Either a module or `{module, keyword_list}` |
+| [`name`](#topology-joint-actuator-name){: #topology-joint-actuator-name .spark-required} | `atom` |  | A unique name for the actuator |
+| [`child_spec`](#topology-joint-actuator-child_spec){: #topology-joint-actuator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the actuator process. Either a module or `{module, keyword_list}` |
 
 
 
@@ -1019,6 +840,196 @@ Target: `Kinetix.Dsl.Actuator`
 ### Introspection
 
 Target: `Kinetix.Dsl.Joint`
+
+
+
+
+## settings
+System-wide settings
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`registry_module`](#settings-registry_module){: #settings-registry_module } | `module` | `Registry` | The registry module to use |
+| [`registry_options`](#settings-registry_options){: #settings-registry_options } | `keyword` |  | Options passed to Registry.start_link/1. Defaults to `[partitions: System.schedulers_online()]` at runtime. |
+| [`supervisor_module`](#settings-supervisor_module){: #settings-supervisor_module } | `module` | `Supervisor` | The supervisor module to use |
+
+
+
+
+
+
+## sensors
+Robot-level sensors
+
+### Nested DSLs
+ * [sensor](#sensors-sensor)
+
+
+
+
+
+### sensors.sensor
+```elixir
+sensor name, child_spec
+```
+
+
+A sensor attached to the robot, a link, or a joint.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#sensors-sensor-name){: #sensors-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
+| [`child_spec`](#sensors-sensor-child_spec){: #sensors-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Sensor`
+
+
+
+
+## controllers
+Robot-level controllers
+
+### Nested DSLs
+ * [controller](#controllers-controller)
+
+
+
+
+
+### controllers.controller
+```elixir
+controller name, child_spec
+```
+
+
+A controller process at the robot level.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#controllers-controller-name){: #controllers-controller-name .spark-required} | `atom` |  | A unique name for the controller |
+| [`child_spec`](#controllers-controller-child_spec){: #controllers-controller-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the controller process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Controller`
+
+
+
+
+## commands
+Robot commands with Goal → Feedback → Result semantics
+
+### Nested DSLs
+ * [command](#commands-command)
+   * argument
+
+
+
+
+
+### commands.command
+```elixir
+command name
+```
+
+
+A command that can be executed on the robot.
+
+Commands follow the Goal → Feedback → Result pattern and integrate with
+the robot's state machine to control when they can run.
+
+
+### Nested DSLs
+ * [argument](#commands-command-argument)
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#commands-command-name){: #commands-command-name .spark-required} | `atom` |  | A unique name for the command |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`handler`](#commands-command-handler){: #commands-command-handler .spark-required} | `module` |  | The handler module implementing the `Kinetix.Command` behaviour |
+| [`timeout`](#commands-command-timeout){: #commands-command-timeout } | `pos_integer \| :infinity` | `:infinity` | Timeout for command execution in milliseconds |
+| [`allowed_states`](#commands-command-allowed_states){: #commands-command-allowed_states } | `list(atom)` | `[:idle]` | Robot states in which this command can run. If `:executing` is included, the command can preempt running commands. |
+
+
+### commands.command.argument
+```elixir
+argument name, type
+```
+
+
+An argument for the command.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#commands-command-argument-name){: #commands-command-argument-name .spark-required} | `atom` |  | A unique name for the argument |
+| [`type`](#commands-command-argument-type){: #commands-command-argument-type .spark-required} | `atom \| module` |  | The type of the argument (e.g., `:float`, `:integer`, `Kinetix.Pose`) |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`required`](#commands-command-argument-required){: #commands-command-argument-required } | `boolean` | `false` | Whether this argument is required |
+| [`default`](#commands-command-argument-default){: #commands-command-argument-default } | `any` |  | Default value if not provided |
+| [`doc`](#commands-command-argument-doc){: #commands-command-argument-doc } | `String.t` |  | Documentation for the argument |
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Command.Argument`
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Command`
 
 
 

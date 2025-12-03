@@ -12,7 +12,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :revolute
@@ -41,7 +41,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "revolute joint with required limit compiles" do
-      assert [link] = Info.robot(RevoluteRobot)
+      assert [link] = Info.topology(RevoluteRobot)
       assert [joint] = link.joints
       assert is_struct(joint, Joint)
       assert joint.name == :joint1
@@ -49,7 +49,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "revolute joint has origin" do
-      [link] = Info.robot(RevoluteRobot)
+      [link] = Info.topology(RevoluteRobot)
       [joint] = link.joints
       assert is_struct(joint.origin, Origin)
       assert joint.origin.x == ~u(0.1 meter)
@@ -57,14 +57,14 @@ defmodule Kinetix.JointTest do
     end
 
     test "revolute joint has axis" do
-      [link] = Info.robot(RevoluteRobot)
+      [link] = Info.topology(RevoluteRobot)
       [joint] = link.joints
       assert is_struct(joint.axis, Axis)
       assert joint.axis.z == ~u(1 meter)
     end
 
     test "revolute joint has limit with degree units" do
-      [link] = Info.robot(RevoluteRobot)
+      [link] = Info.topology(RevoluteRobot)
       [joint] = link.joints
       assert is_struct(joint.limit, Limit)
       assert joint.limit.lower == ~u(-90 degree)
@@ -74,7 +74,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "revolute joint connects to child link" do
-      [link] = Info.robot(RevoluteRobot)
+      [link] = Info.topology(RevoluteRobot)
       [joint] = link.joints
       assert joint.link.name == :child_link
     end
@@ -83,7 +83,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :revolute
@@ -106,7 +106,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "revolute joint with dynamics compiles" do
-      [link] = Info.robot(RevoluteWithDynamicsRobot)
+      [link] = Info.topology(RevoluteWithDynamicsRobot)
       [joint] = link.joints
       assert is_struct(joint.dynamics, Dynamics)
       assert joint.dynamics.damping == ~u(0.5 newton_meter_second_per_degree)
@@ -119,7 +119,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :wheel_joint do
             type :continuous
@@ -136,7 +136,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "continuous joint compiles without limit" do
-      [link] = Info.robot(ContinuousRobot)
+      [link] = Info.topology(ContinuousRobot)
       [joint] = link.joints
       assert joint.type == :continuous
       assert joint.name == :wheel_joint
@@ -147,7 +147,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :continuous
@@ -165,7 +165,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "continuous joint with optional limit compiles" do
-      [link] = Info.robot(ContinuousWithLimitRobot)
+      [link] = Info.topology(ContinuousWithLimitRobot)
       [joint] = link.joints
       assert is_struct(joint.limit, Limit)
       assert joint.limit.effort == ~u(5 newton_meter)
@@ -175,7 +175,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :continuous
@@ -193,7 +193,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "continuous joint with dynamics compiles" do
-      [link] = Info.robot(ContinuousWithDynamicsRobot)
+      [link] = Info.topology(ContinuousWithDynamicsRobot)
       [joint] = link.joints
       assert is_struct(joint.dynamics, Dynamics)
     end
@@ -204,7 +204,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :slider do
             type :prismatic
@@ -228,14 +228,14 @@ defmodule Kinetix.JointTest do
     end
 
     test "prismatic joint with required limit compiles" do
-      [link] = Info.robot(PrismaticRobot)
+      [link] = Info.topology(PrismaticRobot)
       [joint] = link.joints
       assert joint.type == :prismatic
       assert joint.name == :slider
     end
 
     test "prismatic limit uses meter units" do
-      [link] = Info.robot(PrismaticRobot)
+      [link] = Info.topology(PrismaticRobot)
       [joint] = link.joints
       assert joint.limit.lower == ~u(0 meter)
       assert joint.limit.upper == ~u(0.5 meter)
@@ -246,7 +246,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :slider do
             type :prismatic
@@ -269,7 +269,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "prismatic dynamics uses linear units" do
-      [link] = Info.robot(PrismaticWithDynamicsRobot)
+      [link] = Info.topology(PrismaticWithDynamicsRobot)
       [joint] = link.joints
       assert joint.dynamics.damping == ~u(1.0 newton_second_per_meter)
       assert joint.dynamics.friction == ~u(0.5 newton)
@@ -281,7 +281,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :fixed_joint do
             type :fixed
@@ -299,7 +299,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "fixed joint compiles with minimal config" do
-      [link] = Info.robot(FixedRobot)
+      [link] = Info.topology(FixedRobot)
       [joint] = link.joints
       assert joint.type == :fixed
       assert joint.name == :fixed_joint
@@ -308,7 +308,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "fixed joint can have origin" do
-      [link] = Info.robot(FixedRobot)
+      [link] = Info.topology(FixedRobot)
       [joint] = link.joints
       assert joint.origin.x == ~u(0.1 meter)
       assert joint.origin.y == ~u(0.2 meter)
@@ -320,7 +320,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :world do
           joint :floating_base do
             type :floating
@@ -333,7 +333,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "floating joint compiles" do
-      [link] = Info.robot(FloatingRobot)
+      [link] = Info.topology(FloatingRobot)
       [joint] = link.joints
       assert joint.type == :floating
       assert joint.name == :floating_base
@@ -347,7 +347,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :planar_joint do
             type :planar
@@ -364,14 +364,14 @@ defmodule Kinetix.JointTest do
     end
 
     test "planar joint compiles" do
-      [link] = Info.robot(PlanarRobot)
+      [link] = Info.topology(PlanarRobot)
       [joint] = link.joints
       assert joint.type == :planar
       assert joint.name == :planar_joint
     end
 
     test "planar joint with optional axis compiles" do
-      [link] = Info.robot(PlanarRobot)
+      [link] = Info.topology(PlanarRobot)
       [joint] = link.joints
       assert is_struct(joint.axis, Axis)
       assert joint.axis.z == ~u(1 meter)
@@ -381,7 +381,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :planar_joint do
             type :planar
@@ -399,7 +399,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "planar dynamics uses linear units" do
-      [link] = Info.robot(PlanarWithDynamicsRobot)
+      [link] = Info.topology(PlanarWithDynamicsRobot)
       [joint] = link.joints
       assert joint.dynamics.damping == ~u(0.5 newton_second_per_meter)
       assert joint.dynamics.friction == ~u(0.1 newton)
@@ -411,7 +411,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint do
             type :fixed
@@ -431,7 +431,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "joints auto-generate names when not provided" do
-      [link] = Info.robot(AutoNamedJointRobot)
+      [link] = Info.topology(AutoNamedJointRobot)
       names = Enum.map(link.joints, & &1.name)
       assert :joint_0 in names
       assert :joint_1 in names
@@ -443,7 +443,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :fixed
@@ -465,7 +465,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "origin with all translation values" do
-      [link] = Info.robot(OriginRobot)
+      [link] = Info.topology(OriginRobot)
       [joint] = link.joints
       assert joint.origin.x == ~u(1 meter)
       assert joint.origin.y == ~u(2 meter)
@@ -473,7 +473,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "origin with all rotation values" do
-      [link] = Info.robot(OriginRobot)
+      [link] = Info.topology(OriginRobot)
       [joint] = link.joints
       assert joint.origin.roll == ~u(10 degree)
       assert joint.origin.pitch == ~u(20 degree)
@@ -484,7 +484,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :fixed
@@ -501,7 +501,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "origin values default to zero when omitted" do
-      [link] = Info.robot(OriginDefaultsRobot)
+      [link] = Info.topology(OriginDefaultsRobot)
       [joint] = link.joints
       assert joint.origin.x == ~u(1 meter)
       assert joint.origin.y == ~u(0 meter)
@@ -515,7 +515,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :fixed
@@ -533,13 +533,13 @@ defmodule Kinetix.JointTest do
     end
 
     test "origin accepts various length units" do
-      [link] = Info.robot(OriginAlternativeUnitsRobot)
+      [link] = Info.topology(OriginAlternativeUnitsRobot)
       [joint] = link.joints
       assert joint.origin.x == ~u(100 centimeter)
     end
 
     test "origin accepts various angle units" do
-      [link] = Info.robot(OriginAlternativeUnitsRobot)
+      [link] = Info.topology(OriginAlternativeUnitsRobot)
       [joint] = link.joints
       assert joint.origin.roll == ~u(1 radian)
     end
@@ -550,7 +550,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :revolute
@@ -574,7 +574,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "axis with x, y, z components" do
-      [link] = Info.robot(AxisRobot)
+      [link] = Info.topology(AxisRobot)
       [joint] = link.joints
       assert joint.axis.x == ~u(0 meter)
       assert joint.axis.y == ~u(0 meter)
@@ -585,7 +585,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :revolute
@@ -607,7 +607,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "axis values default to zero" do
-      [link] = Info.robot(AxisDefaultsRobot)
+      [link] = Info.topology(AxisDefaultsRobot)
       [joint] = link.joints
       assert joint.axis.x == ~u(0 meter)
       assert joint.axis.y == ~u(0 meter)
@@ -620,7 +620,7 @@ defmodule Kinetix.JointTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :continuous
@@ -638,7 +638,7 @@ defmodule Kinetix.JointTest do
     end
 
     test "limit lower/upper are optional" do
-      [link] = Info.robot(LimitOptionalBoundsRobot)
+      [link] = Info.topology(LimitOptionalBoundsRobot)
       [joint] = link.joints
       assert is_nil(joint.limit.lower)
       assert is_nil(joint.limit.upper)

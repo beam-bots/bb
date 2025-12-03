@@ -19,7 +19,7 @@ defmodule Kinetix.Robot.Builder do
   """
   @spec build(module()) :: Robot.t()
   def build(robot_module) when is_atom(robot_module) do
-    [root_dsl_link] = Dsl.Info.robot(robot_module)
+    [root_dsl_link] = Dsl.Info.topology(robot_module)
     build_from_dsl(robot_module, root_dsl_link)
   end
 

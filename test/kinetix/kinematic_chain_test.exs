@@ -12,7 +12,7 @@ defmodule Kinetix.KinematicChainTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :joint1 do
             type :revolute
@@ -29,13 +29,13 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "root link has one joint" do
-      [root] = Info.robot(TwoLinkRobot)
+      [root] = Info.topology(TwoLinkRobot)
       assert root.name == :base_link
       assert length(root.joints) == 1
     end
 
     test "joint connects to child link" do
-      [root] = Info.robot(TwoLinkRobot)
+      [root] = Info.topology(TwoLinkRobot)
       [joint] = root.joints
       assert joint.name == :joint1
       assert is_struct(joint.link, Link)
@@ -48,7 +48,7 @@ defmodule Kinetix.KinematicChainTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base do
           joint :shoulder do
             type :revolute
@@ -76,7 +76,7 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "can traverse full chain" do
-      [base] = Info.robot(ThreeLinkSerialRobot)
+      [base] = Info.topology(ThreeLinkSerialRobot)
       assert base.name == :base
 
       [shoulder] = base.joints
@@ -94,7 +94,7 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "all links are Link structs" do
-      [base] = Info.robot(ThreeLinkSerialRobot)
+      [base] = Info.topology(ThreeLinkSerialRobot)
 
       assert is_struct(base, Link)
       assert is_struct(base.joints |> hd() |> Map.get(:link), Link)
@@ -111,7 +111,7 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "all joints are Joint structs" do
-      [base] = Info.robot(ThreeLinkSerialRobot)
+      [base] = Info.topology(ThreeLinkSerialRobot)
 
       [shoulder] = base.joints
       assert is_struct(shoulder, Joint)
@@ -126,7 +126,7 @@ defmodule Kinetix.KinematicChainTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :torso do
           joint :left_shoulder do
             type :revolute
@@ -165,12 +165,12 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "single link can have multiple joints" do
-      [torso] = Info.robot(BranchingRobot)
+      [torso] = Info.topology(BranchingRobot)
       assert length(torso.joints) == 3
     end
 
     test "all branches are accessible" do
-      [torso] = Info.robot(BranchingRobot)
+      [torso] = Info.topology(BranchingRobot)
       joint_names = Enum.map(torso.joints, & &1.name)
       assert :left_shoulder in joint_names
       assert :right_shoulder in joint_names
@@ -178,7 +178,7 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "each branch has its own child link" do
-      [torso] = Info.robot(BranchingRobot)
+      [torso] = Info.topology(BranchingRobot)
       child_names = Enum.map(torso.joints, & &1.link.name)
       assert :left_arm in child_names
       assert :right_arm in child_names
@@ -191,7 +191,7 @@ defmodule Kinetix.KinematicChainTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base do
           joint :prismatic_joint do
             type :prismatic
@@ -228,7 +228,7 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "chain can mix joint types" do
-      [base] = Info.robot(MixedJointRobot)
+      [base] = Info.topology(MixedJointRobot)
 
       [prismatic] = base.joints
       assert prismatic.type == :prismatic
@@ -241,7 +241,7 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "different joint types have appropriate properties" do
-      [base] = Info.robot(MixedJointRobot)
+      [base] = Info.topology(MixedJointRobot)
 
       [prismatic] = base.joints
       assert prismatic.limit.lower == ~u(0 meter)
@@ -261,7 +261,7 @@ defmodule Kinetix.KinematicChainTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base do
           inertial do
             mass(~u(10 kilogram))
@@ -353,12 +353,12 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "six joint chain compiles" do
-      [base] = Info.robot(SixDofArmRobot)
+      [base] = Info.topology(SixDofArmRobot)
       assert base.name == :base
     end
 
     test "can traverse all six joints" do
-      [base] = Info.robot(SixDofArmRobot)
+      [base] = Info.topology(SixDofArmRobot)
 
       joints =
         base
@@ -370,7 +370,7 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "properties are preserved through chain" do
-      [base] = Info.robot(SixDofArmRobot)
+      [base] = Info.topology(SixDofArmRobot)
       assert base.inertial.mass == ~u(10 kilogram)
 
       link1 = base.joints |> hd() |> Map.get(:link)
@@ -378,7 +378,7 @@ defmodule Kinetix.KinematicChainTest do
     end
 
     test "origins are set on joints" do
-      [base] = Info.robot(SixDofArmRobot)
+      [base] = Info.topology(SixDofArmRobot)
 
       [j1] = base.joints
       assert j1.origin.z == ~u(0.1 meter)

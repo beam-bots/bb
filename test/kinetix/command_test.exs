@@ -15,20 +15,20 @@ defmodule Kinetix.CommandTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        commands do
-          command :arm do
-            handler(Kinetix.CommandTest.TestHandler)
-          end
+      commands do
+        command :arm do
+          handler(Kinetix.CommandTest.TestHandler)
         end
+      end
 
+      topology do
         link :base_link do
         end
       end
     end
 
     test "command defined at robot level" do
-      commands = Info.robot_commands(SingleCommandRobot)
+      commands = Info.commands(SingleCommandRobot)
       assert length(commands) == 1
 
       [command] = commands
@@ -45,22 +45,22 @@ defmodule Kinetix.CommandTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        commands do
-          command :navigate do
-            handler(Kinetix.CommandTest.TestHandler)
-            timeout(30_000)
-            allowed_states([:idle, :executing])
-          end
+      commands do
+        command :navigate do
+          handler(Kinetix.CommandTest.TestHandler)
+          timeout(30_000)
+          allowed_states([:idle, :executing])
         end
+      end
 
+      topology do
         link :base_link do
         end
       end
     end
 
     test "command with custom timeout and allowed_states" do
-      [command] = Info.robot_commands(CommandWithOptionsRobot)
+      [command] = Info.commands(CommandWithOptionsRobot)
       assert command.name == :navigate
       assert command.timeout == 30_000
       assert command.allowed_states == [:idle, :executing]
@@ -72,30 +72,30 @@ defmodule Kinetix.CommandTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        commands do
-          command :navigate_to_pose do
-            handler(Kinetix.CommandTest.TestHandler)
+      commands do
+        command :navigate_to_pose do
+          handler(Kinetix.CommandTest.TestHandler)
 
-            argument :target_pose, :map do
-              required(true)
-              doc("The target pose to navigate to")
-            end
+          argument :target_pose, :map do
+            required(true)
+            doc("The target pose to navigate to")
+          end
 
-            argument :tolerance, :float do
-              default(0.1)
-              doc("Position tolerance in meters")
-            end
+          argument :tolerance, :float do
+            default(0.1)
+            doc("Position tolerance in meters")
           end
         end
+      end
 
+      topology do
         link :base_link do
         end
       end
     end
 
     test "command with arguments" do
-      [command] = Info.robot_commands(CommandWithArgumentsRobot)
+      [command] = Info.commands(CommandWithArgumentsRobot)
       assert command.name == :navigate_to_pose
       assert length(command.arguments) == 2
 
@@ -117,31 +117,31 @@ defmodule Kinetix.CommandTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        commands do
-          command :arm do
-            handler(Kinetix.CommandTest.TestHandler)
-            allowed_states([:disarmed, :idle])
-          end
-
-          command :disarm do
-            handler(Kinetix.CommandTest.TestHandler)
-            allowed_states([:idle, :executing])
-          end
-
-          command :navigate do
-            handler(Kinetix.CommandTest.TestHandler)
-            allowed_states([:idle])
-          end
+      commands do
+        command :arm do
+          handler(Kinetix.CommandTest.TestHandler)
+          allowed_states([:disarmed, :idle])
         end
 
+        command :disarm do
+          handler(Kinetix.CommandTest.TestHandler)
+          allowed_states([:idle, :executing])
+        end
+
+        command :navigate do
+          handler(Kinetix.CommandTest.TestHandler)
+          allowed_states([:idle])
+        end
+      end
+
+      topology do
         link :base_link do
         end
       end
     end
 
     test "multiple commands defined" do
-      commands = Info.robot_commands(MultipleCommandsRobot)
+      commands = Info.commands(MultipleCommandsRobot)
       assert length(commands) == 3
 
       names = Enum.map(commands, & &1.name)
@@ -157,25 +157,25 @@ defmodule Kinetix.CommandTest do
         @moduledoc false
         use Kinetix
 
-        robot do
-          robot_sensors do
-            sensor :navigate, SomeSensor
-          end
+        sensors do
+          sensor :navigate, SomeSensor
+        end
 
-          commands do
-            command :navigate do
-              handler(Kinetix.CommandTest.TestHandler)
-            end
+        commands do
+          command :navigate do
+            handler(Kinetix.CommandTest.TestHandler)
           end
+        end
 
+        topology do
           link :base_link do
           end
         end
       end
 
       # Both should exist without error - commands aren't in the registry
-      assert length(Info.robot_robot_sensors(CommandSensorSameName)) == 1
-      assert length(Info.robot_commands(CommandSensorSameName)) == 1
+      assert length(Info.sensors(CommandSensorSameName)) == 1
+      assert length(Info.commands(CommandSensorSameName)) == 1
     end
   end
 end

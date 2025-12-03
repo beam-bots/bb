@@ -10,7 +10,7 @@ defmodule Kinetix.Robot.RuntimeTest do
     @moduledoc false
     use Kinetix
 
-    robot do
+    topology do
       link :base_link do
       end
     end
@@ -20,29 +20,29 @@ defmodule Kinetix.Robot.RuntimeTest do
     @moduledoc false
     use Kinetix
 
-    robot do
-      commands do
-        command :immediate do
-          handler Kinetix.Test.ImmediateSuccessCommand
-          allowed_states [:idle]
-        end
-
-        command :async_cmd do
-          handler Kinetix.Test.AsyncCommand
-          allowed_states [:idle]
-        end
-
-        command :rejecting do
-          handler Kinetix.Test.RejectingCommand
-          allowed_states [:idle]
-        end
-
-        command :preemptable do
-          handler Kinetix.Test.AsyncCommand
-          allowed_states [:idle, :executing]
-        end
+    commands do
+      command :immediate do
+        handler Kinetix.Test.ImmediateSuccessCommand
+        allowed_states [:idle]
       end
 
+      command :async_cmd do
+        handler Kinetix.Test.AsyncCommand
+        allowed_states [:idle]
+      end
+
+      command :rejecting do
+        handler Kinetix.Test.RejectingCommand
+        allowed_states [:idle]
+      end
+
+      command :preemptable do
+        handler Kinetix.Test.AsyncCommand
+        allowed_states [:idle, :executing]
+      end
+    end
+
+    topology do
       link :base_link do
       end
     end

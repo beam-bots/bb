@@ -11,7 +11,7 @@ defmodule Kinetix.DslTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
         end
       end
@@ -27,7 +27,9 @@ defmodule Kinetix.DslTest do
 
       robot do
         name :my_custom_robot
+      end
 
+      topology do
         link :base_link do
         end
       end
@@ -43,14 +45,14 @@ defmodule Kinetix.DslTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
         end
       end
     end
 
     test "robot contains a single root link" do
-      assert [link] = Info.robot(BasicLinkRobot)
+      assert [link] = Info.topology(BasicLinkRobot)
       assert is_struct(link, Link)
       assert link.name == :base_link
     end
@@ -59,14 +61,14 @@ defmodule Kinetix.DslTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link do
         end
       end
     end
 
     test "link name auto-generates when not provided" do
-      assert [link] = Info.robot(AutoNamedLinkRobot)
+      assert [link] = Info.topology(AutoNamedLinkRobot)
       assert link.name == :link_0
     end
   end

@@ -11,7 +11,7 @@ defmodule Kinetix.ActuatorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :shoulder do
             type :revolute
@@ -31,7 +31,7 @@ defmodule Kinetix.ActuatorTest do
     end
 
     test "actuator on joint with bare module" do
-      [link] = Info.robot(BareModuleActuatorRobot)
+      [link] = Info.topology(BareModuleActuatorRobot)
       [joint] = link.joints
       [actuator] = joint.actuators
       assert is_struct(actuator, Actuator)
@@ -45,7 +45,7 @@ defmodule Kinetix.ActuatorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :shoulder do
             type :revolute
@@ -65,7 +65,7 @@ defmodule Kinetix.ActuatorTest do
     end
 
     test "actuator on joint with module and args" do
-      [link] = Info.robot(ModuleArgsActuatorRobot)
+      [link] = Info.topology(ModuleArgsActuatorRobot)
       [joint] = link.joints
       [actuator] = joint.actuators
       assert actuator.name == :motor
@@ -78,7 +78,7 @@ defmodule Kinetix.ActuatorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :shoulder do
             type :revolute
@@ -99,7 +99,7 @@ defmodule Kinetix.ActuatorTest do
     end
 
     test "multiple actuators on a single joint" do
-      [link] = Info.robot(MultipleActuatorsRobot)
+      [link] = Info.topology(MultipleActuatorsRobot)
       [joint] = link.joints
       assert length(joint.actuators) == 2
       names = Enum.map(joint.actuators, & &1.name)
@@ -113,7 +113,7 @@ defmodule Kinetix.ActuatorTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base_link do
           joint :shoulder do
             type :revolute
@@ -146,7 +146,7 @@ defmodule Kinetix.ActuatorTest do
     end
 
     test "actuators in nested joints" do
-      [base_link] = Info.robot(NestedJointActuatorsRobot)
+      [base_link] = Info.topology(NestedJointActuatorsRobot)
       [shoulder_joint] = base_link.joints
       [shoulder_actuator] = shoulder_joint.actuators
       assert shoulder_actuator.name == :shoulder_motor

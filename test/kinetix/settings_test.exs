@@ -12,7 +12,7 @@ defmodule Kinetix.SettingsTest do
       @moduledoc false
       use Kinetix
 
-      robot do
+      topology do
         link :base do
         end
       end
@@ -22,11 +22,11 @@ defmodule Kinetix.SettingsTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        settings do
-          registry_options partitions: 4
-        end
+      settings do
+        registry_options partitions: 4
+      end
 
+      topology do
         link :base do
         end
       end
@@ -36,11 +36,11 @@ defmodule Kinetix.SettingsTest do
       @moduledoc false
       use Kinetix
 
-      robot do
-        settings do
-          registry_options []
-        end
+      settings do
+        registry_options []
+      end
 
+      topology do
         link :base do
         end
       end

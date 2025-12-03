@@ -8,7 +8,7 @@ defmodule Kinetix.Dsl.LinkTransformer do
   """
   use Spark.Dsl.Transformer
   alias Kinetix.Cldr.Unit
-  alias Kinetix.Dsl.{Joint, Link}
+  alias Kinetix.Dsl.{Info, Joint, Link}
   alias Spark.{Dsl.Transformer, Error.DslError}
 
   @doc false
@@ -25,24 +25,24 @@ defmodule Kinetix.Dsl.LinkTransformer do
   @impl true
   def transform(dsl) do
     dsl
-    |> Transformer.get_entities([:robot])
+    |> Info.topology()
     |> Enum.filter(&is_struct(&1, Link))
     |> case do
       [] ->
         {:ok, dsl}
 
       [link] ->
-        state = %{dsl: dsl, link_count: 0, joint_count: 0, path: [:robot]}
+        state = %{dsl: dsl, link_count: 0, joint_count: 0, path: [:topology]}
 
         with {:ok, link, state} <- recursive_transform(link, state) do
-          {:ok, Transformer.replace_entity(state.dsl, [:robot], link)}
+          {:ok, Transformer.replace_entity(state.dsl, [:topology], link)}
         end
 
       links ->
         {:error,
          DslError.exception(
            module: Transformer.get_persisted(dsl, :module),
-           path: [:robot],
+           path: [:topology],
            message: """
            There can only be one link at the root of the kinematic graph. You have supplied #{length(links)}
            """
