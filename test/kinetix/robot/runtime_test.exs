@@ -159,8 +159,10 @@ defmodule Kinetix.Robot.RuntimeTest do
     test "rejects command when not in allowed state" do
       start_supervised!(RobotWithCommands)
 
-      assert {:error, %Runtime.StateError{current_state: :disarmed}} =
-               Runtime.execute(RobotWithCommands, :immediate, %{})
+      # Errors now come through the awaited task
+      {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
+
+      assert {:error, %Runtime.StateError{current_state: :disarmed}} = Task.await(task)
     end
 
     test "executes command that succeeds immediately" do
@@ -168,7 +170,8 @@ defmodule Kinetix.Robot.RuntimeTest do
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      assert {:ok, :done} = Runtime.execute(RobotWithCommands, :immediate, %{})
+      {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
+      assert {:ok, :done} = Task.await(task)
     end
 
     test "rejects unknown commands" do
@@ -176,17 +179,18 @@ defmodule Kinetix.Robot.RuntimeTest do
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      assert {:error, {:unknown_command, :nonexistent}} =
-               Runtime.execute(RobotWithCommands, :nonexistent, %{})
+      # Errors now come through the awaited task
+      {:ok, task} = Runtime.execute(RobotWithCommands, :nonexistent, %{})
+      assert {:error, {:unknown_command, :nonexistent}} = Task.await(task)
     end
 
-    test "handler can reject goal" do
+    test "handler can return error" do
       start_supervised!(RobotWithCommands)
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      assert {:error, {:rejected, :not_allowed}} =
-               Runtime.execute(RobotWithCommands, :rejecting, %{})
+      {:ok, task} = Runtime.execute(RobotWithCommands, :rejecting, %{})
+      assert {:error, :not_allowed} = Task.await(task)
     end
 
     test "async command transitions state to executing" do
@@ -194,23 +198,23 @@ defmodule Kinetix.Robot.RuntimeTest do
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      {:ok, _ref} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      {:ok, _task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
 
       assert_receive :executing
       assert Runtime.state(RobotWithCommands) == :executing
     end
 
-    test "async command completes via handle_info" do
+    test "async command transitions back to idle on completion" do
       start_supervised!(RobotWithCommands)
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      {:ok, _ref} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      {:ok, task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       assert_receive :executing
 
-      runtime_pid = GenServer.whereis(Runtime.via(RobotWithCommands))
-      send(runtime_pid, :complete)
+      assert {:ok, :completed} = Task.await(task)
 
+      # Give the runtime a moment to process the :DOWN message
       Process.sleep(10)
       assert Runtime.state(RobotWithCommands) == :idle
     end
@@ -220,12 +224,19 @@ defmodule Kinetix.Robot.RuntimeTest do
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      {:ok, _ref} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      {:ok, task1} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       assert_receive :executing
       assert Runtime.state(RobotWithCommands) == :executing
 
-      {:ok, _ref2} = Runtime.execute(RobotWithCommands, :preemptable, %{notify: self()})
+      # Start a preemptable command - it should cancel the first task
+      {:ok, task2} = Runtime.execute(RobotWithCommands, :preemptable, %{notify: self()})
       assert_receive :executing
+
+      # First task returns cancelled error
+      assert {:error, :cancelled} = Task.await(task1)
+
+      # Second task should complete
+      assert {:ok, :completed} = Task.await(task2)
     end
 
     test "non-preemptable command rejected when executing" do
@@ -233,17 +244,35 @@ defmodule Kinetix.Robot.RuntimeTest do
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      {:ok, _ref} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      {:ok, _task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       assert_receive :executing
 
-      assert {:error, %Runtime.StateError{current_state: :executing}} =
-               Runtime.execute(RobotWithCommands, :immediate, %{})
+      # Errors come through the task now
+      {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
+      assert {:error, %Runtime.StateError{current_state: :executing}} = Task.await(task)
     end
 
     test "cancel returns error when nothing executing" do
       start_supervised!(RobotWithCommands)
 
       assert {:error, :no_execution} = Runtime.cancel(RobotWithCommands)
+    end
+
+    test "cancel terminates running command" do
+      start_supervised!(RobotWithCommands)
+
+      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+
+      {:ok, task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      assert_receive :executing
+
+      assert :ok = Runtime.cancel(RobotWithCommands)
+
+      # Task returns cancelled error
+      assert {:error, :cancelled} = Task.await(task)
+
+      # State transitions to idle synchronously on cancel
+      assert Runtime.state(RobotWithCommands) == :idle
     end
   end
 
@@ -255,12 +284,13 @@ defmodule Kinetix.Robot.RuntimeTest do
       assert function_exported?(RobotWithCommands, :async_cmd, 1)
     end
 
-    test "generated functions execute commands" do
+    test "generated functions execute commands and return tasks" do
       start_supervised!(RobotWithCommands)
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      assert {:ok, :done} = RobotWithCommands.immediate()
+      {:ok, task} = RobotWithCommands.immediate()
+      assert {:ok, :done} = Task.await(task)
     end
 
     test "generated functions pass goals to handler" do
@@ -268,8 +298,57 @@ defmodule Kinetix.Robot.RuntimeTest do
 
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
-      {:ok, _ref} = RobotWithCommands.async_cmd(notify: self())
+      {:ok, task} = RobotWithCommands.async_cmd(notify: self())
       assert_receive :executing
+      assert {:ok, :completed} = Task.await(task)
+    end
+  end
+
+  describe "command events" do
+    alias Kinetix.Command.Event
+
+    test "broadcasts command started event" do
+      start_supervised!(RobotWithCommands)
+
+      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+
+      Kinetix.PubSub.subscribe(RobotWithCommands, [:command, :immediate])
+      {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
+
+      assert_receive {:kinetix, [:command, :immediate, _ref],
+                      %Kinetix.Message{payload: %Event{status: :started}}}
+
+      Task.await(task)
+    end
+
+    test "broadcasts command succeeded event" do
+      start_supervised!(RobotWithCommands)
+
+      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+
+      Kinetix.PubSub.subscribe(RobotWithCommands, [:command, :immediate])
+      {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
+      Task.await(task)
+
+      assert_receive {:kinetix, [:command, :immediate, _ref],
+                      %Kinetix.Message{
+                        payload: %Event{status: :succeeded, data: %{result: :done}}
+                      }}
+    end
+
+    test "broadcasts command failed event" do
+      start_supervised!(RobotWithCommands)
+
+      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+
+      Kinetix.PubSub.subscribe(RobotWithCommands, [:command, :rejecting])
+      {:ok, task} = Runtime.execute(RobotWithCommands, :rejecting, %{})
+      Task.await(task)
+
+      assert_receive {:kinetix, [:command, :rejecting, _ref],
+                      %Kinetix.Message{
+                        payload: %Event{status: :failed, data: %{reason: :not_allowed}}
+                      }}
     end
   end
 end

@@ -7,19 +7,7 @@ defmodule Kinetix.Test.ImmediateSuccessCommand do
   @behaviour Kinetix.Command
 
   @impl true
-  def init(_opts), do: {:ok, %{}}
-
-  @impl true
-  def handle_goal(_goal, _robot_state, state), do: {:accept, state}
-
-  @impl true
-  def handle_execute(_robot_state, _runtime, state), do: {:succeeded, :done, state}
-
-  @impl true
-  def handle_cancel(_robot_state, _runtime, state), do: {:canceled, :stopped, state}
-
-  @impl true
-  def handle_info(_msg, _robot_state, _runtime, state), do: {:executing, state}
+  def handle_command(_goal, _context), do: {:ok, :done}
 end
 
 defmodule Kinetix.Test.AsyncCommand do
@@ -27,28 +15,13 @@ defmodule Kinetix.Test.AsyncCommand do
   @behaviour Kinetix.Command
 
   @impl true
-  def init(_opts), do: {:ok, %{caller: nil}}
-
-  @impl true
-  def handle_goal(%{notify: pid}, _robot_state, state) do
-    {:accept, %{state | caller: pid}}
+  def handle_command(%{notify: pid}, _context) do
+    send(pid, :executing)
+    Process.sleep(50)
+    {:ok, :completed}
   end
 
-  def handle_goal(_goal, _robot_state, state), do: {:accept, state}
-
-  @impl true
-  def handle_execute(_robot_state, _runtime, state) do
-    if state.caller, do: send(state.caller, :executing)
-    {:executing, state}
-  end
-
-  @impl true
-  def handle_cancel(_robot_state, _runtime, state), do: {:canceled, :stopped, state}
-
-  @impl true
-  def handle_info(:complete, _robot_state, _runtime, state), do: {:succeeded, :completed, state}
-  def handle_info(:abort, _robot_state, _runtime, state), do: {:aborted, :failed, state}
-  def handle_info(_msg, _robot_state, _runtime, state), do: {:executing, state}
+  def handle_command(_goal, _context), do: {:ok, :completed}
 end
 
 defmodule Kinetix.Test.RejectingCommand do
@@ -56,17 +29,5 @@ defmodule Kinetix.Test.RejectingCommand do
   @behaviour Kinetix.Command
 
   @impl true
-  def init(_opts), do: {:ok, %{}}
-
-  @impl true
-  def handle_goal(_goal, _robot_state, state), do: {:reject, :not_allowed, state}
-
-  @impl true
-  def handle_execute(_robot_state, _runtime, state), do: {:executing, state}
-
-  @impl true
-  def handle_cancel(_robot_state, _runtime, state), do: {:canceled, :stopped, state}
-
-  @impl true
-  def handle_info(_msg, _robot_state, _runtime, state), do: {:executing, state}
+  def handle_command(_goal, _context), do: {:error, :not_allowed}
 end

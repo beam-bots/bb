@@ -28,11 +28,17 @@ defmodule Kinetix.Robot.Runtime do
   :executing ──disarm──→ :disarmed
   :idle ──disarm──→ :disarmed
   ```
+
+  ## Command Execution
+
+  Commands execute in supervised tasks. The caller receives a `Task.t()` and
+  can use `Task.await/2` or `Task.yield/2` to get the result. The Runtime
+  monitors the task and transitions back to `:idle` when it completes.
   """
 
   use GenServer
 
-  alias Kinetix.Command.Execution
+  alias Kinetix.Command.{Context, Event}
   alias Kinetix.Dsl.Info
   alias Kinetix.{Message, PubSub}
   alias Kinetix.Robot.State, as: RobotState
@@ -70,8 +76,10 @@ defmodule Kinetix.Robot.Runtime do
     :robot_state,
     :state,
     :commands,
-    :handlers,
-    :current_execution
+    :current_task,
+    :current_task_ref,
+    :current_command_name,
+    :current_execution_id
   ]
 
   @type robot_state :: :disarmed | :idle | :executing
@@ -81,8 +89,10 @@ defmodule Kinetix.Robot.Runtime do
           robot_state: RobotState.t(),
           state: robot_state(),
           commands: %{atom() => Kinetix.Dsl.Command.t()},
-          handlers: %{atom() => {module(), term()}},
-          current_execution: Execution.t() | nil
+          current_task: Task.t() | nil,
+          current_task_ref: reference() | nil,
+          current_command_name: atom() | nil,
+          current_execution_id: reference() | nil
         }
 
   @doc """
@@ -153,18 +163,71 @@ defmodule Kinetix.Robot.Runtime do
   @doc """
   Execute a command with the given goal.
 
-  Returns `{:ok, ref}` if the command was accepted, where `ref` can be used
-  to track the execution. The caller will receive messages as the command
-  progresses.
+  Returns `{:ok, task}` where `task` can be awaited for the result.
+  The task handles subscription to command events internally.
+
+  ## Examples
+
+      {:ok, task} = Runtime.execute(MyRobot, :navigate, %{target: pose})
+      {:ok, result} = Task.await(task)
+
+      # Or with timeout
+      case Task.yield(task, 5000) || Task.shutdown(task) do
+        {:ok, result} -> handle_result(result)
+        nil -> handle_timeout()
+      end
+
+  ## Errors
+
+  Errors are returned through the awaited task result:
+  - `{:error, %StateError{}}` - Robot not in allowed state
+  - `{:error, {:unknown_command, name}}` - Command not found
+  - `{:error, reason}` - Command handler returned an error
   """
-  @spec execute(module(), atom(), map()) ::
-          {:ok, reference()} | {:error, StateError.t() | term()}
+  @spec execute(module(), atom(), map()) :: {:ok, Task.t()}
   def execute(robot_module, command_name, goal) do
-    GenServer.call(via(robot_module), {:execute, command_name, goal})
+    execution_id = make_ref()
+
+    # Spawn task owned by the caller so they can await it
+    task =
+      Task.async(fn ->
+        path = [:command, command_name, execution_id]
+        PubSub.subscribe(robot_module, path)
+
+        try do
+          case GenServer.call(via(robot_module), {:execute, command_name, goal, execution_id}) do
+            :ok ->
+              wait_for_completion(path)
+
+            {:error, _} = error ->
+              error
+          end
+        after
+          PubSub.unsubscribe(robot_module, path)
+        end
+      end)
+
+    {:ok, task}
+  end
+
+  defp wait_for_completion(path) do
+    receive do
+      {:kinetix, ^path, %Message{payload: %Event{status: :succeeded, data: %{result: result}}}} ->
+        {:ok, result}
+
+      {:kinetix, ^path, %Message{payload: %Event{status: :failed, data: %{reason: reason}}}} ->
+        {:error, reason}
+
+      {:kinetix, ^path, %Message{payload: %Event{status: :cancelled}}} ->
+        {:error, :cancelled}
+    end
   end
 
   @doc """
   Cancel the currently executing command.
+
+  Terminates the command task immediately. The caller will receive an exit
+  when awaiting the task.
   """
   @spec cancel(module()) :: :ok | {:error, :no_execution}
   def cancel(robot_module) do
@@ -181,16 +244,16 @@ defmodule Kinetix.Robot.Runtime do
       |> Info.robot_commands()
       |> Map.new(&{&1.name, &1})
 
-    handlers = initialise_handlers(commands)
-
     state = %__MODULE__{
       robot_module: robot_module,
       robot: robot,
       robot_state: robot_state,
       state: :disarmed,
       commands: commands,
-      handlers: handlers,
-      current_execution: nil
+      current_task: nil,
+      current_task_ref: nil,
+      current_command_name: nil,
+      current_execution_id: nil
     }
 
     {:ok, state}
@@ -217,46 +280,59 @@ defmodule Kinetix.Robot.Runtime do
     {:reply, state.robot, state}
   end
 
-  def handle_call({:execute, command_name, goal}, from, state) do
+  def handle_call({:execute, command_name, goal, execution_id}, _from, state) do
     case Map.fetch(state.commands, command_name) do
       {:ok, command} ->
-        handle_execute_command(command, goal, from, state)
+        handle_execute_command(command, goal, execution_id, state)
 
       :error ->
         {:reply, {:error, {:unknown_command, command_name}}, state}
     end
   end
 
-  def handle_call(:cancel, _from, %{current_execution: nil} = state) do
+  def handle_call(:cancel, _from, %{current_task: nil} = state) do
     {:reply, {:error, :no_execution}, state}
   end
 
   def handle_call(:cancel, _from, state) do
-    state = handle_cancel_execution(state)
+    old_state = state.state
+    state = terminate_current_task(state)
+    state = %{state | state: :idle}
+    state = set_robot_machine_state(state, :idle)
+
+    if old_state != :idle do
+      publish_transition(state, old_state, :idle)
+    end
+
     {:reply, :ok, state}
   end
 
   @impl GenServer
-  def handle_info(msg, %{current_execution: %Execution{} = exec} = state) do
-    {handler_mod, handler_state} = Map.fetch!(state.handlers, exec.command_name)
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{current_task_ref: ref} = state) do
+    # Task completed (or crashed) - clean up state
+    old_state = state.state
 
-    case handler_mod.handle_info(msg, state.robot_state, self(), handler_state) do
-      {:executing, new_handler_state} ->
-        state = update_handler_state(state, exec.command_name, new_handler_state)
-        {:noreply, state}
+    state = %{
+      state
+      | state: :idle,
+        current_task: nil,
+        current_task_ref: nil,
+        current_command_name: nil,
+        current_execution_id: nil
+    }
 
-      {:succeeded, result, new_handler_state} ->
-        state = complete_execution(state, exec, :succeeded, result, new_handler_state)
-        {:noreply, state}
+    state = set_robot_machine_state(state, :idle)
 
-      {:aborted, reason, new_handler_state} ->
-        state = complete_execution(state, exec, :aborted, reason, new_handler_state)
-        {:noreply, state}
-
-      {:canceled, result, new_handler_state} ->
-        state = complete_execution(state, exec, :canceled, result, new_handler_state)
-        {:noreply, state}
+    if old_state != :idle do
+      publish_transition(state, old_state, :idle)
     end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:command_task_done, _execution_id}, state) do
+    # Task completed normally - :DOWN handles state transition
+    {:noreply, state}
   end
 
   def handle_info(_msg, state) do
@@ -272,26 +348,86 @@ defmodule Kinetix.Robot.Runtime do
     :ok
   end
 
-  defp handle_execute_command(command, goal, from, state) do
+  defp handle_execute_command(command, goal, execution_id, state) do
     with :ok <- check_state_allowed(command, state),
          {:ok, state} <- maybe_preempt(command, state) do
-      exec = Execution.new(command.name, goal, from)
-      {handler_mod, handler_state} = Map.fetch!(state.handlers, command.name)
+      task = spawn_command_task(state, command, goal, execution_id)
+      task_monitor_ref = Process.monitor(task.pid)
 
-      case handler_mod.handle_goal(goal, state.robot_state, handler_state) do
-        {:accept, new_handler_state} ->
-          state = update_handler_state(state, command.name, new_handler_state)
-          state = start_execution(state, exec, handler_mod, new_handler_state)
-          {:reply, {:ok, exec.id}, state}
+      old_state = state.state
 
-        {:reject, reason, new_handler_state} ->
-          state = update_handler_state(state, command.name, new_handler_state)
-          {:reply, {:error, {:rejected, reason}}, state}
+      new_state = %{
+        state
+        | state: :executing,
+          current_task: task,
+          current_task_ref: task_monitor_ref,
+          current_command_name: command.name,
+          current_execution_id: execution_id
+      }
+
+      new_state = set_robot_machine_state(new_state, :executing)
+
+      if old_state != :executing do
+        publish_transition(new_state, old_state, :executing)
       end
+
+      {:reply, :ok, new_state}
     else
       {:error, _} = err ->
         {:reply, err, state}
     end
+  end
+
+  defp spawn_command_task(state, command, goal, execution_id) do
+    robot_module = state.robot_module
+    robot = state.robot
+    robot_state = state.robot_state
+    runtime_pid = self()
+    path = [:command, command.name, execution_id]
+
+    Task.Supervisor.async_nolink(
+      task_supervisor_name(robot_module),
+      fn ->
+        try do
+          # Broadcast command started
+          publish_command_event(robot_module, path, :started, %{goal: goal})
+
+          # Build context
+          context = %Context{
+            robot_module: robot_module,
+            robot: robot,
+            robot_state: robot_state,
+            execution_id: execution_id
+          }
+
+          # Execute handler
+          result = command.handler.handle_command(goal, context)
+
+          # Broadcast result
+          case result do
+            {:ok, value} ->
+              publish_command_event(robot_module, path, :succeeded, %{result: value})
+
+            {:error, reason} ->
+              publish_command_event(robot_module, path, :failed, %{reason: reason})
+          end
+
+          result
+        after
+          # Notify runtime task is done (for any cleanup)
+          send(runtime_pid, {:command_task_done, execution_id})
+        end
+      end
+    )
+  end
+
+  defp task_supervisor_name(robot_module) do
+    Kinetix.Process.via(robot_module, Kinetix.TaskSupervisor)
+  end
+
+  defp publish_command_event(robot_module, path, status, data) do
+    message = Message.new!(Event, :command, status: status, data: data)
+    PubSub.publish(robot_module, path, message)
   end
 
   defp check_state_allowed(command, state) do
@@ -303,13 +439,13 @@ defmodule Kinetix.Robot.Runtime do
     end
   end
 
-  defp maybe_preempt(_command, %{current_execution: nil} = state) do
+  defp maybe_preempt(_command, %{current_task: nil} = state) do
     {:ok, state}
   end
 
   defp maybe_preempt(command, state) do
     if :executing in command.allowed_states do
-      state = handle_cancel_execution(state)
+      state = terminate_current_task(state)
       {:ok, state}
     else
       {:error,
@@ -317,90 +453,28 @@ defmodule Kinetix.Robot.Runtime do
     end
   end
 
-  defp start_execution(state, exec, handler_mod, handler_state) do
-    case handler_mod.handle_execute(state.robot_state, self(), handler_state) do
-      {:executing, new_handler_state} ->
-        exec = %{exec | status: :executing, handler_state: new_handler_state}
-        state = update_handler_state(state, exec.command_name, new_handler_state)
+  defp terminate_current_task(%{current_task: nil} = state), do: state
 
-        old_state = state.state
-        state = set_robot_machine_state(state, :executing)
-        state = %{state | current_execution: exec}
+  defp terminate_current_task(state) do
+    # Broadcast cancelled event before killing the task
+    # so the waiting caller can return
+    path = [:command, state.current_command_name, state.current_execution_id]
+    publish_command_event(state.robot_module, path, :cancelled, %{})
 
-        if old_state != :executing do
-          publish_transition(state, old_state, :executing)
-        end
+    Task.Supervisor.terminate_child(
+      task_supervisor_name(state.robot_module),
+      state.current_task.pid
+    )
 
-        state
+    Process.demonitor(state.current_task_ref, [:flush])
 
-      {:succeeded, result, new_handler_state} ->
-        reply_to_caller(exec.caller, {:ok, result})
-        update_handler_state(state, exec.command_name, new_handler_state)
-
-      {:aborted, reason, new_handler_state} ->
-        reply_to_caller(exec.caller, {:error, {:aborted, reason}})
-        update_handler_state(state, exec.command_name, new_handler_state)
-    end
-  end
-
-  defp handle_cancel_execution(%{current_execution: nil} = state), do: state
-
-  defp handle_cancel_execution(state) do
-    exec = state.current_execution
-    {handler_mod, handler_state} = Map.fetch!(state.handlers, exec.command_name)
-
-    case handler_mod.handle_cancel(state.robot_state, self(), handler_state) do
-      {:canceling, new_handler_state} ->
-        exec = %{exec | status: :canceling}
-        state = update_handler_state(state, exec.command_name, new_handler_state)
-        %{state | current_execution: exec}
-
-      {:canceled, result, new_handler_state} ->
-        complete_execution(state, exec, :canceled, result, new_handler_state)
-
-      {:aborted, reason, new_handler_state} ->
-        complete_execution(state, exec, :aborted, reason, new_handler_state)
-    end
-  end
-
-  defp complete_execution(state, exec, status, result, new_handler_state) do
-    reply =
-      case status do
-        :succeeded -> {:ok, result}
-        :canceled -> {:ok, {:canceled, result}}
-        :aborted -> {:error, {:aborted, result}}
-      end
-
-    reply_to_caller(exec.caller, reply)
-
-    state = update_handler_state(state, exec.command_name, new_handler_state)
-
-    old_state = state.state
-    state = set_robot_machine_state(state, :idle)
-    state = %{state | current_execution: nil}
-
-    if old_state != :idle do
-      publish_transition(state, old_state, :idle)
-    end
-
-    state
-  end
-
-  defp reply_to_caller(from, reply) do
-    GenServer.reply(from, reply)
-  end
-
-  defp update_handler_state(state, command_name, new_handler_state) do
-    {handler_mod, _old_state} = Map.fetch!(state.handlers, command_name)
-    handlers = Map.put(state.handlers, command_name, {handler_mod, new_handler_state})
-    %{state | handlers: handlers}
-  end
-
-  defp initialise_handlers(commands) do
-    Map.new(commands, fn {name, command} ->
-      {:ok, handler_state} = command.handler.init([])
-      {name, {command.handler, handler_state}}
-    end)
+    %{
+      state
+      | current_task: nil,
+        current_task_ref: nil,
+        current_command_name: nil,
+        current_execution_id: nil
+    }
   end
 
   defp publish_transition(state, from, to) do

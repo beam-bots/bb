@@ -6,28 +6,8 @@ defmodule Kinetix.Command do
   @moduledoc """
   Behaviour for implementing robot commands.
 
-  Commands follow a Goal → Feedback → Result pattern similar to ROS2 Actions.
-  Each command handler implements callbacks for the various lifecycle stages.
-
-  ## Lifecycle
-
-  1. `init/1` - Called when the command server starts, initialise handler state
-  2. `handle_goal/3` - Called when a new goal arrives, accept or reject
-  3. `handle_execute/2` - Called after goal is accepted, begin execution
-  4. `handle_cancel/2` - Called when cancellation is requested
-  5. `handle_info/2` - Handle async messages during execution
-
-  ## States
-
-  Commands progress through these states:
-  - `:pending` - Goal received, not yet processed
-  - `:accepted` - Handler accepted the goal
-  - `:executing` - Actively executing
-  - `:canceling` - Cancel requested, winding down
-  - `:succeeded` - Completed successfully
-  - `:aborted` - Failed during execution
-  - `:canceled` - Successfully cancelled
-  - `:rejected` - Handler rejected the goal
+  Commands execute in a supervised task and receive a goal (arguments) and
+  context (robot state). The handler runs to completion and returns a result.
 
   ## Example
 
@@ -35,130 +15,47 @@ defmodule Kinetix.Command do
         @behaviour Kinetix.Command
 
         @impl true
-        def init(_opts), do: {:ok, %{}}
+        def handle_command(%{target_pose: pose, tolerance: tol}, context) do
+          # Access robot state
+          current_pose = get_current_pose(context.robot_state)
 
-        @impl true
-        def handle_goal(%{target_pose: pose}, robot_state, state) do
-          # Validate the goal is achievable
-          if reachable?(pose, robot_state) do
-            {:accept, %{state | target: pose}}
-          else
-            {:reject, :unreachable, state}
+          # Do the work (this runs in a task, so blocking is fine)
+          case navigate_to(pose, tolerance: tol) do
+            :ok -> {:ok, %{final_pose: pose}}
+            {:error, reason} -> {:error, reason}
           end
         end
-
-        @impl true
-        def handle_execute(robot_state, runtime, state) do
-          # Spawn async navigation work that reports back to runtime
-          Task.start(fn ->
-            result = navigate_to(state.target)
-            send(runtime, {:navigation_complete, result})
-          end)
-          {:executing, state}
-        end
-
-        @impl true
-        def handle_cancel(robot_state, runtime, state) do
-          # Gracefully stop
-          {:canceled, :stopped, state}
-        end
-
-        @impl true
-        def handle_info({:navigation_complete, result}, robot_state, runtime, state) do
-          {:succeeded, result, state}
-        end
       end
+
+  ## Execution Model
+
+  Commands run in supervised tasks spawned by the Runtime. The caller receives
+  a `Task.t()` and can use `Task.await/2` or `Task.yield/2` to get the result.
+
+  Cancellation is handled by killing the task - handlers don't need to implement
+  cancellation logic. If graceful shutdown is needed, handlers can trap exits.
   """
 
-  alias Kinetix.Robot.State, as: RobotState
+  alias Kinetix.Command.Context
 
   @type goal :: map()
   @type result :: term()
-  @type reason :: term()
-  @type handler_state :: term()
 
   @doc """
-  Initialise the command handler.
+  Execute the command with the given goal.
 
-  Called when the robot starts. Return `{:ok, state}` with initial handler state.
-  """
-  @callback init(opts :: keyword()) :: {:ok, handler_state()}
+  Called in a supervised task. The handler should perform the work and return
+  the result. Blocking operations are fine since this runs in a separate process.
 
-  @doc """
-  Handle an incoming goal.
-
-  Called when a new goal is submitted. The handler should validate the goal
-  and decide whether to accept or reject it.
+  The context provides access to:
+  - `robot_module` - The robot module
+  - `robot` - The static robot struct (topology)
+  - `robot_state` - The dynamic robot state (ETS-backed joint positions etc)
+  - `execution_id` - Unique identifier for this execution
 
   Returns:
-  - `{:accept, new_state}` - Accept the goal, will call `handle_execute/2` next
-  - `{:reject, reason, new_state}` - Reject the goal with a reason
+  - `{:ok, result}` - Command succeeded with result
+  - `{:error, reason}` - Command failed with reason
   """
-  @callback handle_goal(goal(), RobotState.t(), handler_state()) ::
-              {:accept, handler_state()}
-              | {:reject, reason(), handler_state()}
-
-  @doc """
-  Begin executing the accepted goal.
-
-  Called after the goal is accepted. The handler should start any async work
-  needed to achieve the goal. The `runtime` pid is provided so handlers can
-  spawn processes that send messages back for processing via `handle_info/4`.
-
-  Returns:
-  - `{:executing, new_state}` - Execution in progress, wait for handle_info
-  - `{:succeeded, result, new_state}` - Immediately completed successfully
-  - `{:aborted, reason, new_state}` - Failed to start execution
-  """
-  @callback handle_execute(RobotState.t(), runtime :: pid(), handler_state()) ::
-              {:executing, handler_state()}
-              | {:succeeded, result(), handler_state()}
-              | {:aborted, reason(), handler_state()}
-
-  @doc """
-  Handle a cancellation request.
-
-  Called when the caller requests cancellation. The handler should begin
-  graceful shutdown of the command. The `runtime` pid is provided for
-  spawning async cleanup work.
-
-  Returns:
-  - `{:canceling, new_state}` - Starting cancellation, wait for handle_info
-  - `{:canceled, result, new_state}` - Immediately cancelled
-  - `{:aborted, reason, new_state}` - Cannot cancel cleanly, aborted instead
-  """
-  @callback handle_cancel(RobotState.t(), runtime :: pid(), handler_state()) ::
-              {:canceling, handler_state()}
-              | {:canceled, result(), handler_state()}
-              | {:aborted, reason(), handler_state()}
-
-  @doc """
-  Handle async messages during execution.
-
-  Called for any messages sent to the runtime during command execution.
-  Use this to process sensor data, timer events, or completion notifications
-  from spawned processes. The `runtime` pid is provided for spawning
-  additional async work if needed.
-
-  Returns:
-  - `{:executing, new_state}` - Still executing
-  - `{:succeeded, result, new_state}` - Completed successfully
-  - `{:aborted, reason, new_state}` - Failed during execution
-  - `{:canceled, result, new_state}` - Cancellation completed (only valid when canceling)
-  """
-  @callback handle_info(msg :: term(), RobotState.t(), runtime :: pid(), handler_state()) ::
-              {:executing, handler_state()}
-              | {:succeeded, result(), handler_state()}
-              | {:aborted, reason(), handler_state()}
-              | {:canceled, result(), handler_state()}
-
-  @doc """
-  Optional callback for cleanup when command completes.
-
-  Called after the command finishes (succeeded, aborted, or canceled).
-  Default implementation does nothing.
-  """
-  @callback terminate(reason :: term(), handler_state()) :: :ok
-
-  @optional_callbacks terminate: 2
+  @callback handle_command(goal(), Context.t()) :: {:ok, result()} | {:error, term()}
 end

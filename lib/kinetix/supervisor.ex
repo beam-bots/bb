@@ -15,6 +15,7 @@ defmodule Kinetix.Supervisor do
   Kinetix.Supervisor (root, :one_for_one)
   ├── Registry (named {MyRobot, :registry})
   ├── PubSub Registry (named {MyRobot, :pubsub})
+  ├── Task.Supervisor (for command execution tasks)
   ├── Runtime (robot state, state machine, command execution)
   ├── RobotSensor1 (robot-level sensors)
   ├── Controller1 (robot-level controllers)
@@ -64,6 +65,10 @@ defmodule Kinetix.Supervisor do
          name: Kinetix.PubSub.registry_name(robot_module)
        )}
 
+    # Task supervisor for command execution
+    task_supervisor_child =
+      {Task.Supervisor, name: Kinetix.Process.via(robot_module, Kinetix.TaskSupervisor)}
+
     # Runtime manages robot state, state machine, and command execution
     runtime_child = {Kinetix.Robot.Runtime, {robot_module, opts}}
 
@@ -91,7 +96,7 @@ defmodule Kinetix.Supervisor do
         {Kinetix.LinkSupervisor, {robot_module, link, [], opts}}
       end)
 
-    [registry_child, pubsub_child, runtime_child] ++
+    [registry_child, pubsub_child, task_supervisor_child, runtime_child] ++
       robot_sensor_children ++ controller_children ++ link_children
   end
 end
