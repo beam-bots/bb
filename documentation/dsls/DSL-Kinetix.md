@@ -64,6 +64,7 @@ System-wide settings
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`registry_module`](#robot-settings-registry_module){: #robot-settings-registry_module } | `module` | `Registry` | The registry module to use |
+| [`registry_options`](#robot-settings-registry_options){: #robot-settings-registry_options } | `keyword` |  | Options passed to Registry.start_link/1. Defaults to `[partitions: System.schedulers_online()]` at runtime. |
 | [`supervisor_module`](#robot-settings-supervisor_module){: #robot-settings-supervisor_module } | `module` | `Supervisor` | The supervisor module to use |
 
 

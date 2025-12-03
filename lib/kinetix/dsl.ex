@@ -540,6 +540,12 @@ defmodule Kinetix.Dsl do
         required: false,
         default: Registry
       ],
+      registry_options: [
+        type: :keyword_list,
+        doc:
+          "Options passed to Registry.start_link/1. Defaults to `[partitions: System.schedulers_online()]` at runtime.",
+        required: false
+      ],
       supervisor_module: [
         type: :module,
         doc: "The supervisor module to use",

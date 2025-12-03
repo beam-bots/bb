@@ -1,9 +1,7 @@
 defmodule Kinetix.PubSubTest do
   use ExUnit.Case, async: false
 
-  alias Kinetix.Message.Geometry.Pose
-  alias Kinetix.Message.Sensor.Imu
-  alias Kinetix.Message.{Quaternion, Vec3}
+  alias Kinetix.Message.{Geometry.Pose, Quaternion, Sensor.Imu, Vec3}
   alias Kinetix.PubSub
 
   defmodule TestRobot do

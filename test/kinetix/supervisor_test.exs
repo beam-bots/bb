@@ -41,10 +41,9 @@ defmodule Kinetix.SupervisorTest do
     end
 
     test "can start the robot" do
-      assert {:ok, pid} = BasicRobot.start_link()
+      pid = start_supervised!(BasicRobot)
       assert is_pid(pid)
       assert Process.alive?(pid)
-      Supervisor.stop(pid)
     end
   end
 
@@ -76,31 +75,27 @@ defmodule Kinetix.SupervisorTest do
       end
     end
 
-    test "sensors are registered at correct paths" do
-      {:ok, pid} = SensorRobot.start_link()
+    test "sensors are registered by name" do
+      start_supervised!(SensorRobot)
 
-      camera_pid = KinetixProcess.whereis(SensorRobot, [:camera])
+      camera_pid = KinetixProcess.whereis(SensorRobot, :camera)
       assert is_pid(camera_pid)
 
-      imu_pid = KinetixProcess.whereis(SensorRobot, [:base_link, :imu])
+      imu_pid = KinetixProcess.whereis(SensorRobot, :imu)
       assert is_pid(imu_pid)
 
-      encoder_pid = KinetixProcess.whereis(SensorRobot, [:base_link, :shoulder, :encoder])
+      encoder_pid = KinetixProcess.whereis(SensorRobot, :encoder)
       assert is_pid(encoder_pid)
-
-      Supervisor.stop(pid)
     end
 
     test "sensor receives kinetix context in init" do
-      {:ok, pid} = SensorRobot.start_link()
+      start_supervised!(SensorRobot)
 
-      imu_pid = KinetixProcess.whereis(SensorRobot, [:base_link, :imu])
+      imu_pid = KinetixProcess.whereis(SensorRobot, :imu)
       state = GenServer.call(imu_pid, :get_state)
 
       assert state[:frequency] == 100
       assert state[:kinetix] == %{robot: SensorRobot, path: [:base_link, :imu]}
-
-      Supervisor.stop(pid)
     end
   end
 
@@ -129,28 +124,24 @@ defmodule Kinetix.SupervisorTest do
       end
     end
 
-    test "actuators are registered at correct paths" do
-      {:ok, pid} = ActuatorRobot.start_link()
+    test "actuators are registered by name" do
+      start_supervised!(ActuatorRobot)
 
-      motor_pid = KinetixProcess.whereis(ActuatorRobot, [:base_link, :shoulder, :motor])
+      motor_pid = KinetixProcess.whereis(ActuatorRobot, :motor)
       assert is_pid(motor_pid)
 
-      brake_pid = KinetixProcess.whereis(ActuatorRobot, [:base_link, :shoulder, :brake])
+      brake_pid = KinetixProcess.whereis(ActuatorRobot, :brake)
       assert is_pid(brake_pid)
-
-      Supervisor.stop(pid)
     end
 
     test "actuator receives kinetix context and user options in init" do
-      {:ok, pid} = ActuatorRobot.start_link()
+      start_supervised!(ActuatorRobot)
 
-      motor_pid = KinetixProcess.whereis(ActuatorRobot, [:base_link, :shoulder, :motor])
+      motor_pid = KinetixProcess.whereis(ActuatorRobot, :motor)
       state = GenServer.call(motor_pid, :get_state)
 
       assert state[:pwm_pin] == 12
       assert state[:kinetix] == %{robot: ActuatorRobot, path: [:base_link, :shoulder, :motor]}
-
-      Supervisor.stop(pid)
     end
   end
 
@@ -201,34 +192,25 @@ defmodule Kinetix.SupervisorTest do
       end
     end
 
-    test "deeply nested actuators are registered at correct paths" do
-      {:ok, pid} = NestedRobot.start_link()
+    test "deeply nested actuators are registered by name" do
+      start_supervised!(NestedRobot)
 
-      shoulder_pid = KinetixProcess.whereis(NestedRobot, [:base, :shoulder, :shoulder_motor])
+      shoulder_pid = KinetixProcess.whereis(NestedRobot, :shoulder_motor)
       assert is_pid(shoulder_pid)
 
-      elbow_pid =
-        KinetixProcess.whereis(NestedRobot, [:base, :shoulder, :upper_arm, :elbow, :elbow_motor])
-
+      elbow_pid = KinetixProcess.whereis(NestedRobot, :elbow_motor)
       assert is_pid(elbow_pid)
 
-      wrist_pid =
-        KinetixProcess.whereis(
-          NestedRobot,
-          [:base, :shoulder, :upper_arm, :elbow, :forearm, :wrist, :wrist_motor]
-        )
-
+      wrist_pid = KinetixProcess.whereis(NestedRobot, :wrist_motor)
       assert is_pid(wrist_pid)
-
-      Supervisor.stop(pid)
     end
   end
 
   describe "via tuple" do
     test "via/2 returns correct via tuple" do
-      via = KinetixProcess.via(SomeRobot, [:base, :shoulder, :motor])
+      via = KinetixProcess.via(SomeRobot, :motor)
 
-      assert {:via, Registry, {SomeRobot.Registry, [:base, :shoulder, :motor]}} = via
+      assert {:via, Registry, {SomeRobot.Registry, :motor}} = via
     end
   end
 
@@ -245,21 +227,17 @@ defmodule Kinetix.SupervisorTest do
     end
 
     test "whereis returns pid for existing process" do
-      {:ok, pid} = LookupRobot.start_link()
+      start_supervised!(LookupRobot)
 
-      sensor_pid = KinetixProcess.whereis(LookupRobot, [:base, :test_sensor])
+      sensor_pid = KinetixProcess.whereis(LookupRobot, :test_sensor)
       assert is_pid(sensor_pid)
-
-      Supervisor.stop(pid)
     end
 
-    test "whereis returns :undefined for non-existent path" do
-      {:ok, pid} = LookupRobot.start_link()
+    test "whereis returns :undefined for non-existent name" do
+      start_supervised!(LookupRobot)
 
-      result = KinetixProcess.whereis(LookupRobot, [:nonexistent])
+      result = KinetixProcess.whereis(LookupRobot, :nonexistent)
       assert result == :undefined
-
-      Supervisor.stop(pid)
     end
   end
 end

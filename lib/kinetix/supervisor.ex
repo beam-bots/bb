@@ -34,18 +34,28 @@ defmodule Kinetix.Supervisor do
   def start_link(robot_module, opts \\ []) do
     settings = Info.settings(robot_module)
     sup_mod = settings.supervisor_module || Supervisor
-    reg_mod = settings.registry_module || Registry
 
-    children = build_children(robot_module, reg_mod, opts)
+    children = build_children(robot_module, settings, opts)
 
     sup_mod.start_link(children, strategy: :one_for_one, name: robot_module)
   end
 
-  defp build_children(robot_module, reg_mod, opts) do
+  defp build_children(robot_module, settings, opts) do
     entities = Info.robot(robot_module)
 
-    registry_child = [{reg_mod, keys: :unique, name: Kinetix.Process.registry_name(robot_module)}]
-    pubsub_child = [{reg_mod, keys: :duplicate, name: Kinetix.PubSub.registry_name(robot_module)}]
+    registry_child =
+      {settings.registry_module,
+       Keyword.merge(settings.registry_options,
+         keys: :unique,
+         name: Kinetix.Process.registry_name(robot_module)
+       )}
+
+    pubsub_child =
+      {settings.registry_module,
+       Keyword.merge(settings.registry_options,
+         keys: :duplicate,
+         name: Kinetix.PubSub.registry_name(robot_module)
+       )}
 
     robot_sensor_children =
       entities
@@ -61,6 +71,6 @@ defmodule Kinetix.Supervisor do
         {Kinetix.LinkSupervisor, {robot_module, link, [], opts}}
       end)
 
-    registry_child ++ pubsub_child ++ robot_sensor_children ++ link_children
+    [registry_child, pubsub_child] ++ robot_sensor_children ++ link_children
   end
 end

@@ -50,6 +50,7 @@ spark_locals_without_parens = [
   radius: 1,
   red: 1,
   registry_module: 1,
+  registry_options: 1,
   roll: 1,
   scale: 1,
   sensor: 2,
