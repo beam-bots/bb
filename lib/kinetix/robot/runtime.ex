@@ -308,8 +308,38 @@ defmodule Kinetix.Robot.Runtime do
   end
 
   @impl GenServer
+  def handle_info(
+        {:command_task_done, execution_id, next_state},
+        %{current_execution_id: execution_id} = state
+      ) do
+    # Task completed normally - handle state transition
+    old_state = state.state
+
+    # Demonitor and flush any pending :DOWN message
+    if state.current_task_ref do
+      Process.demonitor(state.current_task_ref, [:flush])
+    end
+
+    state = %{
+      state
+      | state: next_state,
+        current_task: nil,
+        current_task_ref: nil,
+        current_command_name: nil,
+        current_execution_id: nil
+    }
+
+    state = set_robot_machine_state(state, next_state)
+
+    if old_state != next_state do
+      publish_transition(state, old_state, next_state)
+    end
+
+    {:noreply, state}
+  end
+
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{current_task_ref: ref} = state) do
-    # Task completed (or crashed) - clean up state
+    # Task crashed before sending command_task_done - fall back to :idle
     old_state = state.state
 
     state = %{
@@ -327,11 +357,6 @@ defmodule Kinetix.Robot.Runtime do
       publish_transition(state, old_state, :idle)
     end
 
-    {:noreply, state}
-  end
-
-  def handle_info({:command_task_done, _execution_id}, state) do
-    # Task completed normally - :DOWN handles state transition
     {:noreply, state}
   end
 
@@ -388,37 +413,49 @@ defmodule Kinetix.Robot.Runtime do
     Task.Supervisor.async_nolink(
       task_supervisor_name(robot_module),
       fn ->
-        try do
-          # Broadcast command started
-          publish_command_event(robot_module, path, :started, %{goal: goal})
+        # Build context
+        context = %Context{
+          robot_module: robot_module,
+          robot: robot,
+          robot_state: robot_state,
+          execution_id: execution_id
+        }
 
-          # Build context
-          context = %Context{
-            robot_module: robot_module,
-            robot: robot,
-            robot_state: robot_state,
-            execution_id: execution_id
-          }
+        # Broadcast command started
+        publish_command_event(robot_module, path, :started, %{goal: goal})
 
-          # Execute handler
-          result = command.handler.handle_command(goal, context)
+        # Execute handler and parse result
+        raw_result = command.handler.handle_command(goal, context)
+        {result, next_state} = parse_handler_result(raw_result)
 
-          # Broadcast result
-          case result do
-            {:ok, value} ->
-              publish_command_event(robot_module, path, :succeeded, %{result: value})
+        # Broadcast result
+        case result do
+          {:ok, value} ->
+            publish_command_event(robot_module, path, :succeeded, %{result: value})
 
-            {:error, reason} ->
-              publish_command_event(robot_module, path, :failed, %{reason: reason})
-          end
-
-          result
-        after
-          # Notify runtime task is done (for any cleanup)
-          send(runtime_pid, {:command_task_done, execution_id})
+          {:error, reason} ->
+            publish_command_event(robot_module, path, :failed, %{reason: reason})
         end
+
+        # Notify runtime with next state before returning
+        send(runtime_pid, {:command_task_done, execution_id, next_state})
+
+        result
       end
     )
+  end
+
+  defp parse_handler_result({:ok, value, opts}) when is_list(opts) do
+    next_state = Keyword.get(opts, :next_state, :idle)
+    {{:ok, value}, next_state}
+  end
+
+  defp parse_handler_result({:ok, value}) do
+    {{:ok, value}, :idle}
+  end
+
+  defp parse_handler_result({:error, reason}) do
+    {{:error, reason}, :idle}
   end
 
   defp task_supervisor_name(robot_module) do

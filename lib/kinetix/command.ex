@@ -27,6 +27,18 @@ defmodule Kinetix.Command do
         end
       end
 
+  ## State Transitions
+
+  By default, when a command completes successfully, the robot transitions to
+  `:idle`. Commands can override this by returning a `next_state` option:
+
+      def handle_command(_goal, _context) do
+        {:ok, :disarmed, next_state: :disarmed}
+      end
+
+  This is useful for commands like `Arm` and `Disarm` that need to control
+  the robot's state machine.
+
   ## Execution Model
 
   Commands run in supervised tasks spawned by the Runtime. The caller receives
@@ -40,6 +52,7 @@ defmodule Kinetix.Command do
 
   @type goal :: map()
   @type result :: term()
+  @type options :: [next_state: Kinetix.Robot.Runtime.robot_state()]
 
   @doc """
   Execute the command with the given goal.
@@ -53,9 +66,15 @@ defmodule Kinetix.Command do
   - `robot_state` - The dynamic robot state (ETS-backed joint positions etc)
   - `execution_id` - Unique identifier for this execution
 
-  Returns:
-  - `{:ok, result}` - Command succeeded with result
-  - `{:error, reason}` - Command failed with reason
+  ## Return Values
+
+  - `{:ok, result}` - Command succeeded, robot transitions to `:idle`
+  - `{:ok, result, options}` - Command succeeded with options:
+    - `next_state: state` - Robot transitions to specified state instead of `:idle`
+  - `{:error, reason}` - Command failed, robot transitions to `:idle`
   """
-  @callback handle_command(goal(), Context.t()) :: {:ok, result()} | {:error, term()}
+  @callback handle_command(goal(), Context.t()) ::
+              {:ok, result()}
+              | {:ok, result(), options()}
+              | {:error, term()}
 end
