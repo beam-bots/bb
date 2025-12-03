@@ -6,6 +6,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Kinetix
 
+[![Build Status](https://drone.harton.dev/api/badges/james/kinetix/status.svg)](https://drone.harton.dev/james/kinetix)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Hex version badge](https://img.shields.io/hexpm/v/kinetix.svg)](https://hex.pm/packages/kinetix)
+[![REUSE status](https://api.reuse.software/badge/harton.dev/james/kinetix)](https://api.reuse.software/info/harton.dev/james/kinetix)
+
 Kinetix is a framework for building resilient robotics projects in Elixir.
 
 ## Features
