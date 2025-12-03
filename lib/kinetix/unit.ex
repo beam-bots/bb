@@ -13,7 +13,7 @@ defmodule Kinetix.Unit do
   The input should be a magnitude (integer or float) followed by a unit name.
   Whitespace between the magnitude and unit is optional.
 
-  For a full list of supported units, see the
+  Units are generally referred to in the singlular, even if it doesn't read as nicely, for example `meter_per_second` rather than `meters_per_second`. For a full list of supported units, see the
   [ex_cldr_units documentation](https://hexdocs.pm/ex_cldr_units/readme.html).
 
   ## Examples
