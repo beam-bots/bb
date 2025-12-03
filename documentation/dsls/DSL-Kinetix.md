@@ -11,6 +11,10 @@ Describe universal robot properties
 
 ### Nested DSLs
  * [settings](#robot-settings)
+ * [robot_sensors](#robot-robot_sensors)
+   * sensor
+ * [controllers](#robot-controllers)
+   * controller
  * [link](#robot-link)
    * inertial
      * origin
@@ -38,7 +42,6 @@ Describe universal robot properties
    * limit
    * sensor
    * actuator
- * [sensor](#robot-sensor)
 
 
 
@@ -68,6 +71,84 @@ System-wide settings
 | [`supervisor_module`](#robot-settings-supervisor_module){: #robot-settings-supervisor_module } | `module` | `Supervisor` | The supervisor module to use |
 
 
+
+
+### robot.robot_sensors
+Robot-level sensors
+
+### Nested DSLs
+ * [sensor](#robot-robot_sensors-sensor)
+
+
+
+
+
+### robot.robot_sensors.sensor
+```elixir
+sensor name, child_spec
+```
+
+
+A sensor attached at the robot level.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-robot_sensors-sensor-name){: #robot-robot_sensors-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
+| [`child_spec`](#robot-robot_sensors-sensor-child_spec){: #robot-robot_sensors-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Sensor`
+
+
+### robot.controllers
+Robot-level controllers
+
+### Nested DSLs
+ * [controller](#robot-controllers-controller)
+
+
+
+
+
+### robot.controllers.controller
+```elixir
+controller name, child_spec
+```
+
+
+A controller process at the robot level.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#robot-controllers-controller-name){: #robot-controllers-controller-name .spark-required} | `atom` |  | A unique name for the controller |
+| [`child_spec`](#robot-controllers-controller-child_spec){: #robot-controllers-controller-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the controller process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `Kinetix.Dsl.Controller`
 
 
 
@@ -850,34 +931,6 @@ Target: `Kinetix.Dsl.Actuator`
 ### Introspection
 
 Target: `Kinetix.Dsl.Joint`
-
-### robot.sensor
-```elixir
-sensor name, child_spec
-```
-
-
-A sensor attached to the robot, a link, or a joint.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#robot-sensor-name){: #robot-sensor-name .spark-required} | `atom` |  | A unique name for the sensor |
-| [`child_spec`](#robot-sensor-child_spec){: #robot-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
-
-
-
-
-
-
-### Introspection
-
-Target: `Kinetix.Dsl.Sensor`
 
 
 

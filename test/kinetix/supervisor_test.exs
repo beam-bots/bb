@@ -57,7 +57,9 @@ defmodule Kinetix.SupervisorTest do
       use Kinetix
 
       robot do
-        sensor :camera, Kinetix.SupervisorTest.TestGenServer
+        robot_sensors do
+          sensor :camera, Kinetix.SupervisorTest.TestGenServer
+        end
 
         link :base_link do
           sensor :imu, {Kinetix.SupervisorTest.TestGenServer, frequency: 100}

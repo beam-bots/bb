@@ -559,12 +559,66 @@ defmodule Kinetix.Dsl do
     ]
   }
 
+  @robot_sensor %Entity{
+    name: :sensor,
+    describe: "A sensor attached at the robot level.",
+    target: Kinetix.Dsl.Sensor,
+    identifier: :name,
+    args: [:name, :child_spec],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the sensor"
+      ],
+      child_spec: [
+        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
+        required: true,
+        doc:
+          "The child specification for the sensor process. Either a module or `{module, keyword_list}`"
+      ]
+    ]
+  }
+
+  @robot_sensors_section %Section{
+    name: :robot_sensors,
+    describe: "Robot-level sensors",
+    entities: [@robot_sensor]
+  }
+
+  @controller %Entity{
+    name: :controller,
+    describe: "A controller process at the robot level.",
+    target: Kinetix.Dsl.Controller,
+    identifier: :name,
+    args: [:name, :child_spec],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the controller"
+      ],
+      child_spec: [
+        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
+        required: true,
+        doc:
+          "The child specification for the controller process. Either a module or `{module, keyword_list}`"
+      ]
+    ]
+  }
+
+  @controllers_section %Section{
+    name: :controllers,
+    describe: "Robot-level controllers",
+    entities: [@controller]
+  }
+
   @robot %Section{
     name: :robot,
     describe: "Describe universal robot properties",
-    entities: [@link, @joint, @sensor],
+    entities: [@link, @joint],
     imports: [Kinetix.Unit],
-    sections: [@settings],
+    sections: [@settings, @robot_sensors_section, @controllers_section],
     schema: [
       name: [
         type: :atom,
@@ -580,6 +634,7 @@ defmodule Kinetix.Dsl do
       __MODULE__.DefaultNameTransformer,
       __MODULE__.LinkTransformer,
       __MODULE__.SupervisorTransformer,
+      __MODULE__.UniquenessTransformer,
       __MODULE__.RobotTransformer
     ]
 end

@@ -144,7 +144,10 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
           use Kinetix
 
           robot do
-            sensor :base, MySensor
+            robot_sensors do
+              sensor :base, MySensor
+            end
+
             link :base
           end
         end
@@ -156,7 +159,9 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
         use Kinetix
 
         robot do
-          sensor :robot_sensor, MySensor
+          robot_sensors do
+            sensor :robot_sensor, MySensor
+          end
 
           link :base do
             sensor :base_sensor, MySensor

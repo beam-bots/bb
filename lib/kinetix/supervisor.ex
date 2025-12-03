@@ -25,7 +25,7 @@ defmodule Kinetix.Supervisor do
   ```
   """
 
-  alias Kinetix.Dsl.{Info, Link, Sensor}
+  alias Kinetix.Dsl.{Info, Link}
 
   @doc """
   Starts the supervisor tree for a robot module.
@@ -61,13 +61,23 @@ defmodule Kinetix.Supervisor do
          name: Kinetix.PubSub.registry_name(robot_module)
        )}
 
+    # Sensors from the robot_sensors section
     robot_sensor_children =
-      entities
-      |> Enum.filter(&is_struct(&1, Sensor))
+      robot_module
+      |> Info.robot_robot_sensors()
       |> Enum.map(fn sensor ->
         Kinetix.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [])
       end)
 
+    # Controllers from the controllers section
+    controller_children =
+      robot_module
+      |> Info.robot_controllers()
+      |> Enum.map(fn controller ->
+        Kinetix.Process.child_spec(robot_module, controller.name, controller.child_spec, [])
+      end)
+
+    # Links remain as entities at robot level
     link_children =
       entities
       |> Enum.filter(&is_struct(&1, Link))
@@ -75,6 +85,7 @@ defmodule Kinetix.Supervisor do
         {Kinetix.LinkSupervisor, {robot_module, link, [], opts}}
       end)
 
-    [registry_child, pubsub_child] ++ robot_sensor_children ++ link_children
+    [registry_child, pubsub_child] ++
+      robot_sensor_children ++ controller_children ++ link_children
   end
 end

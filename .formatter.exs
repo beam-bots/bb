@@ -15,6 +15,8 @@ spark_locals_without_parens = [
   collision: 1,
   color: 0,
   color: 1,
+  controller: 2,
+  controller: 3,
   cylinder: 0,
   cylinder: 1,
   damping: 1,

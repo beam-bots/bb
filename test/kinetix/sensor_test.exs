@@ -12,16 +12,18 @@ defmodule Kinetix.SensorTest do
       use Kinetix
 
       robot do
-        link :base_link do
+        robot_sensors do
+          sensor :camera, MySensor
         end
 
-        sensor :camera, MySensor
+        link :base_link do
+        end
       end
     end
 
     test "sensor defined at robot level" do
-      entities = Info.robot(RobotLevelSensorRobot)
-      sensor = Enum.find(entities, &is_struct(&1, Sensor))
+      sensors = Info.robot_robot_sensors(RobotLevelSensorRobot)
+      sensor = Enum.find(sensors, &is_struct(&1, Sensor))
       assert sensor.name == :camera
       assert sensor.child_spec == MySensor
     end
@@ -54,12 +56,14 @@ defmodule Kinetix.SensorTest do
       use Kinetix
 
       robot do
+        robot_sensors do
+          sensor :camera, CameraSensor
+        end
+
         link :base_link do
           sensor :imu, ImuSensor
           sensor :gps, {GpsSensor, port: "/dev/ttyUSB0"}
         end
-
-        sensor :camera, CameraSensor
       end
     end
 
@@ -70,8 +74,7 @@ defmodule Kinetix.SensorTest do
     end
 
     test "sensors at both link and robot level" do
-      entities = Info.robot(MultipleSensorsRobot)
-      robot_sensors = Enum.filter(entities, &is_struct(&1, Sensor))
+      robot_sensors = Info.robot_robot_sensors(MultipleSensorsRobot)
       assert length(robot_sensors) == 1
       assert hd(robot_sensors).name == :camera
     end
@@ -149,6 +152,10 @@ defmodule Kinetix.SensorTest do
       use Kinetix
 
       robot do
+        robot_sensors do
+          sensor :robot_sensor, RobotSensor
+        end
+
         link :base_link do
           sensor :link_sensor, LinkSensor
 
@@ -166,15 +173,13 @@ defmodule Kinetix.SensorTest do
             end
           end
         end
-
-        sensor :robot_sensor, RobotSensor
       end
     end
 
     test "sensors at all levels" do
       entities = Info.robot(MixedSensorsRobot)
       [link] = Enum.filter(entities, &is_struct(&1, Link))
-      [robot_sensor] = Enum.filter(entities, &is_struct(&1, Sensor))
+      [robot_sensor] = Info.robot_robot_sensors(MixedSensorsRobot)
 
       assert robot_sensor.name == :robot_sensor
       assert length(link.sensors) == 1
