@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.PubSub do
   @moduledoc """
   Hierarchical pubsub system for robot component messages.

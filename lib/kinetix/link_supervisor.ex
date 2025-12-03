@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.LinkSupervisor do
   @moduledoc """
   Supervisor for a link and its joints.

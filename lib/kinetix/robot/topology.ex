@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Robot.Topology do
   @moduledoc """
   Pre-computed topology metadata for efficient traversal and kinematic operations.

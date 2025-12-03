@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Supervisor do
   @moduledoc """
   Root supervisor for a Kinetix robot.

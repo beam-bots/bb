@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Message.Geometry.Transform do
   @moduledoc """
   A transformation in 3D space (translation and rotation).

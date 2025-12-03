@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Robot.Joint do
   @moduledoc """
   An optimised joint representation with all units converted to SI floats.

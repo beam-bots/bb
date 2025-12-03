@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Message.Sensor.Image do
   @moduledoc """
   Raw image data from a camera sensor.

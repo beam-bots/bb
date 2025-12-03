@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Message.Vec3 do
   @moduledoc """
   Helper functions for 3D vector tagged tuples.

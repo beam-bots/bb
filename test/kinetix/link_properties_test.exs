@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.LinkPropertiesTest do
   use ExUnit.Case, async: true
   alias Kinetix.Dsl.{Collision, Inertia, Inertial, Info, Origin, Visual}

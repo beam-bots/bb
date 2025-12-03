@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defprotocol Kinetix.Message.Payload do
   @moduledoc """
   Protocol for introspecting message payloads.

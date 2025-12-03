@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Process do
   @moduledoc """
   Helper functions for building child specs and looking up processes in the robot's registry.

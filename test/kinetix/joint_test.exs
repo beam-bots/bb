@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.JointTest do
   use ExUnit.Case, async: true
   alias Kinetix.Dsl.{Axis, Dynamics, Info, Joint, Limit, Origin}

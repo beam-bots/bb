@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Dsl.DefaultNameTransformer do
   @moduledoc "Ensures that the default robot name is present"
   use Spark.Dsl.Transformer

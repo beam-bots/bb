@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Robot.Units do
   @moduledoc """
   Unit conversion functions for transforming Cldr.Unit values into base SI floats.

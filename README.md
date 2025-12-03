@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 James Harton
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Kinetix
 
 Kinetix is a framework for building resilient robotics projects in Elixir.

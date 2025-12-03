@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Unit.Option do
   @moduledoc """
   Functions for specifying and validating units in option schemas.

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Dsl.SupervisorTransformer do
   @moduledoc """
   Injects `start_link/1` and `child_spec/1` into robot modules.

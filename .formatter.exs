@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 spark_locals_without_parens = [
   actuator: 2,
   actuator: 3,

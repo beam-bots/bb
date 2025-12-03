@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Message.Geometry.Wrench do
   @moduledoc """
   Force and torque in 3D space.

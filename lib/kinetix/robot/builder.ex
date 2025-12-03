@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Kinetix.Robot.Builder do
   @moduledoc """
   Builds an optimised `Kinetix.Robot` struct from DSL output.
