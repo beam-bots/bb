@@ -11,6 +11,7 @@ defmodule Kinetix.Robot.Runtime do
   - The `Kinetix.Robot.State` ETS table (dynamic joint state)
   - Robot state machine (disarmed/idle/executing)
   - Command execution lifecycle
+  - Sensor telemetry collection (subscribes to `JointState` messages)
 
   ## Robot States
 
@@ -41,6 +42,7 @@ defmodule Kinetix.Robot.Runtime do
   alias Kinetix.Command.{Context, Event}
   alias Kinetix.Dsl.Info
   alias Kinetix.{Message, PubSub}
+  alias Kinetix.Message.Sensor.JointState
   alias Kinetix.Robot.State, as: RobotState
   alias Kinetix.StateMachine.Transition
 
@@ -161,6 +163,50 @@ defmodule Kinetix.Robot.Runtime do
   end
 
   @doc """
+  Get all joint positions as a map.
+
+  Reads directly from ETS for fast concurrent access. Returns a map of
+  joint names to their current positions (in radians for revolute joints,
+  metres for prismatic joints).
+
+  Positions are updated automatically by the Runtime when sensors publish
+  `JointState` messages.
+
+  ## Examples
+
+      iex> Kinetix.Robot.Runtime.positions(MyRobot)
+      %{pan_joint: 0.0, tilt_joint: 0.0}
+
+  """
+  @spec positions(module()) :: %{atom() => float()}
+  def positions(robot_module) do
+    robot_state = get_robot_state(robot_module)
+    RobotState.get_all_positions(robot_state)
+  end
+
+  @doc """
+  Get all joint velocities as a map.
+
+  Reads directly from ETS for fast concurrent access. Returns a map of
+  joint names to their current velocities (in rad/s for revolute joints,
+  m/s for prismatic joints).
+
+  Velocities are updated automatically by the Runtime when sensors publish
+  `JointState` messages.
+
+  ## Examples
+
+      iex> Kinetix.Robot.Runtime.velocities(MyRobot)
+      %{pan_joint: 0.0, tilt_joint: 0.0}
+
+  """
+  @spec velocities(module()) :: %{atom() => float()}
+  def velocities(robot_module) do
+    robot_state = get_robot_state(robot_module)
+    RobotState.get_all_velocities(robot_state)
+  end
+
+  @doc """
   Execute a command with the given goal.
 
   Returns `{:ok, task}` where `task` can be awaited for the result.
@@ -243,6 +289,9 @@ defmodule Kinetix.Robot.Runtime do
       robot_module
       |> Info.commands()
       |> Map.new(&{&1.name, &1})
+
+    # Subscribe to all sensor messages to receive JointState updates
+    PubSub.subscribe(robot_module, [:sensor])
 
     state = %__MODULE__{
       robot_module: robot_module,
@@ -357,6 +406,11 @@ defmodule Kinetix.Robot.Runtime do
       publish_transition(state, old_state, :idle)
     end
 
+    {:noreply, state}
+  end
+
+  def handle_info({:kinetix, _path, %Message{payload: %JointState{} = joint_state}}, state) do
+    update_joint_state(state.robot_state, joint_state)
     {:noreply, state}
   end
 
@@ -522,5 +576,25 @@ defmodule Kinetix.Robot.Runtime do
   defp set_robot_machine_state(state, new_robot_state) do
     RobotState.set_robot_state(state.robot_state, new_robot_state)
     %{state | state: new_robot_state}
+  end
+
+  defp update_joint_state(robot_state, %JointState{} = joint_state) do
+    names = joint_state.names || []
+    positions = joint_state.positions || []
+    velocities = joint_state.velocities || []
+
+    # Update positions
+    names
+    |> Enum.zip(positions)
+    |> Enum.each(fn {name, position} ->
+      RobotState.set_joint_position(robot_state, name, position)
+    end)
+
+    # Update velocities
+    names
+    |> Enum.zip(velocities)
+    |> Enum.each(fn {name, velocity} ->
+      RobotState.set_joint_velocity(robot_state, name, velocity)
+    end)
   end
 end
