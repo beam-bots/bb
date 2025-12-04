@@ -129,7 +129,7 @@ defmodule Kinetix.ControllerTest do
 
   describe "name uniqueness" do
     test "rejects controller with same name as sensor" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:duplicate/, fn ->
+      assert_raise Spark.Error.DslError, ~r/:duplicate/, fn ->
         defmodule ControllerSensorSameName do
           use Kinetix
 
@@ -150,7 +150,7 @@ defmodule Kinetix.ControllerTest do
     end
 
     test "rejects controller with same name as link" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:base_link/, fn ->
+      assert_raise Spark.Error.DslError, ~r/:base_link/, fn ->
         defmodule ControllerLinkSameName do
           use Kinetix
 

@@ -49,7 +49,7 @@ The DSL supports physical units via `~u` sigil (e.g., `~u(0.1 meter)`, `~u(90 de
 
 Transformers run in sequence to process DSL at compile-time:
 1. `DefaultNameTransformer` - sets robot name to module name if unset
-2. `LinkTransformer` - validates link hierarchy
+2. `TopologyTransformer` - validates link hierarchy
 3. `SupervisorTransformer` - generates supervision tree specs
 4. `RobotTransformer` - builds optimised `Kinetix.Robot` struct, injects `robot/0` function
 

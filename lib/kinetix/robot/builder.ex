@@ -202,7 +202,7 @@ defmodule Kinetix.Robot.Builder do
       lower: Units.to_meters_or_nil(limit.lower),
       upper: Units.to_meters_or_nil(limit.upper),
       velocity: Units.to_meters_per_second(limit.velocity),
-      effort: Units.to_newton_meters(limit.effort)
+      effort: Units.to_newton(limit.effort)
     }
   end
 

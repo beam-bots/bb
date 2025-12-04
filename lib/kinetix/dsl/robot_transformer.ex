@@ -6,7 +6,7 @@ defmodule Kinetix.Dsl.RobotTransformer do
   @moduledoc """
   Builds and persists the optimised Robot struct at compile-time.
 
-  This transformer runs after the LinkTransformer and UniquenessTransformer to
+  This transformer runs after the TopologyTransformer and UniquenessTransformer to
   ensure the DSL is fully validated, then builds the optimised `Kinetix.Robot`
   struct and injects an accessor function into the robot module.
   """
@@ -17,7 +17,8 @@ defmodule Kinetix.Dsl.RobotTransformer do
 
   @doc false
   @impl true
-  def after?(Kinetix.Dsl.LinkTransformer), do: true
+  def after?(Kinetix.Dsl.DefaultNameTransformer), do: true
+  def after?(Kinetix.Dsl.TopologyTransformer), do: true
   def after?(Kinetix.Dsl.SupervisorTransformer), do: true
   def after?(Kinetix.Dsl.UniquenessTransformer), do: true
   def after?(_), do: false

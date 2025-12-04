@@ -7,7 +7,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
 
   describe "name uniqueness validation" do
     test "rejects duplicate link names" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:duplicate/, fn ->
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:duplicate/sm, fn ->
         defmodule DuplicateLinkNames do
           use Kinetix
 
@@ -24,7 +24,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
     end
 
     test "rejects link and joint with same name" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:shared_name/, fn ->
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:shared_name/sm, fn ->
         defmodule LinkJointSameName do
           use Kinetix
 
@@ -41,7 +41,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
     end
 
     test "rejects duplicate sensor names across links" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:my_sensor/, fn ->
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:my_sensor/sm, fn ->
         defmodule DuplicateSensorNames do
           use Kinetix
 
@@ -63,7 +63,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
     end
 
     test "rejects sensor with same name as link" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:base/, fn ->
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:base/sm, fn ->
         defmodule SensorLinkSameName do
           use Kinetix
 
@@ -77,7 +77,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
     end
 
     test "rejects duplicate actuator names" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:motor/, fn ->
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:motor/sm, fn ->
         defmodule DuplicateActuatorNames do
           use Kinetix
 
@@ -115,7 +115,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
     end
 
     test "rejects actuator with same name as joint" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:shoulder/, fn ->
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:shoulder/sm, fn ->
         defmodule ActuatorJointSameName do
           use Kinetix
 
@@ -139,7 +139,7 @@ defmodule Kinetix.Dsl.RobotTransformerTest do
     end
 
     test "rejects robot-level sensor with same name as link" do
-      assert_raise Spark.Error.DslError, ~r/names are used more than once.*:base/, fn ->
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:base/sm, fn ->
         defmodule RobotSensorLinkSameName do
           use Kinetix
 

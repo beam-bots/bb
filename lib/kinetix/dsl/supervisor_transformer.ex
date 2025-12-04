@@ -15,7 +15,7 @@ defmodule Kinetix.Dsl.SupervisorTransformer do
   @doc false
   @impl true
   def after?(Kinetix.Dsl.DefaultNameTransformer), do: true
-  def after?(Kinetix.Dsl.LinkTransformer), do: true
+  def after?(Kinetix.Dsl.TopologyTransformer), do: true
   def after?(_), do: false
 
   @doc false

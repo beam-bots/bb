@@ -40,6 +40,7 @@ defmodule Kinetix.Dsl.CommandTransformer do
 
   @doc false
   @impl true
+  def after?(Kinetix.Dsl.DefaultNameTransformer), do: true
   def after?(Kinetix.Dsl.RobotTransformer), do: true
   def after?(_), do: false
 

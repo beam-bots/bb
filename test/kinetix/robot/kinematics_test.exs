@@ -180,7 +180,7 @@ defmodule Kinetix.Robot.KinematicsTest do
           limit do
             lower(~u(0 meter))
             upper(~u(1 meter))
-            effort(~u(10 newton_meter))
+            effort(~u(10 newton))
             velocity(~u(1 meter_per_second))
           end
 

@@ -103,6 +103,22 @@ defmodule Kinetix.Robot.Units do
   end
 
   @doc """
+  Convert a force unit to newtons (float).
+
+  ## Examples
+
+      iex> import Kinetix.Unit
+      iex> Kinetix.Robot.Units.to_newton(~u(5 newton))
+      5.0
+  """
+  @spec to_newton(Cldr.Unit.t()) :: float()
+  def to_newton(%Cldr.Unit{} = unit) do
+    unit
+    |> Cldr.Unit.convert!(:newton)
+    |> extract_float()
+  end
+
+  @doc """
   Convert a torque unit to newton-meters (float).
 
   ## Examples

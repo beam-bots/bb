@@ -127,7 +127,7 @@ defmodule Kinetix.Dsl do
         required: false
       ],
       effort: [
-        type: unit_type(compatible: :newton_meter),
+        type: {:or, [unit_type(compatible: :newton), unit_type(compatible: :newton_meter)]},
         doc:
           "The maximum effort - both positive and negative - that can be commanded to the joint",
         required: true
@@ -538,6 +538,11 @@ defmodule Kinetix.Dsl do
     name: :settings,
     describe: "System-wide settings",
     schema: [
+      name: [
+        type: :atom,
+        required: false,
+        doc: "The name of the robot, defaults to the name of the defining module"
+      ],
       registry_module: [
         type: :module,
         doc: "The registry module to use",
@@ -673,19 +678,6 @@ defmodule Kinetix.Dsl do
     entities: [@command]
   }
 
-  @robot %Section{
-    name: :robot,
-    describe: "Describe universal robot properties",
-    imports: [Kinetix.Unit],
-    schema: [
-      name: [
-        type: :atom,
-        required: false,
-        doc: "The name of the robot, defaults to the name of the defining module"
-      ]
-    ]
-  }
-
   @topology %Section{
     name: :topology,
     describe: "Robot topology",
@@ -693,10 +685,10 @@ defmodule Kinetix.Dsl do
   }
 
   use Spark.Dsl.Extension,
-    sections: [@robot, @topology, @settings, @sensors, @controllers, @commands],
+    sections: [@topology, @settings, @sensors, @controllers, @commands],
     transformers: [
       __MODULE__.DefaultNameTransformer,
-      __MODULE__.LinkTransformer,
+      __MODULE__.TopologyTransformer,
       __MODULE__.SupervisorTransformer,
       __MODULE__.UniquenessTransformer,
       __MODULE__.RobotTransformer,

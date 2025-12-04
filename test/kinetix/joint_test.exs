@@ -216,7 +216,7 @@ defmodule Kinetix.JointTest do
             limit do
               lower(~u(0 meter))
               upper(~u(0.5 meter))
-              effort(~u(100 newton_meter))
+              effort(~u(100 newton))
               velocity(~u(0.1 meter_per_second))
             end
 
@@ -257,7 +257,7 @@ defmodule Kinetix.JointTest do
             end
 
             limit do
-              effort(~u(100 newton_meter))
+              effort(~u(100 newton))
               velocity(~u(0.1 meter_per_second))
             end
 

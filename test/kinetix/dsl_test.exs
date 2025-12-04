@@ -18,14 +18,14 @@ defmodule Kinetix.DslTest do
     end
 
     test "defaults the robot name from module name" do
-      assert {:ok, :most_basic_robot} = Info.robot_name(MostBasicRobot)
+      assert {:ok, :most_basic_robot} = Info.settings_name(MostBasicRobot)
     end
 
     defmodule ExplicitlyNamedRobot do
       @moduledoc false
       use Kinetix
 
-      robot do
+      settings do
         name :my_custom_robot
       end
 
@@ -36,7 +36,7 @@ defmodule Kinetix.DslTest do
     end
 
     test "explicit robot name is used when provided" do
-      assert {:ok, :my_custom_robot} = Info.robot_name(ExplicitlyNamedRobot)
+      assert {:ok, :my_custom_robot} = Info.settings_name(ExplicitlyNamedRobot)
     end
   end
 

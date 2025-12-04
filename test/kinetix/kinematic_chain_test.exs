@@ -199,7 +199,7 @@ defmodule Kinetix.KinematicChainTest do
             limit do
               lower(~u(0 meter))
               upper(~u(1 meter))
-              effort(~u(100 newton_meter))
+              effort(~u(100 newton))
               velocity(~u(0.5 meter_per_second))
             end
 
