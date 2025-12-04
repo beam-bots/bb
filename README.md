@@ -21,26 +21,48 @@ Kinetix is a framework for building resilient robotics projects in Elixir.
 - **Hierarchical PubSub** - subscribe to messages by path or subtree
 - **Forward kinematics** - compute link positions using Nx tensors
 - **Message system** - typed payloads with schema validation
+- **Command system** - state machine with arm/disarm and custom commands
+- **URDF export** - export robot definitions for use with ROS tools
 
 ## Example
 
 ```elixir
 defmodule MyRobot do
   use Kinetix
-  import Kinetix.Unit
 
   topology do
     link :base do
-      joint :shoulder, type: :revolute do
-        origin x: ~u(0 meter), y: ~u(0 meter), z: ~u(0.1 meter)
-        axis z: ~u(1 meter)
-        limit effort: ~u(10 newton_meter), velocity: ~u(1 radian_per_second)
+      joint :shoulder do
+        type(:revolute)
+
+        origin do
+          z(~u(0.1 meter))
+        end
+
+        axis do
+        end
+
+        limit do
+          effort(~u(10 newton_meter))
+          velocity(~u(1 radian_per_second))
+        end
 
         link :upper_arm do
-          joint :elbow, type: :revolute do
-            origin z: ~u(0.3 meter)
-            axis y: ~u(1 meter)
-            limit effort: ~u(10 newton_meter), velocity: ~u(1 radian_per_second)
+          joint :elbow do
+            type(:revolute)
+
+            origin do
+              z(~u(0.3 meter))
+            end
+
+            axis do
+              roll(~u(-90 degree))
+            end
+
+            limit do
+              effort(~u(10 newton_meter))
+              velocity(~u(1 radian_per_second))
+            end
 
             link :forearm do
             end
@@ -56,10 +78,25 @@ end
 
 # Compute forward kinematics
 robot = MyRobot.robot()
-{:ok, state} = Kinetix.Robot.State.new(robot)
-Kinetix.Robot.State.set_joint_position(state, :shoulder, :math.pi() / 4)
-{x, y, z} = Kinetix.Robot.Kinematics.link_position(robot, state, :forearm)
+positions = %{shoulder: :math.pi() / 4, elbow: 0.0}
+{x, y, z} = Kinetix.Robot.Kinematics.link_position(robot, positions, :forearm)
+
+# Export to URDF
+mix kinetix.to_urdf MyRobot -o robot.urdf
 ```
+
+## Documentation
+
+See the [tutorials](documentation/tutorials/) for a guided introduction:
+
+1. [Your First Robot](documentation/tutorials/01-first-robot.md) - defining robots with the DSL
+2. [Starting and Stopping](documentation/tutorials/02-starting-and-stopping.md) - supervision trees
+3. [Sensors and PubSub](documentation/tutorials/03-sensors-and-pubsub.md) - publishing and subscribing to messages
+4. [Forward Kinematics](documentation/tutorials/04-kinematics.md) - computing link positions
+5. [Commands and State Machine](documentation/tutorials/05-commands.md) - controlling the robot
+6. [Exporting to URDF](documentation/tutorials/06-urdf-export.md) - interoperability with ROS tools
+
+The [DSL Reference](documentation/dsls/DSL-Kinetix.md) documents all available options.
 
 ## Status
 

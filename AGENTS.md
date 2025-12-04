@@ -12,6 +12,19 @@ This file provides guidance to coding assistances while working with this projec
 
 Kinetix is a framework for building resilient robotics projects in Elixir. It provides a Spark DSL for defining robot topologies (links, joints, sensors, actuators) with automatic supervision tree generation that mirrors the physical structure for fault isolation.
 
+## Documentation
+
+See `documentation/tutorials/` for guided tutorials:
+
+1. `01-first-robot.md` - defining robots with the DSL
+2. `02-starting-and-stopping.md` - supervision trees and fault isolation
+3. `03-sensors-and-pubsub.md` - publishing and subscribing to messages
+4. `04-kinematics.md` - computing link positions with forward kinematics
+5. `05-commands.md` - the command system and robot state machine
+6. `06-urdf-export.md` - exporting to URDF for ROS tools
+
+The DSL reference is in `documentation/dsls/DSL-Kinetix.md`.
+
 ## Common Commands
 
 ```bash
@@ -31,6 +44,10 @@ mix dialyzer
 # Spark DSL tools
 mix spark.formatter                       # Update formatter with DSL locals
 mix spark.cheat_sheets                    # Generate DSL documentation
+
+# URDF export
+mix kinetix.to_urdf MyRobot              # Print URDF to stdout
+mix kinetix.to_urdf MyRobot -o robot.urdf # Write to file
 ```
 
 ## Architecture
@@ -38,9 +55,15 @@ mix spark.cheat_sheets                    # Generate DSL documentation
 ### Spark DSL (`lib/kinetix/dsl.ex`)
 
 The core DSL defines robot structure using nested entities:
-- **robot** (top-level section) - contains settings, links, joints, sensors
+- **settings** - robot name, registry/supervisor modules
+- **topology** - contains links, joints, sensors, actuators in a tree structure
+- **sensors** - robot-level sensors (GPS, battery, etc.)
+- **controllers** - robot-level controller processes
+- **commands** - commands with handlers and state machine integration
+
+Within the topology:
 - **link** - kinematic link (solid body) with visual, collision, inertial properties
-- **joint** - connection between links (revolute, prismatic, fixed, etc.)
+- **joint** - connection between links (revolute, prismatic, fixed, continuous, floating, planar)
 - **sensor/actuator** - child processes attached to links or joints
 
 The DSL supports physical units via `~u` sigil (e.g., `~u(0.1 meter)`, `~u(90 degree)`).
@@ -57,7 +80,7 @@ Transformers run in sequence to process DSL at compile-time:
 
 **Robot struct** (`lib/kinetix/robot.ex`): Optimised representation with:
 - Flat maps for O(1) lookup of links/joints/sensors/actuators
-- All units converted to SI base (meters, radians, kg)
+- All units converted to SI base (metres, radians, kg)
 - Pre-computed topology for traversal
 
 **Supervision tree** (`lib/kinetix/supervisor.ex`): Mirrors robot topology for fault isolation. Crashes propagate only within affected subtree.
@@ -65,6 +88,15 @@ Transformers run in sequence to process DSL at compile-time:
 **PubSub** (`lib/kinetix/pub_sub.ex`): Hierarchical message routing by path. Subscribers can match exact paths or entire subtrees.
 
 **Kinematics** (`lib/kinetix/robot/kinematics.ex`): Forward kinematics using 4x4 homogeneous transform matrices (Nx tensors).
+
+**Runtime** (`lib/kinetix/robot/runtime.ex`): Manages robot operational state with a state machine:
+- `:disarmed` → `:idle` → `:executing` → `:idle`
+- Commands only execute in allowed states
+- Subscribes to sensor messages and updates joint positions
+
+**Commands**: Defined in the DSL `commands` section with handlers implementing `Kinetix.Command` behaviour. Built-in commands include `Kinetix.Command.Arm` and `Kinetix.Command.Disarm`.
+
+**URDF Export** (`lib/kinetix/urdf/exporter.ex`): Converts robot definitions to URDF XML format for use with ROS tools like RViz and Gazebo. Available via `mix kinetix.to_urdf`.
 
 ### Message System
 
@@ -76,3 +108,5 @@ Transformers run in sequence to process DSL at compile-time:
 - Transforms: 4x4 matrices in `Kinetix.Robot.Transform`, angles in radians
 - Process registration: Uses Registry with `:via` tuples, names must be globally unique per robot
 - DSL entities are structs in `lib/kinetix/dsl/` matching entity names
+- Commands: Return `{:ok, result}` or `{:ok, result, next_state: state}` for state transitions
+- State machine: Robots start `:disarmed`, transition to `:idle` when armed, `:executing` during commands
