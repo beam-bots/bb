@@ -4,23 +4,45 @@
 
 defmodule Kinetix.Dsl.Axis do
   @moduledoc """
-  An axis
+  Joint axis orientation specified as Euler angles.
+
+  The axis defines the direction of rotation (for revolute joints) or
+  translation (for prismatic joints). By default, the axis points along
+  the Z direction. Use roll, pitch, and yaw to rotate it to the desired
+  orientation.
+
+  ## Examples
+
+      # Default Z-axis (no rotation needed)
+      axis do
+      end
+
+      # Y-axis (pitch by 90°)
+      axis do
+        pitch(~u(90 degree))
+      end
+
+      # X-axis (pitch by 90°, then roll by 90°)
+      axis do
+        pitch(~u(90 degree))
+        roll(~u(90 degree))
+      end
   """
   import Kinetix.Unit
 
   defstruct __identifier__: nil,
             __spark_metadata__: nil,
-            x: ~u(0 meter),
-            y: ~u(0 meter),
-            z: ~u(0 meter)
+            roll: ~u(0 degree),
+            pitch: ~u(0 degree),
+            yaw: ~u(0 degree)
 
   alias Spark.Dsl.Entity
 
   @type t :: %__MODULE__{
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
-          x: Cldr.Unit.t(),
-          y: Cldr.Unit.t(),
-          z: Cldr.Unit.t()
+          roll: Cldr.Unit.t(),
+          pitch: Cldr.Unit.t(),
+          yaw: Cldr.Unit.t()
         }
 end

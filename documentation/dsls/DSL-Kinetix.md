@@ -694,9 +694,9 @@ The joint axis specified in the joint frame. This is the axis of rotation for re
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`x`](#topology-joint-axis-x){: #topology-joint-axis-x } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `x` axis |
-| [`y`](#topology-joint-axis-y){: #topology-joint-axis-y } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `y` axis |
-| [`z`](#topology-joint-axis-z){: #topology-joint-axis-z } | `any` | `Cldr.Unit.new!(:meter, 0)` | translation along the `z` axis |
+| [`roll`](#topology-joint-axis-roll){: #topology-joint-axis-roll } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the X axis |
+| [`pitch`](#topology-joint-axis-pitch){: #topology-joint-axis-pitch } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the Y axis |
+| [`yaw`](#topology-joint-axis-yaw){: #topology-joint-axis-yaw } | `any` | `Cldr.Unit.new!(:degree, 0)` | rotation around the Z axis |
 
 
 

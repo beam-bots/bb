@@ -61,7 +61,6 @@ defmodule Kinetix.Robot.LifecycleTest do
           end
 
           axis do
-            z(~u(1 meter))
           end
 
           limit do
@@ -80,7 +79,6 @@ defmodule Kinetix.Robot.LifecycleTest do
               end
 
               axis do
-                z(~u(1 meter))
               end
 
               limit do

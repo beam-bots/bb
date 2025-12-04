@@ -26,7 +26,6 @@ defmodule Kinetix.RobotTest do
           end
 
           axis do
-            z(~u(1 meter))
           end
 
           limit do
@@ -45,7 +44,6 @@ defmodule Kinetix.RobotTest do
               end
 
               axis do
-                z(~u(1 meter))
               end
 
               limit do
@@ -64,7 +62,6 @@ defmodule Kinetix.RobotTest do
                   end
 
                   axis do
-                    z(~u(1 meter))
                   end
 
                   limit do

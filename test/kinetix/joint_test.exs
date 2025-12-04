@@ -23,7 +23,6 @@ defmodule Kinetix.JointTest do
             end
 
             axis do
-              z ~u(1 meter)
             end
 
             limit do
@@ -56,11 +55,13 @@ defmodule Kinetix.JointTest do
       assert joint.origin.yaw == ~u(45 degree)
     end
 
-    test "revolute joint has axis" do
+    test "revolute joint has axis with default Z orientation" do
       [link] = Info.topology(RevoluteRobot)
       [joint] = link.joints
       assert is_struct(joint.axis, Axis)
-      assert joint.axis.z == ~u(1 meter)
+      assert joint.axis.roll == ~u(0 degree)
+      assert joint.axis.pitch == ~u(0 degree)
+      assert joint.axis.yaw == ~u(0 degree)
     end
 
     test "revolute joint has limit with degree units" do
@@ -125,7 +126,6 @@ defmodule Kinetix.JointTest do
             type :continuous
 
             axis do
-              z ~u(1 meter)
             end
 
             link :wheel do
@@ -210,7 +210,6 @@ defmodule Kinetix.JointTest do
             type :prismatic
 
             axis do
-              z ~u(1 meter)
             end
 
             limit do
@@ -353,7 +352,6 @@ defmodule Kinetix.JointTest do
             type :planar
 
             axis do
-              z ~u(1 meter)
             end
 
             link :sliding_link do
@@ -374,7 +372,7 @@ defmodule Kinetix.JointTest do
       [link] = Info.topology(PlanarRobot)
       [joint] = link.joints
       assert is_struct(joint.axis, Axis)
-      assert joint.axis.z == ~u(1 meter)
+      assert joint.axis.roll == ~u(0 degree)
     end
 
     defmodule PlanarWithDynamicsRobot do
@@ -556,9 +554,9 @@ defmodule Kinetix.JointTest do
             type :revolute
 
             axis do
-              x ~u(0 meter)
-              y ~u(0 meter)
-              z ~u(1 meter)
+              roll ~u(10 degree)
+              pitch ~u(20 degree)
+              yaw ~u(30 degree)
             end
 
             limit do
@@ -573,12 +571,12 @@ defmodule Kinetix.JointTest do
       end
     end
 
-    test "axis with x, y, z components" do
+    test "axis with roll, pitch, yaw components" do
       [link] = Info.topology(AxisRobot)
       [joint] = link.joints
-      assert joint.axis.x == ~u(0 meter)
-      assert joint.axis.y == ~u(0 meter)
-      assert joint.axis.z == ~u(1 meter)
+      assert joint.axis.roll == ~u(10 degree)
+      assert joint.axis.pitch == ~u(20 degree)
+      assert joint.axis.yaw == ~u(30 degree)
     end
 
     defmodule AxisDefaultsRobot do
@@ -591,7 +589,6 @@ defmodule Kinetix.JointTest do
             type :revolute
 
             axis do
-              z ~u(1 meter)
             end
 
             limit do
@@ -606,12 +603,45 @@ defmodule Kinetix.JointTest do
       end
     end
 
-    test "axis values default to zero" do
+    test "axis values default to zero (Z axis orientation)" do
       [link] = Info.topology(AxisDefaultsRobot)
       [joint] = link.joints
-      assert joint.axis.x == ~u(0 meter)
-      assert joint.axis.y == ~u(0 meter)
-      assert joint.axis.z == ~u(1 meter)
+      assert joint.axis.roll == ~u(0 degree)
+      assert joint.axis.pitch == ~u(0 degree)
+      assert joint.axis.yaw == ~u(0 degree)
+    end
+
+    defmodule YAxisRobot do
+      @moduledoc false
+      use Kinetix
+
+      topology do
+        link :base_link do
+          joint :joint1 do
+            type :revolute
+
+            axis do
+              roll ~u(-90 degree)
+            end
+
+            limit do
+              effort(~u(10 newton_meter))
+              velocity(~u(100 degree_per_second))
+            end
+
+            link :child_link do
+            end
+          end
+        end
+      end
+    end
+
+    test "axis with roll rotates default Z to Y direction" do
+      [link] = Info.topology(YAxisRobot)
+      [joint] = link.joints
+      assert joint.axis.roll == ~u(-90 degree)
+      assert joint.axis.pitch == ~u(0 degree)
+      assert joint.axis.yaw == ~u(0 degree)
     end
   end
 

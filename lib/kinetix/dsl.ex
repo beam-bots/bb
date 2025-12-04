@@ -58,27 +58,35 @@ defmodule Kinetix.Dsl do
 
   @axis %Entity{
     name: :axis,
+    describe: """
+    Joint axis orientation specified as Euler angles.
+
+    The axis defines the direction of rotation (for revolute joints) or
+    translation (for prismatic joints). By default, the axis points along
+    the Z direction. Use roll, pitch, and yaw to rotate it to the desired
+    orientation.
+    """,
     target: Kinetix.Dsl.Axis,
     identifier: {:auto, :unique_integer},
     imports: [Kinetix.Unit],
     schema: [
-      x: [
-        type: unit_type(compatible: :meter),
-        doc: "translation along the `x` axis",
+      roll: [
+        type: unit_type(compatible: :degree),
+        doc: "rotation around the X axis",
         required: false,
-        default: ~u(0 meter)
+        default: ~u(0 degree)
       ],
-      y: [
-        type: unit_type(compatible: :meter),
-        doc: "translation along the `y` axis",
+      pitch: [
+        type: unit_type(compatible: :degree),
+        doc: "rotation around the Y axis",
         required: false,
-        default: ~u(0 meter)
+        default: ~u(0 degree)
       ],
-      z: [
-        type: unit_type(compatible: :meter),
-        doc: "translation along the `z` axis",
+      yaw: [
+        type: unit_type(compatible: :degree),
+        doc: "rotation around the Z axis",
         required: false,
-        default: ~u(0 meter)
+        default: ~u(0 degree)
       ]
     ]
   }

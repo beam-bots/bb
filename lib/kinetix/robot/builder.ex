@@ -12,7 +12,7 @@ defmodule Kinetix.Robot.Builder do
 
   alias Kinetix.Dsl
   alias Kinetix.Robot
-  alias Kinetix.Robot.{Joint, Link, Topology, Units}
+  alias Kinetix.Robot.{Joint, Link, Topology, Transform, Units}
 
   @doc """
   Build a Robot struct from a robot module that uses the Kinetix DSL.
@@ -173,17 +173,17 @@ defmodule Kinetix.Robot.Builder do
   defp convert_axis(nil), do: nil
 
   defp convert_axis(%Dsl.Axis{} = axis) do
-    x = Units.to_meters(axis.x)
-    y = Units.to_meters(axis.y)
-    z = Units.to_meters(axis.z)
+    roll = Units.to_radians(axis.roll)
+    pitch = Units.to_radians(axis.pitch)
+    yaw = Units.to_radians(axis.yaw)
 
-    magnitude = :math.sqrt(x * x + y * y + z * z)
+    # Build rotation matrix from Euler angles and apply to default Z axis
+    rotation =
+      Transform.rotation_x(roll)
+      |> Transform.compose(Transform.rotation_y(pitch))
+      |> Transform.compose(Transform.rotation_z(yaw))
 
-    if magnitude > 0 do
-      {x / magnitude, y / magnitude, z / magnitude}
-    else
-      {0.0, 0.0, 1.0}
-    end
+    Transform.apply_to_point(rotation, {0.0, 0.0, 1.0})
   end
 
   defp convert_limits(nil, _type), do: nil

@@ -35,7 +35,7 @@ defmodule Kinetix.Robot.KinematicsTest do
           type :revolute
 
           axis do
-            y(~u(1 meter))
+            roll(~u(-90 degree))
           end
 
           limit do
@@ -52,7 +52,7 @@ defmodule Kinetix.Robot.KinematicsTest do
               end
 
               axis do
-                y(~u(1 meter))
+                roll(~u(-90 degree))
               end
 
               limit do
@@ -106,7 +106,6 @@ defmodule Kinetix.Robot.KinematicsTest do
           end
 
           axis do
-            z(~u(1 meter))
           end
 
           limit do
@@ -123,7 +122,6 @@ defmodule Kinetix.Robot.KinematicsTest do
               end
 
               axis do
-                z(~u(1 meter))
               end
 
               limit do
@@ -140,7 +138,6 @@ defmodule Kinetix.Robot.KinematicsTest do
                   end
 
                   axis do
-                    z(~u(1 meter))
                   end
 
                   limit do
@@ -174,7 +171,6 @@ defmodule Kinetix.Robot.KinematicsTest do
           type :prismatic
 
           axis do
-            z(~u(1 meter))
           end
 
           limit do

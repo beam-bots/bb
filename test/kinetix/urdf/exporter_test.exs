@@ -112,7 +112,6 @@ defmodule Kinetix.Urdf.ExporterTest do
           end
 
           axis do
-            z(~u(1 meter))
           end
 
           limit do
@@ -160,7 +159,7 @@ defmodule Kinetix.Urdf.ExporterTest do
           type(:continuous)
 
           axis do
-            y(~u(1 meter))
+            roll(~u(-90 degree))
           end
 
           limit do
