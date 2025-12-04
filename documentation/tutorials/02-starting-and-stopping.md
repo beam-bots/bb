@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 James Harton
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Starting and Stopping
 
 In the previous tutorial, we defined a robot using the Kinetix DSL. Now we'll bring it to life by starting its supervision tree and understanding the process structure.

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 James Harton
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Forward Kinematics
 
 In this tutorial, you'll learn how to compute link positions from joint angles using Kinetix's forward kinematics system.

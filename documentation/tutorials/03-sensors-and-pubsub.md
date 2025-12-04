@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 James Harton
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Sensors and PubSub
 
 In this tutorial, you'll learn how to add sensors to your robot and subscribe to their messages using Kinetix's hierarchical PubSub system.

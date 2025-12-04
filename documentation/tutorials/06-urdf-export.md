@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 James Harton
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Exporting to URDF
 
 In this tutorial, you'll learn how to export your Kinetix robot definition to URDF format for use with external tools.

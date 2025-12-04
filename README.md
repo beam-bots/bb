@@ -109,13 +109,37 @@ Core functionality is implemented. Planned additions:
 
 ## Installation
 
-Kinetix is not yet available on Hex. Add it as a Git dependency:
+### With Igniter (Recommended)
+
+If your project uses [Igniter](https://hex.pm/packages/igniter):
+
+```bash
+mix igniter.install kinetix
+```
+
+This will:
+- Add Kinetix to your dependencies
+- Create a `{YourApp}.Robot` module with arm/disarm commands and a base link
+- Add the robot to your application supervision tree
+- Configure the formatter for the Kinetix DSL
+
+To add additional robots later:
+
+```bash
+mix kinetix.add_robot --robot MyApp.Robots.SecondRobot
+```
+
+### Manual Installation
+
+Add Kinetix to your dependencies:
 
 ```elixir
 def deps do
   [
-    {:kinetix, git: "https://harton.dev/kinetix/kinetix.git"}
+    {:kinetix, "~> 0.1"}
   ]
 end
 ```
+
+Then create a robot module manually (see [Your First Robot](documentation/tutorials/01-first-robot.md)).
 

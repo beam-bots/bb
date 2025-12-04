@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 James Harton
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Commands and State Machine
 
 In this tutorial, you'll learn how to control your robot using commands and understand the robot state machine.

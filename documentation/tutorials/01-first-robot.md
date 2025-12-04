@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 James Harton
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Your First Robot
 
 This tutorial guides you through defining your first robot with Kinetix. By the end, you'll understand the core DSL concepts and have a working robot definition.
@@ -5,13 +11,27 @@ This tutorial guides you through defining your first robot with Kinetix. By the 
 ## Prerequisites
 
 - Elixir 1.19 or later
-- Kinetix added to your dependencies
+- Kinetix installed in your project
+
+### Quick Start with Igniter
+
+The fastest way to get started is with [Igniter](https://hex.pm/packages/igniter):
+
+```bash
+mix igniter.install kinetix
+```
+
+This creates a `{YourApp}.Robot` module with arm/disarm commands and a base link, adds it to your supervision tree, and configures the formatter. You can skip to [Step 2](#step-2-add-a-joint-and-child-link) and modify the generated module.
+
+### Manual Installation
+
+If you prefer to create the module manually, add Kinetix to your dependencies:
 
 ```elixir
 # mix.exs
 def deps do
   [
-    {:kinetix, git: "https://harton.dev/kinetix/kinetix.git"}
+    {:kinetix, "~> 0.1"}
   ]
 end
 ```
