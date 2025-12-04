@@ -316,7 +316,7 @@ The material of the visual element
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#topology-link-visual-material-name){: #topology-link-visual-material-name .spark-required} | `atom` |  | The name of the material |
+| [`name`](#topology-link-visual-material-name){: #topology-link-visual-material-name } | `atom` |  | The name of the material |
 
 
 ### topology.link.visual.material.color

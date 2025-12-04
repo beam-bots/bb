@@ -18,12 +18,19 @@ defmodule Kinetix.MixProject do
       consolidate_protocols: Mix.env() == :prod,
       deps: deps(),
       description: @moduledoc,
+      dialyzer: dialyzer(),
       docs: docs(),
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
       start_permanent: Mix.env() == :prod,
       version: @version
+    ]
+  end
+
+  defp dialyzer do
+    [
+      plt_add_apps: [:mix]
     ]
   end
 
@@ -41,7 +48,7 @@ defmodule Kinetix.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger, :xmerl]
     ]
   end
 

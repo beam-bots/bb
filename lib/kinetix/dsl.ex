@@ -384,7 +384,7 @@ defmodule Kinetix.Dsl do
       name: [
         type: :atom,
         doc: "The name of the material",
-        required: true
+        required: false
       ]
     ]
   }
