@@ -17,8 +17,12 @@ defmodule BB.Supervisor do
   ├── PubSub Registry (named {MyRobot, :pubsub})
   ├── Task.Supervisor (for command execution tasks)
   ├── Runtime (robot state, state machine, command execution)
-  ├── RobotSensor1 (robot-level sensors)
-  ├── Controller1 (robot-level controllers)
+  ├── BB.SensorSupervisor (:one_for_one)
+  │   └── RobotSensor1, RobotSensor2...
+  ├── BB.ControllerSupervisor (:one_for_one)
+  │   └── Controller1, Controller2...
+  ├── BB.BridgeSupervisor (:one_for_one)
+  │   └── MavlinkBridge, PhoenixBridge...
   └── BB.LinkSupervisor(:base_link, :one_for_one)
       ├── LinkSensor (link sensors)
       └── BB.JointSupervisor(:shoulder, :one_for_one)
@@ -27,6 +31,10 @@ defmodule BB.Supervisor do
           └── BB.LinkSupervisor(:arm, :one_for_one)
               └── ...
   ```
+
+  Each subsystem supervisor (sensors, controllers, bridges) has its own restart
+  budget, so a flapping process in one won't exhaust the root supervisor's
+  budget and bring down the entire robot.
   """
 
   alias BB.Dsl.{Info, Link}
@@ -70,21 +78,10 @@ defmodule BB.Supervisor do
     # Runtime manages robot state, state machine, and command execution
     runtime_child = {BB.Robot.Runtime, {robot_module, opts}}
 
-    # Sensors from the robot_sensors section
-    robot_sensor_children =
-      robot_module
-      |> Info.sensors()
-      |> Enum.map(fn sensor ->
-        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [])
-      end)
-
-    # Controllers from the controllers section
-    controller_children =
-      robot_module
-      |> Info.controllers()
-      |> Enum.map(fn controller ->
-        BB.Process.child_spec(robot_module, controller.name, controller.child_spec, [])
-      end)
+    # Subsystem supervisors for fault isolation
+    sensor_supervisor_child = {BB.SensorSupervisor, {robot_module, opts}}
+    controller_supervisor_child = {BB.ControllerSupervisor, {robot_module, opts}}
+    bridge_supervisor_child = {BB.BridgeSupervisor, {robot_module, opts}}
 
     # Links remain as entities at robot level
     link_children =
@@ -95,7 +92,14 @@ defmodule BB.Supervisor do
         {BB.LinkSupervisor, {robot_module, link, [], opts}}
       end)
 
-    [registry_child, pubsub_child, task_supervisor_child, runtime_child] ++
-      robot_sensor_children ++ controller_children ++ link_children
+    [
+      registry_child,
+      pubsub_child,
+      task_supervisor_child,
+      runtime_child,
+      sensor_supervisor_child,
+      controller_supervisor_child,
+      bridge_supervisor_child
+    ] ++ link_children
   end
 end

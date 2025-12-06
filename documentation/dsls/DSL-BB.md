@@ -1236,6 +1236,7 @@ end
  * [group](#parameters-group)
    * param
  * [param](#parameters-param)
+ * [bridge](#parameters-bridge)
 
 
 
@@ -1343,6 +1344,45 @@ A runtime-adjustable parameter.
 ### Introspection
 
 Target: `BB.Dsl.Param`
+
+### parameters.bridge
+```elixir
+bridge name, child_spec
+```
+
+
+A parameter protocol bridge for remote access.
+
+Bridges expose robot parameters to remote clients (GCS, web UI, etc.)
+and receive parameter updates from them. They implement `BB.Parameter.Protocol`.
+
+#### Example
+
+parameters do
+bridge :mavlink, {BBMavLink.ParameterBridge, conn: "/dev/ttyACM0"}
+bridge :phoenix, {BBPhoenix.ParameterBridge, url: "ws://gcs.local/socket"}
+end
+
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#parameters-bridge-name){: #parameters-bridge-name .spark-required} | `atom` |  | A unique name for the bridge |
+| [`child_spec`](#parameters-bridge-child_spec){: #parameters-bridge-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the bridge process. Either a module or `{module, keyword_list}` |
+
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Bridge`
 
 
 

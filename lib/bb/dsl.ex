@@ -789,6 +789,44 @@ defmodule BB.Dsl do
     ]
   }
 
+  @bridge %Entity{
+    name: :bridge,
+    describe: """
+    A parameter protocol bridge for remote access.
+
+    Bridges expose robot parameters to remote clients (GCS, web UI, etc.)
+    and receive parameter updates from them. They implement `BB.Parameter.Protocol`.
+
+    ## Example
+
+        parameters do
+          bridge :mavlink, {BBMavLink.ParameterBridge, conn: "/dev/ttyACM0"}
+          bridge :phoenix, {BBPhoenix.ParameterBridge, url: "ws://gcs.local/socket"}
+        end
+    """,
+    target: BB.Dsl.Bridge,
+    identifier: :name,
+    args: [:name, :child_spec],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the bridge"
+      ],
+      child_spec: [
+        type:
+          {:or,
+           [
+             {:behaviour, BB.Parameter.Protocol},
+             {:tuple, [{:behaviour, BB.Parameter.Protocol}, :keyword_list]}
+           ]},
+        required: true,
+        doc:
+          "The child specification for the bridge process. Either a module or `{module, keyword_list}`"
+      ]
+    ]
+  }
+
   @parameters %Section{
     name: :parameters,
     describe: """
@@ -812,7 +850,7 @@ defmodule BB.Dsl do
           end
         end
     """,
-    entities: [@param_group, @param]
+    entities: [@param_group, @param, @bridge]
   }
 
   @topology %Section{

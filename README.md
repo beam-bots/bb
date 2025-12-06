@@ -89,7 +89,7 @@ mix bb.to_urdf MyRobot -o robot.urdf
 
 ## Documentation
 
-See the [tutorials](documentation/tutorials/) for a guided introduction:
+See the tutorials for a guided introduction:
 
 1. [Your First Robot](documentation/tutorials/01-first-robot.md) - defining robots with the DSL
 2. [Starting and Stopping](documentation/tutorials/02-starting-and-stopping.md) - supervision trees
