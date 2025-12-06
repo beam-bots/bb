@@ -1,0 +1,261 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: MIX_ENV=test mix compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/install-elixir@59199173e18eee6748b65d01626ef82d51c6e963 # main
+      - name: Set OS deps compile partition count
+        run: echo "MIX_OS_DEPS_COMPILE_PARTITION_COUNT=$(($(lscpu -p | grep -v '^#' | sort -u -t, -k 2,4 | wc -l) / 2))" >> $GITHUB_ENV
+      - uses: team-alembic/staple-actions/actions/mix-compile@04f27881d51ef973841fc40c549aefb7b52db7f7 # main
+        with:
+          mix-env: test
+          args: "--warnings-as-errors"
+
+  test:
+    name: mix test
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-test@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: test
+
+  credo:
+    name: mix credo --strict
+    runs-on: ubuntu-latest
+    needs: build-test
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-credo@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: test
+      - name: Run Credo SAST
+        uses: team-alembic/staple-actions/actions/mix-task@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          task: credo --format sarif > results.sarif
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@0499de31b99561a6d14a36a5f662c2a54f91beee # v4.31.2
+        with:
+          sarif_file: results.sarif
+          category: credo
+
+  formatter:
+    name: mix format --check-formatted
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-format@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: test
+
+  spark-formatter:
+    name: mix spark.formatter --check
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-task@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: test
+          task: spark.formatter --check
+
+  spark-cheat-sheets:
+    name: mix spark.cheat_sheets --check
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-task@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: test
+          task: spark.cheat_sheets --dry-run --yes
+      - uses: team-alembic/staple-actions/actions/mix-task@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: test
+          task: spark.cheat_sheets --check
+
+  dialyzer:
+    name: mix dialyzer
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-dialyzer@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: dev
+
+  audit:
+    name: mix deps.audit + hex.audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-hex-audit@59199173e18eee6748b65d01626ef82d51c6e963 # main
+      - uses: team-alembic/staple-actions/actions/mix-task@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          task: deps.audit
+
+  unused-deps:
+    name: mix deps.unlock --check-unused
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-task@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: test
+          task: deps.unlock --check-unused
+
+  reuse:
+    name: REUSE compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: REUSE compliance check
+        uses: fsfe/reuse-action@v6
+
+  build-docs:
+    name: mix docs
+    runs-on: ubuntu-latest
+    needs:
+      - build-test
+      - spark-cheat-sheets
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: team-alembic/staple-actions/actions/mix-docs@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: dev
+          use-cache: false
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: doc/
+
+  deploy-docs:
+    name: Deploy docs to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build-docs
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+
+  release:
+    name: Publish to Hex.pm
+    runs-on: ubuntu-latest
+    needs:
+      - test
+      - dialyzer
+      - credo
+      - formatter
+      - spark-formatter
+      - spark-cheat-sheets
+      - audit
+      - unused-deps
+      - reuse
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Extract release notes from CHANGELOG.md
+        id: extract-notes
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+
+          # Extract the section for this version from CHANGELOG.md
+          awk -v version="$VERSION" '
+            /^## \[v?[0-9]/ {
+              if (found) exit
+              if (index($0, "[v" version "]") || index($0, "[" version "]")) {
+                found = 1
+                next
+              }
+            }
+            found {
+              if (/^## \[v?[0-9]/) exit
+              print
+            }
+          ' CHANGELOG.md > release_notes.md
+
+          # Check if notes were found
+          if [ -s release_notes.md ]; then
+            echo "has_notes=true" >> $GITHUB_OUTPUT
+            echo "Release notes extracted for version $VERSION"
+          else
+            echo "has_notes=false" >> $GITHUB_OUTPUT
+            echo "No release notes found for version $VERSION, will use auto-generated notes"
+          fi
+      - name: Create prerelease with changelog notes
+        if: ${{ (contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') || contains(github.ref, '-pre')) && steps.extract-notes.outputs.has_notes == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release create \
+            --repo ${{ github.repository }} \
+            --title ${GITHUB_REF#refs/tags/} \
+            --prerelease \
+            --notes-file release_notes.md \
+            ${GITHUB_REF#refs/tags/}
+      - name: Create prerelease with generated notes
+        if: ${{ (contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') || contains(github.ref, '-pre')) && steps.extract-notes.outputs.has_notes != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release create \
+            --repo ${{ github.repository }} \
+            --title ${GITHUB_REF#refs/tags/} \
+            --prerelease \
+            --generate-notes \
+            ${GITHUB_REF#refs/tags/}
+      - name: Create release with changelog notes
+        if: ${{ (!contains(github.ref, '-rc') && !contains(github.ref, '-beta') && !contains(github.ref, '-alpha') && !contains(github.ref, '-pre')) && steps.extract-notes.outputs.has_notes == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release create \
+            --repo ${{ github.repository }} \
+            --title ${GITHUB_REF#refs/tags/} \
+            --notes-file release_notes.md \
+            ${GITHUB_REF#refs/tags/}
+      - name: Create release with generated notes
+        if: ${{ (!contains(github.ref, '-rc') && !contains(github.ref, '-beta') && !contains(github.ref, '-alpha') && !contains(github.ref, '-pre')) && steps.extract-notes.outputs.has_notes != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release create \
+            --repo ${{ github.repository }} \
+            --title ${GITHUB_REF#refs/tags/} \
+            --generate-notes \
+            ${GITHUB_REF#refs/tags/}
+      - uses: team-alembic/staple-actions/actions/mix-hex-publish@59199173e18eee6748b65d01626ef82d51c6e963 # main
+        with:
+          mix-env: dev
+          hex-api-key: ${{ secrets.HEX_API_KEY }}

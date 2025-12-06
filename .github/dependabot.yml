@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2025 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
+version: 2
+updates:
+  - package-ecosystem: "mix"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      dev-dependencies:
+        patterns:
+          - "credo"
+          - "dialyxir"
+          - "ex_check"
+          - "ex_doc"
+          - "git_ops"
+          - "mix_audit"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

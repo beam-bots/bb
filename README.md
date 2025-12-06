@@ -8,6 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Beam Bots
 
+[![CI](https://github.com/beam-bots/bb/actions/workflows/ci.yml/badge.svg)](https://github.com/beam-bots/bb/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Hex version badge](https://img.shields.io/hexpm/v/bb.svg)](https://hex.pm/packages/bb)
 [![REUSE status](https://api.reuse.software/badge/github.com/beam-bots/bb)](https://api.reuse.software/info/github.com/beam-bots/bb)
