@@ -93,21 +93,6 @@ defmodule BB.Test.ParameterBridge do
   # BB.Parameter.Protocol callbacks
 
   @impl BB.Parameter.Protocol
-  def init(robot, opts) do
-    BB.PubSub.subscribe(robot, [:param])
-
-    state = %__MODULE__{
-      robot: robot,
-      test_pid: Keyword.get(opts, :test_pid),
-      calls: [],
-      remote_params: Keyword.get(opts, :remote_params, %{}),
-      subscriptions: MapSet.new()
-    }
-
-    {:ok, state}
-  end
-
-  @impl BB.Parameter.Protocol
   def handle_change(_robot, changed, state) do
     state = record_call(state, :handle_change, [changed])
 
@@ -156,7 +141,16 @@ defmodule BB.Test.ParameterBridge do
     %{robot: robot} = Keyword.fetch!(opts, :bb)
     user_opts = Keyword.delete(opts, :bb)
 
-    {:ok, state} = __MODULE__.init(robot, user_opts)
+    BB.PubSub.subscribe(robot, [:param])
+
+    state = %__MODULE__{
+      robot: robot,
+      test_pid: Keyword.get(user_opts, :test_pid),
+      calls: [],
+      remote_params: Keyword.get(user_opts, :remote_params, %{}),
+      subscriptions: MapSet.new()
+    }
+
     {:ok, state}
   end
 

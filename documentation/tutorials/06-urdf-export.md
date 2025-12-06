@@ -232,17 +232,14 @@ The URDF serves as a visualisation and validation tool, while Beam Bots handles 
 
 ## Summary
 
-You've completed the Beam Bots tutorials! You now know how to:
+You now know how to export your robot to URDF for use with external tools like RViz and Gazebo.
 
-1. Define robots using the DSL
-2. Start and stop supervision trees
-3. Add sensors and subscribe to messages
-4. Compute forward kinematics
-5. Implement and execute commands
-6. Export to URDF for external tools
+## What's Next?
 
-## Next Steps
+In the next tutorial, we'll learn how to:
 
-- Explore the [DSL Reference](../dsls/DSL-BB.md) for all available options
-- Check the module documentation for API details
-- Look at the example robots in `test/support/example_robots.ex`
+- Define runtime-adjustable parameters
+- Tune your robot while it's running
+- Subscribe to parameter changes
+
+Continue to [Parameters](07-parameters.md).
