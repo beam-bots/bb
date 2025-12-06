@@ -14,6 +14,8 @@ spark_locals_without_parens = [
   blue: 1,
   box: 0,
   box: 1,
+  bridge: 2,
+  bridge: 3,
   collision: 0,
   collision: 1,
   color: 0,

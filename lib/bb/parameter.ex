@@ -194,7 +194,83 @@ defmodule BB.Parameter do
     function_exported?(module, :param_schema, 0)
   end
 
+  # ===========================================================================
+  # Remote Parameter Access (via bridges)
+  # ===========================================================================
+
+  @doc """
+  List parameters available on a remote system via a bridge.
+
+  Returns a list of parameter info from the remote (e.g., flight controller).
+  The bridge must implement `list_remote/1`.
+
+  ## Examples
+
+      {:ok, params} = BB.Parameter.list_remote(MyRobot, :mavlink)
+      # => [{id: "PITCH_RATE_P", value: 0.1, type: :float, doc: "..."}, ...]
+  """
+  @spec list_remote(module(), atom()) :: {:ok, [map()]} | {:error, term()}
+  def list_remote(robot_module, bridge_name)
+      when is_atom(robot_module) and is_atom(bridge_name) do
+    GenServer.call(bridge_via(robot_module, bridge_name), :list_remote)
+  end
+
+  @doc """
+  Get a parameter value from a remote system via a bridge.
+
+  The bridge must implement `get_remote/2`.
+
+  ## Examples
+
+      {:ok, 0.15} = BB.Parameter.get_remote(MyRobot, :mavlink, "PITCH_RATE_P")
+  """
+  @spec get_remote(module(), atom(), BB.Parameter.Protocol.param_id()) ::
+          {:ok, term()} | {:error, term()}
+  def get_remote(robot_module, bridge_name, param_id)
+      when is_atom(robot_module) and is_atom(bridge_name) do
+    GenServer.call(bridge_via(robot_module, bridge_name), {:get_remote, param_id})
+  end
+
+  @doc """
+  Set a parameter value on a remote system via a bridge.
+
+  The bridge must implement `set_remote/3`.
+
+  ## Examples
+
+      :ok = BB.Parameter.set_remote(MyRobot, :mavlink, "PITCH_RATE_P", 0.15)
+  """
+  @spec set_remote(module(), atom(), BB.Parameter.Protocol.param_id(), term()) ::
+          :ok | {:error, term()}
+  def set_remote(robot_module, bridge_name, param_id, value)
+      when is_atom(robot_module) and is_atom(bridge_name) do
+    GenServer.call(bridge_via(robot_module, bridge_name), {:set_remote, param_id, value})
+  end
+
+  @doc """
+  Subscribe to changes for a remote parameter via a bridge.
+
+  When the remote parameter changes, the bridge publishes via `BB.PubSub`.
+  The path structure is determined by the bridge implementation.
+
+  The bridge must implement `subscribe_remote/2`.
+
+  ## Examples
+
+      :ok = BB.Parameter.subscribe_remote(MyRobot, :mavlink, "PITCH_RATE_P")
+  """
+  @spec subscribe_remote(module(), atom(), BB.Parameter.Protocol.param_id()) ::
+          :ok | {:error, term()}
+  def subscribe_remote(robot_module, bridge_name, param_id)
+      when is_atom(robot_module) and is_atom(bridge_name) do
+    GenServer.call(bridge_via(robot_module, bridge_name), {:subscribe_remote, param_id})
+  end
+
   defp get_robot_state(robot_module) do
     Runtime.get_robot_state(robot_module)
+  end
+
+  defp bridge_via(robot_module, bridge_name) do
+    BB.Process.via(robot_module, bridge_name)
   end
 end
