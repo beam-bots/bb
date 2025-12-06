@@ -2,17 +2,17 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Kinetix.Test.ImmediateSuccessCommand do
+defmodule BB.Test.ImmediateSuccessCommand do
   @moduledoc false
-  @behaviour Kinetix.Command
+  @behaviour BB.Command
 
   @impl true
   def handle_command(_goal, _context), do: {:ok, :done}
 end
 
-defmodule Kinetix.Test.AsyncCommand do
+defmodule BB.Test.AsyncCommand do
   @moduledoc false
-  @behaviour Kinetix.Command
+  @behaviour BB.Command
 
   @impl true
   def handle_command(%{notify: pid}, _context) do
@@ -24,9 +24,9 @@ defmodule Kinetix.Test.AsyncCommand do
   def handle_command(_goal, _context), do: {:ok, :completed}
 end
 
-defmodule Kinetix.Test.RejectingCommand do
+defmodule BB.Test.RejectingCommand do
   @moduledoc false
-  @behaviour Kinetix.Command
+  @behaviour BB.Command
 
   @impl true
   def handle_command(_goal, _context), do: {:error, :not_allowed}

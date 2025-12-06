@@ -6,32 +6,32 @@ SPDX-License-Identifier: Apache-2.0
 
 # Your First Robot
 
-This tutorial guides you through defining your first robot with Kinetix. By the end, you'll understand the core DSL concepts and have a working robot definition.
+This tutorial guides you through defining your first robot with Beam Bots. By the end, you'll understand the core DSL concepts and have a working robot definition.
 
 ## Prerequisites
 
 - Elixir 1.19 or later
-- Kinetix installed in your project
+- Beam Bots installed in your project
 
 ### Quick Start with Igniter
 
 The fastest way to get started is with [Igniter](https://hex.pm/packages/igniter):
 
 ```bash
-mix igniter.install kinetix
+mix igniter.install bb
 ```
 
 This creates a `{YourApp}.Robot` module with arm/disarm commands and a base link, adds it to your supervision tree, and configures the formatter. You can skip to [Step 2](#step-2-add-a-joint-and-child-link) and modify the generated module.
 
 ### Manual Installation
 
-If you prefer to create the module manually, add Kinetix to your dependencies:
+If you prefer to create the module manually, add Beam Bots to your dependencies:
 
 ```elixir
 # mix.exs
 def deps do
   [
-    {:kinetix, "~> 0.1"}
+    {:bb, "~> 0.1"}
   ]
 end
 ```
@@ -54,7 +54,7 @@ Create a new file `lib/my_robot.ex`:
 
 ```elixir
 defmodule MyRobot do
-  use Kinetix
+  use BB
 
   topology do
     link :base do
@@ -65,7 +65,7 @@ end
 
 Let's break this down:
 
-- `use Kinetix` brings in the Kinetix DSL and the `~u` sigil for physical units
+- `use BB` brings in the Beam Bots DSL and the `~u` sigil for physical units
 - `topology do ... end` defines the robot's physical structure
 - `link :base do ... end` creates our first link (rigid body)
 
@@ -73,7 +73,7 @@ Compile and test:
 
 ```elixir
 iex> MyRobot.robot()
-%Kinetix.Robot{name: MyRobot, links: %{base: %Kinetix.Robot.Link{...}}, ...}
+%BB.Robot{name: MyRobot, links: %{base: %BB.Robot.Link{...}}, ...}
 ```
 
 The `robot/0` function returns a compiled struct optimised for runtime use.
@@ -84,7 +84,7 @@ Joints connect links. Let's add a pan joint that allows rotation around the Z-ax
 
 ```elixir
 defmodule MyRobot do
-  use Kinetix
+  use BB
 
   topology do
     link :base do
@@ -179,7 +179,7 @@ Let's add a tilt joint to create a full pan-tilt mechanism:
 
 ```elixir
 defmodule MyRobot do
-  use Kinetix
+  use BB
 
   topology do
     link :base do
@@ -272,7 +272,7 @@ Here's the full robot definition:
 
 ```elixir
 defmodule MyRobot do
-  use Kinetix
+  use BB
 
   topology do
     link :base do
@@ -377,7 +377,7 @@ end
 
 ## Exploring the Compiled Robot
 
-The `robot/0` function returns a `Kinetix.Robot` struct:
+The `robot/0` function returns a `BB.Robot` struct:
 
 ```elixir
 iex> robot = MyRobot.robot()
@@ -398,7 +398,7 @@ Notice that angles are stored in radians (SI units) even though we defined them 
 
 ## Joint Types
 
-Kinetix supports six joint types:
+BB supports six joint types:
 
 | Type | Description | Use Case |
 |------|-------------|----------|
@@ -415,6 +415,6 @@ You've defined a robot structure, but it's not running yet. In the next tutorial
 
 - Start the robot's supervision tree
 - Understand how the process structure mirrors the physical structure
-- Learn about Kinetix's fault isolation model
+- Learn about Beam Bots' fault isolation model
 
 Continue to [Starting and Stopping](02-starting-and-stopping.md).

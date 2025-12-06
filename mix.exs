@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Kinetix.MixProject do
+defmodule BB.MixProject do
   use Mix.Project
 
   @moduledoc """
-  The framework for resilient robotics.
+  Beam Bots - The framework for resilient robotics.
   """
 
   @version "0.1.0"
@@ -14,7 +14,7 @@ defmodule Kinetix.MixProject do
   def project do
     [
       aliases: aliases(),
-      app: :kinetix,
+      app: :bb,
       consolidate_protocols: Mix.env() == :prod,
       deps: deps(),
       description: @moduledoc,
@@ -39,7 +39,7 @@ defmodule Kinetix.MixProject do
       maintainers: ["James Harton <james@harton.nz>"],
       licenses: ["Apache-2.0"],
       links: %{
-        "Source" => "https://harton.dev/kinetix/kinetix",
+        "Source" => "https://github.com/beam-bots/bb",
         "Sponsor" => "https://github.com/sponsors/jimsynz"
       }
     ]
@@ -63,14 +63,14 @@ defmodule Kinetix.MixProject do
         "documentation/tutorials/04-kinematics.md",
         "documentation/tutorials/05-commands.md",
         "documentation/tutorials/06-urdf-export.md",
-        "documentation/dsls/DSL-Kinetix.md"
+        "documentation/dsls/DSL-BB.md"
       ],
       groups_for_extras: [
         Tutorials: ~r/tutorials\//,
         "DSL Reference": ~r/dsls\//
       ],
       source_ref: "main",
-      source_url: "https://harton.dev/james/kinetix",
+      source_url: "https://github.com/beam-bots/bb",
       before_closing_head_tag: &before_closing_head_tag/1
     ]
   end
@@ -106,8 +106,8 @@ defmodule Kinetix.MixProject do
 
   defp aliases do
     [
-      "spark.formatter": "spark.formatter --extensions Kinetix.Dsl",
-      "spark.cheat_sheets": "spark.cheat_sheets --extensions Kinetix.Dsl"
+      "spark.formatter": "spark.formatter --extensions BB.Dsl",
+      "spark.cheat_sheets": "spark.cheat_sheets --extensions BB.Dsl"
     ]
   end
 

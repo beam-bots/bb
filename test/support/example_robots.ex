@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Kinetix.ExampleRobots do
+defmodule BB.ExampleRobots do
   @moduledoc """
   Example robot topologies for testing and documentation.
   """
@@ -17,8 +17,8 @@ defmodule Kinetix.ExampleRobots do
       - right_wheel (continuous joint)
       - caster_wheel (fixed)
     """
-    use Kinetix
-    import Kinetix.Unit
+    use BB
+    import BB.Unit
 
     settings do
       name(:differential_drive)
@@ -261,8 +261,8 @@ defmodule Kinetix.ExampleRobots do
                 - wrist_3 (revolute, Y-axis)
                   - tool0 (fixed, tool mounting point)
     """
-    use Kinetix
-    import Kinetix.Unit
+    use BB
+    import BB.Unit
 
     settings do
       name(:six_dof_arm)
@@ -670,8 +670,8 @@ defmodule Kinetix.ExampleRobots do
           - tilt_joint (revolute, Y-axis)
             - camera_link
     """
-    use Kinetix
-    import Kinetix.Unit
+    use BB
+    import BB.Unit
 
     settings do
       name(:pan_tilt_camera)
@@ -851,8 +851,8 @@ defmodule Kinetix.ExampleRobots do
       - slider_joint (prismatic, Z-axis)
         - slider_link
     """
-    use Kinetix
-    import Kinetix.Unit
+    use BB
+    import BB.Unit
 
     settings do
       name(:linear_actuator)

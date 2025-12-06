@@ -4,14 +4,15 @@ SPDX-FileCopyrightText: 2025 James Harton
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Kinetix
+<img src="https://github.com/beam-bots/bb/blob/main/logos/beam_bots_logo.png?raw=true" alt="Beam Bots Logo" width="250" />
 
-[![Build Status](https://drone.harton.dev/api/badges/james/kinetix/status.svg)](https://drone.harton.dev/james/kinetix)
+# Beam Bots
+
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Hex version badge](https://img.shields.io/hexpm/v/kinetix.svg)](https://hex.pm/packages/kinetix)
-[![REUSE status](https://api.reuse.software/badge/harton.dev/james/kinetix)](https://api.reuse.software/info/harton.dev/james/kinetix)
+[![Hex version badge](https://img.shields.io/hexpm/v/bb.svg)](https://hex.pm/packages/bb)
+[![REUSE status](https://api.reuse.software/badge/github.com/beam-bots/bb)](https://api.reuse.software/info/github.com/beam-bots/bb)
 
-Kinetix is a framework for building resilient robotics projects in Elixir.
+Beam Bots is a framework for building resilient robotics projects in Elixir.
 
 ## Features
 
@@ -28,7 +29,7 @@ Kinetix is a framework for building resilient robotics projects in Elixir.
 
 ```elixir
 defmodule MyRobot do
-  use Kinetix
+  use BB
 
   topology do
     link :base do
@@ -74,15 +75,15 @@ defmodule MyRobot do
 end
 
 # Start the supervision tree
-{:ok, _pid} = Kinetix.Supervisor.start_link(MyRobot)
+{:ok, _pid} = BB.Supervisor.start_link(MyRobot)
 
 # Compute forward kinematics
 robot = MyRobot.robot()
 positions = %{shoulder: :math.pi() / 4, elbow: 0.0}
-{x, y, z} = Kinetix.Robot.Kinematics.link_position(robot, positions, :forearm)
+{x, y, z} = BB.Robot.Kinematics.link_position(robot, positions, :forearm)
 
 # Export to URDF
-mix kinetix.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot -o robot.urdf
 ```
 
 ## Documentation
@@ -96,16 +97,16 @@ See the [tutorials](documentation/tutorials/) for a guided introduction:
 5. [Commands and State Machine](documentation/tutorials/05-commands.md) - controlling the robot
 6. [Exporting to URDF](documentation/tutorials/06-urdf-export.md) - interoperability with ROS tools
 
-The [DSL Reference](documentation/dsls/DSL-Kinetix.md) documents all available options.
+The [DSL Reference](documentation/dsls/DSL-BB.md) documents all available options.
 
 ## Status
 
 Core functionality is implemented. Planned additions:
 
-- `kinetix_sitl` - simulation integration (Gazebo, etc.)
-- `kinetix_rc_servo` - PWM-based RC servo driver
-- `kinetix_mavlink` - MAVLink protocol bridge
-- `kinetix_crossfire` - Crossfire RC bridge
+- `bb_sitl` - simulation integration (Gazebo, etc.)
+- `bb_rc_servo` - PWM-based RC servo driver
+- `bb_mavlink` - MAVLink protocol bridge
+- `bb_crossfire` - Crossfire RC bridge
 
 ## Installation
 
@@ -114,29 +115,29 @@ Core functionality is implemented. Planned additions:
 If your project uses [Igniter](https://hex.pm/packages/igniter):
 
 ```bash
-mix igniter.install kinetix
+mix igniter.install bb
 ```
 
 This will:
-- Add Kinetix to your dependencies
+- Add Beam Bots to your dependencies
 - Create a `{YourApp}.Robot` module with arm/disarm commands and a base link
 - Add the robot to your application supervision tree
-- Configure the formatter for the Kinetix DSL
+- Configure the formatter for the Beam Bots DSL
 
 To add additional robots later:
 
 ```bash
-mix kinetix.add_robot --robot MyApp.Robots.SecondRobot
+mix bb.add_robot --robot MyApp.Robots.SecondRobot
 ```
 
 ### Manual Installation
 
-Add Kinetix to your dependencies:
+Add Beam Bots to your dependencies:
 
 ```elixir
 def deps do
   [
-    {:kinetix, "~> 0.1"}
+    {:bb, "~> 0.1"}
   ]
 end
 ```

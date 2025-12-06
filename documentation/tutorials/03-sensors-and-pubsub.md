@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Sensors and PubSub
 
-In this tutorial, you'll learn how to add sensors to your robot and subscribe to their messages using Kinetix's hierarchical PubSub system.
+In this tutorial, you'll learn how to add sensors to your robot and subscribe to their messages using Beam Bots' hierarchical PubSub system.
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ Sensors are processes that publish data. Add one to your robot:
 
 ```elixir
 defmodule MyRobot do
-  use Kinetix
+  use BB
 
   topology do
     link :base do
@@ -49,9 +49,9 @@ A sensor is a GenServer that publishes messages. Here's a simple IMU sensor:
 defmodule MyImuSensor do
   use GenServer
 
-  alias Kinetix.Message.Sensor.Imu
-  alias Kinetix.Message.{Vec3, Quaternion}
-  alias Kinetix.PubSub
+  alias BB.Message.Sensor.Imu
+  alias BB.Message.{Vec3, Quaternion}
+  alias BB.PubSub
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
@@ -59,7 +59,7 @@ defmodule MyImuSensor do
 
   @impl GenServer
   def init(opts) do
-    # Kinetix passes robot context in opts
+    # BB passes robot context in opts
     robot = Keyword.fetch!(opts, :robot)
     path = Keyword.fetch!(opts, :path)
 
@@ -89,21 +89,21 @@ end
 
 Key points:
 
-- Kinetix passes `:robot` and `:path` in the options
+- BB passes `:robot` and `:path` in the options
 - The path reflects where the sensor is in the topology (e.g., `[:base, :imu]`)
 - Publish with `[:sensor | path]` to identify it as a sensor message
 
 > **For Roboticists:** This is similar to ROS publishers. The sensor publishes on a topic (path) and subscribers receive the messages asynchronously.
 
-> **For Elixirists:** The sensor is just a GenServer. Kinetix starts it as part of the supervision tree and provides context about where it sits in the robot topology.
+> **For Elixirists:** The sensor is just a GenServer. BB starts it as part of the supervision tree and provides context about where it sits in the robot topology.
 
 ## Subscribing to Messages
 
 Start your robot and subscribe to sensor messages:
 
 ```elixir
-iex> {:ok, _} = Kinetix.Supervisor.start_link(MyRobot)
-iex> Kinetix.PubSub.subscribe(MyRobot, [:sensor])
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
+iex> BB.PubSub.subscribe(MyRobot, [:sensor])
 {:ok, #PID<0.234.0>}
 ```
 
@@ -111,8 +111,8 @@ Now your IEx process receives sensor messages:
 
 ```elixir
 iex> flush()
-{:kinetix, [:sensor, :base, :imu], %Kinetix.Message{...}}
-{:kinetix, [:sensor, :base, :imu], %Kinetix.Message{...}}
+{:bb, [:sensor, :base, :imu], %BB.Message{...}}
+{:bb, [:sensor, :base, :imu], %BB.Message{...}}
 ```
 
 ## Subscription Patterns
@@ -121,16 +121,16 @@ The path you subscribe to determines which messages you receive:
 
 ```elixir
 # All sensor messages from anywhere
-Kinetix.PubSub.subscribe(MyRobot, [:sensor])
+BB.PubSub.subscribe(MyRobot, [:sensor])
 
 # Sensors under the base link
-Kinetix.PubSub.subscribe(MyRobot, [:sensor, :base])
+BB.PubSub.subscribe(MyRobot, [:sensor, :base])
 
 # Only the specific IMU sensor
-Kinetix.PubSub.subscribe(MyRobot, [:sensor, :base, :imu])
+BB.PubSub.subscribe(MyRobot, [:sensor, :base, :imu])
 
 # All messages (sensors, actuators, everything)
-Kinetix.PubSub.subscribe(MyRobot, [])
+BB.PubSub.subscribe(MyRobot, [])
 ```
 
 ## Filtering by Message Type
@@ -138,9 +138,9 @@ Kinetix.PubSub.subscribe(MyRobot, [])
 Subscribe only to specific message types:
 
 ```elixir
-alias Kinetix.Message.Sensor.Imu
+alias BB.Message.Sensor.Imu
 
-Kinetix.PubSub.subscribe(MyRobot, [:sensor],
+BB.PubSub.subscribe(MyRobot, [:sensor],
   message_types: [Imu]
 )
 ```
@@ -164,13 +164,13 @@ defmodule MyController do
     robot = Keyword.fetch!(opts, :robot)
 
     # Subscribe to all sensor messages
-    Kinetix.PubSub.subscribe(robot, [:sensor])
+    BB.PubSub.subscribe(robot, [:sensor])
 
     {:ok, %{robot: robot}}
   end
 
   @impl GenServer
-  def handle_info({:kinetix, path, message}, state) do
+  def handle_info({:bb, path, message}, state) do
     # Process the sensor message
     IO.inspect(message.payload, label: "Received from #{inspect(path)}")
     {:noreply, state}
@@ -183,10 +183,10 @@ end
 Messages have a standard envelope structure:
 
 ```elixir
-%Kinetix.Message{
+%BB.Message{
   timestamp: -576460748776542,  # monotonic nanoseconds
   frame_id: :imu,
-  payload: %Kinetix.Message.Sensor.Imu{
+  payload: %BB.Message.Sensor.Imu{
     orientation: {:quaternion, 0.0, 0.0, 0.0, 1.0},
     angular_velocity: {:vec3, 0.0, 0.0, 0.0},
     linear_acceleration: {:vec3, 0.0, 0.0, 9.81}
@@ -200,32 +200,32 @@ Messages have a standard envelope structure:
 
 ## Available Message Types
 
-Kinetix includes common sensor message types:
+BB includes common sensor message types:
 
 | Module | Description |
 |--------|-------------|
-| `Kinetix.Message.Sensor.Imu` | Accelerometer, gyroscope |
-| `Kinetix.Message.Sensor.JointState` | Joint positions, velocities, efforts |
-| `Kinetix.Message.Sensor.LaserScan` | Lidar range data |
-| `Kinetix.Message.Sensor.Range` | Single distance measurement |
-| `Kinetix.Message.Sensor.Image` | Camera images |
-| `Kinetix.Message.Sensor.BatteryState` | Battery status |
+| `BB.Message.Sensor.Imu` | Accelerometer, gyroscope |
+| `BB.Message.Sensor.JointState` | Joint positions, velocities, efforts |
+| `BB.Message.Sensor.LaserScan` | Lidar range data |
+| `BB.Message.Sensor.Range` | Single distance measurement |
+| `BB.Message.Sensor.Image` | Camera images |
+| `BB.Message.Sensor.BatteryState` | Battery status |
 
 And geometry types for transforms and motion:
 
 | Module | Description |
 |--------|-------------|
-| `Kinetix.Message.Geometry.Pose` | Position + orientation |
-| `Kinetix.Message.Geometry.Twist` | Linear + angular velocity |
-| `Kinetix.Message.Geometry.Wrench` | Force + torque |
-| `Kinetix.Message.Geometry.Transform` | Coordinate transform |
+| `BB.Message.Geometry.Pose` | Position + orientation |
+| `BB.Message.Geometry.Twist` | Linear + angular velocity |
+| `BB.Message.Geometry.Wrench` | Force + torque |
+| `BB.Message.Geometry.Transform` | Coordinate transform |
 
 ## Creating Custom Payload Types
 
 You can define your own payload types for domain-specific sensor data. A payload type must:
 
-1. Implement the `Kinetix.Message` behaviour (provides the schema)
-2. Implement the `Kinetix.Message.Payload` protocol (enables runtime introspection)
+1. Implement the `BB.Message` behaviour (provides the schema)
+2. Implement the `BB.Message.Payload` protocol (enables runtime introspection)
 
 Here's a complete example for a custom temperature sensor:
 
@@ -233,7 +233,7 @@ Here's a complete example for a custom temperature sensor:
 defmodule MyApp.Message.Temperature do
   @moduledoc "Temperature reading from a thermal sensor."
 
-  @behaviour Kinetix.Message
+  @behaviour BB.Message
 
   defstruct [:celsius, :sensor_id]
 
@@ -257,19 +257,19 @@ defmodule MyApp.Message.Temperature do
           )
 
   # Behaviour callback - returns the compiled schema
-  @impl Kinetix.Message
+  @impl BB.Message
   def schema, do: @schema
 
   # Protocol implementation - enables runtime schema lookup
-  defimpl Kinetix.Message.Payload do
+  defimpl BB.Message.Payload do
     def schema(_payload), do: @for.schema()
   end
 
   # Convenience constructor (optional but recommended)
   @spec new(atom(), atom(), float()) ::
-          {:ok, Kinetix.Message.t()} | {:error, term()}
+          {:ok, BB.Message.t()} | {:error, term()}
   def new(frame_id, sensor_id, celsius) do
-    Kinetix.Message.new(__MODULE__, frame_id,
+    BB.Message.new(__MODULE__, frame_id,
       celsius: celsius,
       sensor_id: sensor_id
     )
@@ -284,7 +284,7 @@ defmodule MyTemperatureSensor do
   use GenServer
 
   alias MyApp.Message.Temperature
-  alias Kinetix.PubSub
+  alias BB.PubSub
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
 
@@ -311,14 +311,14 @@ defmodule MyTemperatureSensor do
 end
 ```
 
-The `Spark.Options` schema validates attributes when creating messages. If validation fails, `Kinetix.Message.new/3` returns `{:error, reason}` with details about what went wrong.
+The `Spark.Options` schema validates attributes when creating messages. If validation fails, `BB.Message.new/3` returns `{:error, reason}` with details about what went wrong.
 
 ## Unsubscribing
 
 Stop receiving messages:
 
 ```elixir
-Kinetix.PubSub.unsubscribe(MyRobot, [:sensor])
+BB.PubSub.unsubscribe(MyRobot, [:sensor])
 ```
 
 ## Debugging Subscriptions
@@ -326,7 +326,7 @@ Kinetix.PubSub.unsubscribe(MyRobot, [:sensor])
 List who's subscribed to a path:
 
 ```elixir
-iex> Kinetix.PubSub.subscribers(MyRobot, [:sensor])
+iex> BB.PubSub.subscribers(MyRobot, [:sensor])
 [{#PID<0.234.0>, []}]  # PID and message type filters
 ```
 
@@ -361,7 +361,7 @@ Some sensors aren't attached to a specific link (e.g., GPS, battery monitor). De
 
 ```elixir
 defmodule MyRobot do
-  use Kinetix
+  use BB
 
   sensors do
     sensor :gps, GpsSensor

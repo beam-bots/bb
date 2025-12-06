@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Starting and Stopping
 
-In the previous tutorial, we defined a robot using the Kinetix DSL. Now we'll bring it to life by starting its supervision tree and understanding the process structure.
+In the previous tutorial, we defined a robot using the Beam Bots DSL. Now we'll bring it to life by starting its supervision tree and understanding the process structure.
 
 ## Prerequisites
 
@@ -14,10 +14,10 @@ Complete [Your First Robot](01-first-robot.md) first. You should have a `MyRobot
 
 ## Starting the Robot
 
-Start your robot with `Kinetix.Supervisor.start_link/2`:
+Start your robot with `BB.Supervisor.start_link/2`:
 
 ```elixir
-iex> {:ok, pid} = Kinetix.Supervisor.start_link(MyRobot)
+iex> {:ok, pid} = BB.Supervisor.start_link(MyRobot)
 {:ok, #PID<0.234.0>}
 ```
 
@@ -25,10 +25,10 @@ Your robot is now running. The supervisor has spawned a tree of processes that m
 
 ## Understanding the Process Tree
 
-Kinetix creates a supervision tree that reflects your robot's topology:
+BB creates a supervision tree that reflects your robot's topology:
 
 ```
-Kinetix.Supervisor (MyRobot)
+BB.Supervisor (MyRobot)
 ├── Registry           - Process name registry
 ├── PubSub Registry    - Message routing
 ├── Task.Supervisor    - Command execution
@@ -69,8 +69,8 @@ You can inspect the running processes:
 ```elixir
 iex> Supervisor.which_children(MyRobot)
 [
-  {{Kinetix.LinkSupervisor, :base}, #PID<0.236.0>, :supervisor, ...},
-  {Kinetix.Robot.Runtime, #PID<0.235.0>, :worker, ...},
+  {{BB.LinkSupervisor, :base}, #PID<0.236.0>, :supervisor, ...},
+  {BB.Robot.Runtime, #PID<0.235.0>, :worker, ...},
   ...
 ]
 ```
@@ -108,7 +108,7 @@ defmodule MyApp.Application do
   def start(_type, _args) do
     children = [
       # Start the robot supervisor
-      {Kinetix.Supervisor, MyRobot}
+      {BB.Supervisor, MyRobot}
     ]
 
     opts = [strategy: :one_for_one, name: MyApp.Supervisor]
@@ -125,9 +125,9 @@ You can run multiple robots in the same application:
 
 ```elixir
 children = [
-  {Kinetix.Supervisor, LeftArm},
-  {Kinetix.Supervisor, RightArm},
-  {Kinetix.Supervisor, MobileBase}
+  {BB.Supervisor, LeftArm},
+  {BB.Supervisor, RightArm},
+  {BB.Supervisor, MobileBase}
 ]
 ```
 
@@ -138,7 +138,7 @@ Each robot has its own isolated supervision tree.
 The `Runtime` process manages your robot's operational state. When the robot starts, it's in the `:disarmed` state - a safe mode where actuators won't respond to commands.
 
 ```elixir
-iex> Kinetix.Robot.Runtime.get_state(MyRobot)
+iex> BB.Robot.Runtime.get_state(MyRobot)
 :disarmed
 ```
 
@@ -149,7 +149,7 @@ We'll cover the state machine and commands in [Commands and State Machine](05-co
 Every process in the robot tree is registered with a unique name. You can look up any process:
 
 ```elixir
-iex> Kinetix.Process.whereis(MyRobot, :pan_joint)
+iex> BB.Process.whereis(MyRobot, :pan_joint)
 #PID<0.238.0>
 ```
 
@@ -157,7 +157,7 @@ This registry is used internally for routing messages and looking up components.
 
 ## Supervision Strategies
 
-By default, Kinetix uses `:one_for_one` supervision - if a child crashes, only that child restarts. This is appropriate for most robotics applications where components are independent.
+By default, BB uses `:one_for_one` supervision - if a child crashes, only that child restarts. This is appropriate for most robotics applications where components are independent.
 
 You can customise the supervisor module in your robot's settings:
 

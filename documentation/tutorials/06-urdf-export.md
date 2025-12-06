@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Exporting to URDF
 
-In this tutorial, you'll learn how to export your Kinetix robot definition to URDF format for use with external tools.
+In this tutorial, you'll learn how to export your Beam Bots robot definition to URDF format for use with external tools.
 
 ## Prerequisites
 
@@ -22,21 +22,21 @@ URDF describes:
 - Physical properties (mass, inertia)
 - Materials and colours
 
-Exporting to URDF lets you visualise your Kinetix robots in established tools.
+Exporting to URDF lets you visualise your Beam Bots robots in established tools.
 
 ## Using the Mix Task
 
-Export your robot with the `kinetix.to_urdf` mix task:
+Export your robot with the `bb.to_urdf` mix task:
 
 ```bash
 # Print URDF to stdout
-mix kinetix.to_urdf MyRobot
+mix bb.to_urdf MyRobot
 
 # Write to a file
-mix kinetix.to_urdf MyRobot --output robot.urdf
+mix bb.to_urdf MyRobot --output robot.urdf
 
 # Short form
-mix kinetix.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot -o robot.urdf
 ```
 
 ## Example Output
@@ -82,7 +82,7 @@ For a simple two-joint robot, the output looks like:
 You can also export from Elixir code:
 
 ```elixir
-alias Kinetix.Urdf.Exporter
+alias BB.Urdf.Exporter
 
 # From a module
 {:ok, xml} = Exporter.export(MyRobot)
@@ -101,7 +101,7 @@ If you have ROS installed, view your robot:
 
 ```bash
 # Export the robot
-mix kinetix.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot -o robot.urdf
 
 # View in RViz (requires ROS)
 roslaunch urdf_tutorial display.launch model:=robot.urdf
@@ -113,7 +113,7 @@ For simulation in Gazebo:
 
 ```bash
 # Export
-mix kinetix.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot -o robot.urdf
 
 # Launch Gazebo with the model
 gazebo --verbose robot.urdf
@@ -123,9 +123,9 @@ Note: Gazebo may require additional tags for physics simulation (like `<inertial
 
 ## What Gets Exported
 
-The exporter converts these Kinetix elements to URDF:
+The exporter converts these Beam Bots elements to URDF:
 
-| Kinetix | URDF |
+| Beam Bots | URDF |
 |---------|------|
 | `link` | `<link>` |
 | `joint` (revolute, prismatic, etc.) | `<joint>` |
@@ -163,14 +163,14 @@ Make sure the mesh files are available relative to where you'll use the URDF.
 
 ## Limitations
 
-Some Kinetix features don't map directly to URDF:
+Some Beam Bots features don't map directly to URDF:
 
 | Feature | Status |
 |---------|--------|
 | Sensors | Not exported (URDF extension) |
 | Actuators | Not exported (URDF extension) |
-| Commands | Not exported (Kinetix-specific) |
-| Controllers | Not exported (Kinetix-specific) |
+| Commands | Not exported (Beam Bots-specific) |
+| Controllers | Not exported (Beam Bots-specific) |
 | `floating` joints | Exported but limited support |
 | `planar` joints | Exported but limited support |
 
@@ -178,7 +178,7 @@ URDF is primarily a static description format. Dynamic elements like sensors and
 
 ## Unit Conversion
 
-Kinetix automatically converts units to URDF conventions:
+Beam Bots automatically converts units to URDF conventions:
 
 | Quantity | URDF Unit |
 |----------|-----------|
@@ -191,7 +191,7 @@ Kinetix automatically converts units to URDF conventions:
 Your `~u()` values are converted automatically:
 
 ```elixir
-# In Kinetix
+# In Beam Bots
 limit do
   lower(~u(-90 degree))
   upper(~u(90 degree))
@@ -222,17 +222,17 @@ Common issues:
 
 A typical development workflow:
 
-1. Define robot in Kinetix (Elixir DSL)
+1. Define robot in Beam Bots (Elixir DSL)
 2. Export to URDF for visualisation
 3. Test kinematics in RViz
-4. Run runtime in Kinetix (supervision, sensors, commands)
+4. Run runtime in Beam Bots (supervision, sensors, commands)
 5. Re-export after changes
 
-The URDF serves as a visualisation and validation tool, while Kinetix handles the runtime.
+The URDF serves as a visualisation and validation tool, while Beam Bots handles the runtime.
 
 ## Summary
 
-You've completed the Kinetix tutorials! You now know how to:
+You've completed the Beam Bots tutorials! You now know how to:
 
 1. Define robots using the DSL
 2. Start and stop supervision trees
@@ -243,6 +243,6 @@ You've completed the Kinetix tutorials! You now know how to:
 
 ## Next Steps
 
-- Explore the [DSL Reference](../dsls/DSL-Kinetix.md) for all available options
+- Explore the [DSL Reference](../dsls/DSL-BB.md) for all available options
 - Check the module documentation for API details
 - Look at the example robots in `test/support/example_robots.ex`

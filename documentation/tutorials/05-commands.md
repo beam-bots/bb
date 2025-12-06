@@ -14,7 +14,7 @@ Complete [Starting and Stopping](02-starting-and-stopping.md). You should unders
 
 ## The Robot State Machine
 
-Every Kinetix robot has a state machine that controls when commands can execute:
+Every Beam Bots robot has a state machine that controls when commands can execute:
 
 ```
 :disarmed ──arm──→ :idle
@@ -36,8 +36,8 @@ Every Kinetix robot has a state machine that controls when commands can execute:
 Query the current state:
 
 ```elixir
-iex> {:ok, _} = Kinetix.Supervisor.start_link(MyRobot)
-iex> Kinetix.Robot.Runtime.state(MyRobot)
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
+iex> BB.Robot.Runtime.state(MyRobot)
 :disarmed
 ```
 
@@ -49,16 +49,16 @@ To use the standard arm/disarm commands, add them to your robot:
 
 ```elixir
 defmodule MyRobot do
-  use Kinetix
+  use BB
 
   commands do
     command :arm do
-      handler Kinetix.Command.Arm
+      handler BB.Command.Arm
       allowed_states [:disarmed]
     end
 
     command :disarm do
-      handler Kinetix.Command.Disarm
+      handler BB.Command.Disarm
       allowed_states [:idle]
     end
   end
@@ -75,7 +75,7 @@ The DSL generates convenience functions on your module:
 iex> {:ok, task} = MyRobot.arm()
 iex> {:ok, :armed} = Task.await(task)
 
-iex> Kinetix.Robot.Runtime.state(MyRobot)
+iex> BB.Robot.Runtime.state(MyRobot)
 :idle
 ```
 
@@ -105,12 +105,12 @@ Add commands to your robot with the `commands` block:
 ```elixir
 commands do
   command :arm do
-    handler Kinetix.Command.Arm
+    handler BB.Command.Arm
     allowed_states [:disarmed]
   end
 
   command :disarm do
-    handler Kinetix.Command.Disarm
+    handler BB.Command.Disarm
     allowed_states [:idle]
   end
 
@@ -122,18 +122,18 @@ end
 ```
 
 Each command specifies:
-- **handler** - Module implementing `Kinetix.Command` behaviour
+- **handler** - Module implementing `BB.Command` behaviour
 - **allowed_states** - Robot states where this command can execute
 
 ## Implementing a Command Handler
 
-Create a module implementing the `Kinetix.Command` behaviour:
+Create a module implementing the `BB.Command` behaviour:
 
 ```elixir
 defmodule MyMoveJointCommand do
-  @behaviour Kinetix.Command
+  @behaviour BB.Command
 
-  alias Kinetix.Robot.State, as: RobotState
+  alias BB.Robot.State, as: RobotState
 
   @impl true
   def handle_command(goal, context) do
@@ -163,7 +163,7 @@ The handler receives:
 
 ## State vs Physical Movement
 
-**Important:** Calling `RobotState.set_joint_position/3` only updates Kinetix's internal representation of where joints are. It does **not** move physical hardware.
+**Important:** Calling `RobotState.set_joint_position/3` only updates Beam Bots' internal representation of where joints are. It does **not** move physical hardware.
 
 To actually move a robot, you need:
 
@@ -214,7 +214,7 @@ An actuator subscribes to commands and drives hardware:
 defmodule ShoulderActuator do
   use GenServer
 
-  alias Kinetix.PubSub
+  alias BB.PubSub
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
@@ -234,7 +234,7 @@ defmodule ShoulderActuator do
   end
 
   @impl GenServer
-  def handle_info({:kinetix, _path, %{payload: command}}, state) do
+  def handle_info({:bb, _path, %{payload: command}}, state) do
     # Received a new target position
     {:noreply, %{state | target: command.target}}
   end
@@ -256,8 +256,8 @@ A separate **sensor** reads the actual position and publishes it:
 defmodule ShoulderEncoder do
   use GenServer
 
-  alias Kinetix.PubSub
-  alias Kinetix.Message.Sensor.JointState
+  alias BB.PubSub
+  alias BB.Message.Sensor.JointState
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
 
@@ -298,7 +298,7 @@ This separation mirrors real hardware:
 - **Sensors** read encoders (input only)
 - **Runtime** maintains the kinematic model from sensor feedback
 
-> **For Roboticists:** This is the standard separation you'd expect. Kinetix manages coordination; you provide the hardware drivers.
+> **For Roboticists:** This is the standard separation you'd expect. BB manages coordination; you provide the hardware drivers.
 
 > **For Elixirists:** Actuators and sensors are independent GenServers that communicate via PubSub. The Runtime aggregates sensor data into a coherent robot state.
 
@@ -354,12 +354,12 @@ Commands can return:
 The `next_state` option is how `Arm` and `Disarm` control the state machine:
 
 ```elixir
-# In Kinetix.Command.Arm
+# In BB.Command.Arm
 def handle_command(_goal, _context) do
   {:ok, :armed}  # next_state defaults to :idle
 end
 
-# In Kinetix.Command.Disarm
+# In BB.Command.Disarm
 def handle_command(_goal, _context) do
   {:ok, :disarmed, next_state: :disarmed}
 end
@@ -370,12 +370,12 @@ end
 Commands only execute in their allowed states:
 
 ```elixir
-iex> Kinetix.Robot.Runtime.state(MyRobot)
+iex> BB.Robot.Runtime.state(MyRobot)
 :disarmed
 
 iex> {:ok, task} = MyRobot.move_joint(joint: :shoulder, position: 0.5)
 iex> Task.await(task)
-{:error, %Kinetix.Robot.Runtime.StateError{
+{:error, %BB.Robot.Runtime.StateError{
   current_state: :disarmed,
   allowed_states: [:idle]
 }}
@@ -387,11 +387,11 @@ Here's a robot with arm, disarm, and a custom move command:
 
 ```elixir
 defmodule SimpleArm do
-  use Kinetix
+  use BB
 
   defmodule MoveCommand do
-    @behaviour Kinetix.Command
-    alias Kinetix.PubSub
+    @behaviour BB.Command
+    alias BB.PubSub
 
     @impl true
     def handle_command(goal, context) do
@@ -408,12 +408,12 @@ defmodule SimpleArm do
 
   commands do
     command :arm do
-      handler Kinetix.Command.Arm
+      handler BB.Command.Arm
       allowed_states [:disarmed]
     end
 
     command :disarm do
-      handler Kinetix.Command.Disarm
+      handler BB.Command.Disarm
       allowed_states [:idle]
     end
 
@@ -461,7 +461,7 @@ end
 Use it:
 
 ```elixir
-iex> {:ok, _} = Kinetix.Supervisor.start_link(SimpleArm)
+iex> {:ok, _} = BB.Supervisor.start_link(SimpleArm)
 
 # Arm the robot
 iex> {:ok, task} = SimpleArm.arm()
@@ -481,14 +481,14 @@ iex> {:ok, :disarmed} = Task.await(task)
 Monitor state machine changes via PubSub:
 
 ```elixir
-Kinetix.PubSub.subscribe(MyRobot, [:state_machine])
+BB.PubSub.subscribe(MyRobot, [:state_machine])
 
 {:ok, task} = MyRobot.arm()
 Task.await(task)
 
 # Receive transition messages
 receive do
-  {:kinetix, [:state_machine], %Kinetix.Message{payload: transition}} ->
+  {:bb, [:state_machine], %BB.Message{payload: transition}} ->
     IO.puts("#{transition.from} → #{transition.to}")
 end
 ```
@@ -546,7 +546,7 @@ Cancel a running command explicitly:
 {:ok, task} = MyRobot.long_running_command()
 
 # Later, if needed
-Kinetix.Robot.Runtime.cancel(MyRobot)
+BB.Robot.Runtime.cancel(MyRobot)
 
 # The task will return {:error, :cancelled}
 ```

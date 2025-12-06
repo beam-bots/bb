@@ -10,7 +10,7 @@ This file provides guidance to coding assistances while working with this projec
 
 ## Project Overview
 
-Kinetix is a framework for building resilient robotics projects in Elixir. It provides a Spark DSL for defining robot topologies (links, joints, sensors, actuators) with automatic supervision tree generation that mirrors the physical structure for fault isolation.
+Beam Bots is a framework for building resilient robotics projects in Elixir. It provides a Spark DSL for defining robot topologies (links, joints, sensors, actuators) with automatic supervision tree generation that mirrors the physical structure for fault isolation.
 
 ## Documentation
 
@@ -23,7 +23,7 @@ See `documentation/tutorials/` for guided tutorials:
 5. `05-commands.md` - the command system and robot state machine
 6. `06-urdf-export.md` - exporting to URDF for ROS tools
 
-The DSL reference is in `documentation/dsls/DSL-Kinetix.md`.
+The DSL reference is in `documentation/dsls/DSL-BB.md`.
 
 ## Common Commands
 
@@ -46,13 +46,13 @@ mix spark.formatter                       # Update formatter with DSL locals
 mix spark.cheat_sheets                    # Generate DSL documentation
 
 # URDF export
-mix kinetix.to_urdf MyRobot              # Print URDF to stdout
-mix kinetix.to_urdf MyRobot -o robot.urdf # Write to file
+mix bb.to_urdf MyRobot              # Print URDF to stdout
+mix bb.to_urdf MyRobot -o robot.urdf # Write to file
 ```
 
 ## Architecture
 
-### Spark DSL (`lib/kinetix/dsl.ex`)
+### Spark DSL (`lib/bb/dsl.ex`)
 
 The core DSL defines robot structure using nested entities:
 - **settings** - robot name, registry/supervisor modules
@@ -74,39 +74,39 @@ Transformers run in sequence to process DSL at compile-time:
 1. `DefaultNameTransformer` - sets robot name to module name if unset
 2. `TopologyTransformer` - validates link hierarchy
 3. `SupervisorTransformer` - generates supervision tree specs
-4. `RobotTransformer` - builds optimised `Kinetix.Robot` struct, injects `robot/0` function
+4. `RobotTransformer` - builds optimised `BB.Robot` struct, injects `robot/0` function
 
 ### Runtime Components
 
-**Robot struct** (`lib/kinetix/robot.ex`): Optimised representation with:
+**Robot struct** (`lib/bb/robot.ex`): Optimised representation with:
 - Flat maps for O(1) lookup of links/joints/sensors/actuators
 - All units converted to SI base (metres, radians, kg)
 - Pre-computed topology for traversal
 
-**Supervision tree** (`lib/kinetix/supervisor.ex`): Mirrors robot topology for fault isolation. Crashes propagate only within affected subtree.
+**Supervision tree** (`lib/bb/supervisor.ex`): Mirrors robot topology for fault isolation. Crashes propagate only within affected subtree.
 
-**PubSub** (`lib/kinetix/pub_sub.ex`): Hierarchical message routing by path. Subscribers can match exact paths or entire subtrees.
+**PubSub** (`lib/bb/pub_sub.ex`): Hierarchical message routing by path. Subscribers can match exact paths or entire subtrees.
 
-**Kinematics** (`lib/kinetix/robot/kinematics.ex`): Forward kinematics using 4x4 homogeneous transform matrices (Nx tensors).
+**Kinematics** (`lib/bb/robot/kinematics.ex`): Forward kinematics using 4x4 homogeneous transform matrices (Nx tensors).
 
-**Runtime** (`lib/kinetix/robot/runtime.ex`): Manages robot operational state with a state machine:
+**Runtime** (`lib/bb/robot/runtime.ex`): Manages robot operational state with a state machine:
 - `:disarmed` → `:idle` → `:executing` → `:idle`
 - Commands only execute in allowed states
 - Subscribes to sensor messages and updates joint positions
 
-**Commands**: Defined in the DSL `commands` section with handlers implementing `Kinetix.Command` behaviour. Built-in commands include `Kinetix.Command.Arm` and `Kinetix.Command.Disarm`.
+**Commands**: Defined in the DSL `commands` section with handlers implementing `BB.Command` behaviour. Built-in commands include `BB.Command.Arm` and `BB.Command.Disarm`.
 
-**URDF Export** (`lib/kinetix/urdf/exporter.ex`): Converts robot definitions to URDF XML format for use with ROS tools like RViz and Gazebo. Available via `mix kinetix.to_urdf`.
+**URDF Export** (`lib/bb/urdf/exporter.ex`): Converts robot definitions to URDF XML format for use with ROS tools like RViz and Gazebo. Available via `mix bb.to_urdf`.
 
 ### Message System
 
-`Kinetix.Message` wraps payloads with timestamp/frame_id. Payload types implement a behaviour and protocol for schema validation via Spark.Options.
+`BB.Message` wraps payloads with timestamp/frame_id. Payload types implement a behaviour and protocol for schema validation via Spark.Options.
 
 ## Key Patterns
 
 - Units: Use `Cldr.Unit` throughout DSL, converted to floats (SI) in Robot struct
-- Transforms: 4x4 matrices in `Kinetix.Robot.Transform`, angles in radians
+- Transforms: 4x4 matrices in `BB.Robot.Transform`, angles in radians
 - Process registration: Uses Registry with `:via` tuples, names must be globally unique per robot
-- DSL entities are structs in `lib/kinetix/dsl/` matching entity names
+- DSL entities are structs in `lib/bb/dsl/` matching entity names
 - Commands: Return `{:ok, result}` or `{:ok, result, next_state: state}` for state transitions
 - State machine: Robots start `:disarmed`, transition to `:idle` when armed, `:executing` during commands

@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Forward Kinematics
 
-In this tutorial, you'll learn how to compute link positions from joint angles using Kinetix's forward kinematics system.
+In this tutorial, you'll learn how to compute link positions from joint angles using Beam Bots' forward kinematics system.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ Forward kinematics computes the position and orientation of any link given the c
 - **Input:** Joint angles (e.g., shoulder at 45°, elbow at 30°)
 - **Output:** Position of the hand in 3D space (x, y, z)
 
-Kinetix uses 4x4 homogeneous transformation matrices internally, leveraging Nx tensors for efficient computation.
+BB uses 4x4 homogeneous transformation matrices internally, leveraging Nx tensors for efficient computation.
 
 ## Computing Link Position
 
@@ -29,7 +29,7 @@ Pass a map of joint positions to compute where a link is:
 
 ```elixir
 iex> robot = MyRobot.robot()
-iex> alias Kinetix.Robot.Kinematics
+iex> alias BB.Robot.Kinematics
 
 iex> positions = %{
 ...>   pan_joint: :math.pi() / 4,
@@ -51,8 +51,8 @@ Positions are in **radians** for revolute joints and **metres** for prismatic jo
 For a running robot, query the Runtime for current joint positions:
 
 ```elixir
-iex> {:ok, _} = Kinetix.Supervisor.start_link(MyRobot)
-iex> positions = Kinetix.Robot.Runtime.positions(MyRobot)
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
+iex> positions = BB.Robot.Runtime.positions(MyRobot)
 %{pan_joint: 0.0, tilt_joint: 0.0}
 
 iex> robot = MyRobot.robot()
@@ -77,7 +77,7 @@ iex> transform = Kinematics.forward_kinematics(robot, positions, :camera_link)
 Extract components:
 
 ```elixir
-iex> alias Kinetix.Robot.Transform
+iex> alias BB.Robot.Transform
 
 # Get position
 iex> {x, y, z} = Transform.get_translation(transform)
@@ -107,7 +107,7 @@ This is more efficient than calling `forward_kinematics/3` multiple times.
 Transforms are 4x4 homogeneous matrices. Here are common operations:
 
 ```elixir
-alias Kinetix.Robot.Transform
+alias BB.Robot.Transform
 
 # Identity transform (no translation, no rotation)
 identity = Transform.identity()
@@ -133,7 +133,7 @@ Here's a complete example that tracks the camera position as we sweep through jo
 
 ```elixir
 defmodule KinematicsDemo do
-  alias Kinetix.Robot.Kinematics
+  alias BB.Robot.Kinematics
 
   def sweep_pan(robot) do
     # Sweep pan joint from -90° to +90°
@@ -165,7 +165,7 @@ Pan 90°: x=0.03, y=0.0, z=0.08
 
 ## Unit Conventions
 
-Kinetix uses SI units throughout:
+BB uses SI units throughout:
 
 | Quantity | Unit |
 |----------|------|

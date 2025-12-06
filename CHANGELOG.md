@@ -11,7 +11,7 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
-## [v0.1.0](https://harton.dev/kinetix/kinetix/compare/v0.1.0...v0.1.0) (2025-11-27)
+## [v0.1.0](https://github.com/beam-bots/bb/compare/v0.1.0...v0.1.0) (2025-11-27)
 
 
 

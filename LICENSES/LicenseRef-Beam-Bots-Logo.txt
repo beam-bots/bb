@@ -1,0 +1,41 @@
+## Nominative use
+
+The "nominative use" (or "nominative fair use") is a legal doctrine that authorizes everyone (even commercial companies) to use or refer to the trademark of another if:
+
+* The product or service in question must be one not readily identifiable without use of the trademark.
+* Only so much of the mark or marks may be used as is reasonably necessary to identify the product or service.
+* The organisation using the mark must do nothing that would, in conjunction with the mark, suggest sponsorship or endorsement by the trademark holder.
+
+Our trademarks must be used to refer to the Beam Bots project.
+
+## Examples of permitted use
+
+All examples listed next must strictly adhere to the terms outlined in the previous sections:
+
+* Usage of the Beam Bots logo to say a technology is "powered by Beam Bots" or "built with Beam Bots" under nominative use. Linking back to the Beam Bots repository, if possible, is appreciated.
+* Usage of the Beam Bots logo to display it as a supported technology in a service, platform, or hardware device. For instance, you may say "we support Beam Bots" and use the Beam Bots logo, but you may not refer to yourself as "the Beam Bots platform" nor imply any form of endorsement or association with Beam Bots.
+* Usage of the Beam Bots logo in non-commercial community meetups, in presentations, and in courses when referring to the framework and its ecosystem under nominative use.
+* Usage of the Beam Bots logo in non-commercial swag (stickers, t-shirts, mugs, etc) to promote the Beam Bots project. The Beam Bots marks must be the only marks featured in the product. You need permission to make swag that include Beam Bots and other third party marks in them.
+* Inclusion of the Beam Bots logo in non-commercial icon sets. Use of the Beam Bots icons must still adhere to Beam Bots's trademark policies.
+* Usage of the "Beam Bots" word in book titles, meetups, conferences, and podcasts. You must not use the word to imply uniqueness or endorsement from the Beam Bots Project Authors. "The Beam Bots book" and "The Beam Bots podcast" are not permitted.
+* Usage of the "Beam Bots" word in the names of freely distributed software and hardware products is allowed when referring to use with or suitability for the Beam Bots project. If the product includes the Beam Bots project itself, then you must also respect its license.
+
+## Examples of not permitted use
+
+Here is a non-exhaustive list of non permitted uses of the marks:
+
+* Usage of the Beam Bots logo in book covers, conferences, and podcasts.
+* Usage of the Beam Bots logo as the mark of third party projects, even in combination with other marks.
+* Naming any company or product after Beam Bots, such as "The Beam Bots Hosting", "The Beam Bots Consultants", etc.
+
+## Examples that require permission
+
+Here are some examples that may be granted permission upon request:
+
+* Selling merchandise (stickers, t-shirts, mugs, etc).
+
+You can request permission by opening an issue at https://github.com/beam-bots/bb.
+
+## Important note
+
+Nothing in this page shall be interpreted to allow any third party to claim any association with the Beam Bots project and the Beam Bots Project Authors, or to imply any approval or support by the Beam Bots project and the Beam Bots Project Authors for any third party products, services, or events.
