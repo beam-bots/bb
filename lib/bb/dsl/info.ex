@@ -6,7 +6,7 @@ defmodule BB.Dsl.Info do
   @moduledoc false
   use Spark.InfoGenerator,
     extension: BB.Dsl,
-    sections: [:robot, :topology, :settings, :sensors, :controllers, :commands]
+    sections: [:robot, :topology, :settings, :sensors, :controllers, :commands, :parameters]
 
   alias Spark.Dsl.Extension
 
@@ -16,7 +16,8 @@ defmodule BB.Dsl.Info do
   @spec settings(module) :: %{
           registry_module: module,
           registry_options: keyword,
-          supervisor_module: module
+          supervisor_module: module,
+          parameter_store: module | {module, keyword} | nil
         }
   def settings(robot_module) do
     registry_options =
@@ -27,7 +28,8 @@ defmodule BB.Dsl.Info do
       registry_module: Extension.get_opt(robot_module, [:settings], :registry_module, Registry),
       registry_options: registry_options,
       supervisor_module:
-        Extension.get_opt(robot_module, [:settings], :supervisor_module, Supervisor)
+        Extension.get_opt(robot_module, [:settings], :supervisor_module, Supervisor),
+      parameter_store: Extension.get_opt(robot_module, [:settings], :parameter_store)
     }
   end
 end

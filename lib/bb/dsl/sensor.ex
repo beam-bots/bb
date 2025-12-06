@@ -8,7 +8,8 @@ defmodule BB.Dsl.Sensor do
   defstruct __identifier__: nil,
             __spark_metadata__: nil,
             name: nil,
-            child_spec: nil
+            child_spec: nil,
+            params: []
 
   alias Spark.Dsl.Entity
 
@@ -18,6 +19,7 @@ defmodule BB.Dsl.Sensor do
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
           name: atom,
-          child_spec: child_spec
+          child_spec: child_spec,
+          params: [BB.Dsl.Param.t()]
         }
 end

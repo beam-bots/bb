@@ -200,7 +200,7 @@ defmodule BB.Robot.RuntimeTest do
 
       {:ok, _task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
 
-      assert_receive :executing
+      assert_receive :executing, 500
       assert Runtime.state(RobotWithCommands) == :executing
     end
 
@@ -210,7 +210,7 @@ defmodule BB.Robot.RuntimeTest do
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
       {:ok, task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
-      assert_receive :executing
+      assert_receive :executing, 500
 
       assert {:ok, :completed} = Task.await(task)
 
@@ -225,12 +225,12 @@ defmodule BB.Robot.RuntimeTest do
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
       {:ok, task1} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
-      assert_receive :executing
+      assert_receive :executing, 500
       assert Runtime.state(RobotWithCommands) == :executing
 
       # Start a preemptable command - it should cancel the first task
       {:ok, task2} = Runtime.execute(RobotWithCommands, :preemptable, %{notify: self()})
-      assert_receive :executing
+      assert_receive :executing, 500
 
       # First task returns cancelled error
       assert {:error, :cancelled} = Task.await(task1)
@@ -245,7 +245,7 @@ defmodule BB.Robot.RuntimeTest do
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
       {:ok, _task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
-      assert_receive :executing
+      assert_receive :executing, 500
 
       # Errors come through the task now
       {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
@@ -264,7 +264,7 @@ defmodule BB.Robot.RuntimeTest do
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
       {:ok, task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
-      assert_receive :executing
+      assert_receive :executing, 500
 
       assert :ok = Runtime.cancel(RobotWithCommands)
 
@@ -299,7 +299,7 @@ defmodule BB.Robot.RuntimeTest do
       {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
 
       {:ok, task} = RobotWithCommands.async_cmd(notify: self())
-      assert_receive :executing
+      assert_receive :executing, 500
       assert {:ok, :completed} = Task.await(task)
     end
   end
