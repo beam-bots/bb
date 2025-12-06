@@ -91,14 +91,16 @@ mix bb.to_urdf MyRobot -o robot.urdf
 
 See the tutorials for a guided introduction:
 
-1. [Your First Robot](documentation/tutorials/01-first-robot.md) - defining robots with the DSL
-2. [Starting and Stopping](documentation/tutorials/02-starting-and-stopping.md) - supervision trees
-3. [Sensors and PubSub](documentation/tutorials/03-sensors-and-pubsub.md) - publishing and subscribing to messages
-4. [Forward Kinematics](documentation/tutorials/04-kinematics.md) - computing link positions
-5. [Commands and State Machine](documentation/tutorials/05-commands.md) - controlling the robot
-6. [Exporting to URDF](documentation/tutorials/06-urdf-export.md) - interoperability with ROS tools
+1. [Your First Robot](https://hexdocs.pm/bb/01-first-robot.html) - defining robots with the DSL
+2. [Starting and Stopping](https://hexdocs.pm/bb/02-starting-and-stopping.html) - supervision trees
+3. [Sensors and PubSub](https://hexdocs.pm/bb/03-sensors-and-pubsub.html) - publishing and subscribing to messages
+4. [Forward Kinematics](https://hexdocs.pm/bb/04-kinematics.html) - computing link positions
+5. [Commands and State Machine](https://hexdocs.pm/bb/05-commands.html) - controlling the robot
+6. [Exporting to URDF](https://hexdocs.pm/bb/06-urdf-export.html) - interoperability with ROS tools
+7. [Parameters](https://hexdocs.pm/bb/07-parameters.html) - runtime-adjustable configuration
+8. [Parameter Bridges](https://hexdocs.pm/bb/08-parameter-bridges.html) - bidirectional remote access
 
-The [DSL Reference](documentation/dsls/DSL-BB.md) documents all available options.
+The [DSL Reference](https://hexdocs.pm/bb/dsl-bb.html) documents all available options.
 
 ## Status
 
@@ -143,5 +145,5 @@ def deps do
 end
 ```
 
-Then create a robot module manually (see [Your First Robot](documentation/tutorials/01-first-robot.md)).
+Then create a robot module manually (see [Your First Robot](https://hexdocs.pm/bb/01-first-robot.html)).
 
