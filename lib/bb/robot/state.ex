@@ -240,6 +240,148 @@ defmodule BB.Robot.State do
     :ok
   end
 
+  # Parameter functions
+
+  @doc """
+  Get a parameter value by path.
+
+  Returns `{:ok, value}` if the parameter exists, `{:error, :not_found}` otherwise.
+  """
+  @spec get_parameter(t(), [atom()]) :: {:ok, term()} | {:error, :not_found}
+  def get_parameter(%__MODULE__{table: table}, path) when is_list(path) do
+    case :ets.lookup(table, {:param, path}) do
+      [{{:param, ^path}, value}] -> {:ok, value}
+      [] -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Set a parameter value by path.
+
+  This is a low-level function that does not validate or notify.
+  Use `BB.Parameter.set/3` for the validated, notifying version.
+  """
+  @spec set_parameter(t(), [atom()], term()) :: :ok
+  def set_parameter(%__MODULE__{table: table}, path, value) when is_list(path) do
+    :ets.insert(table, {{:param, path}, value})
+    :ok
+  end
+
+  @doc """
+  Set multiple parameters atomically.
+
+  This is a low-level function that does not validate or notify.
+  """
+  @spec set_parameters(t(), [{[atom()], term()}]) :: :ok
+  def set_parameters(%__MODULE__{table: table}, params) when is_list(params) do
+    entries = Enum.map(params, fn {path, value} -> {{:param, path}, value} end)
+    :ets.insert(table, entries)
+    :ok
+  end
+
+  @doc """
+  List all parameters, optionally filtered by path prefix.
+
+  Returns a list of `{path, metadata}` tuples where metadata includes
+  the current value and schema information if registered.
+  """
+  @spec list_parameters(t(), [atom()]) :: [{[atom()], map()}]
+  def list_parameters(%__MODULE__{table: table}, prefix \\ []) when is_list(prefix) do
+    # Get all parameter entries
+    params =
+      :ets.match_object(table, {{:param, :_}, :_})
+      |> Enum.filter(fn {{:param, path}, _value} ->
+        List.starts_with?(path, prefix)
+      end)
+
+    # Get schemas to enrich metadata
+    schemas = get_all_schemas(table)
+
+    Enum.map(params, fn {{:param, path}, value} ->
+      schema_info = find_schema_for_path(schemas, path)
+      {path, build_parameter_metadata(value, schema_info, path)}
+    end)
+  end
+
+  @doc """
+  Register a parameter schema for a component path.
+
+  The schema is stored and used for validation and metadata.
+  """
+  @spec register_parameter_schema(t(), [atom()], Spark.Options.t()) :: :ok
+  def register_parameter_schema(%__MODULE__{table: table}, path, schema)
+      when is_list(path) do
+    :ets.insert(table, {{:param_schema, path}, schema})
+    :ok
+  end
+
+  @doc """
+  Get the registered schema for a path prefix.
+
+  Returns `{:ok, schema}` if found, `{:error, :not_found}` otherwise.
+  """
+  @spec get_parameter_schema(t(), [atom()]) :: {:ok, Spark.Options.t()} | {:error, :not_found}
+  def get_parameter_schema(%__MODULE__{table: table}, path) when is_list(path) do
+    case :ets.lookup(table, {:param_schema, path}) do
+      [{{:param_schema, ^path}, schema}] -> {:ok, schema}
+      [] -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Find the schema that applies to a given parameter path.
+
+  Searches for the longest matching schema prefix.
+  """
+  @spec find_schema_for_parameter(t(), [atom()]) ::
+          {:ok, [atom()], Spark.Options.t()} | {:error, :not_found}
+  def find_schema_for_parameter(%__MODULE__{table: table}, path) when is_list(path) do
+    schemas = get_all_schemas(table)
+
+    case find_schema_for_path(schemas, path) do
+      nil -> {:error, :not_found}
+      {schema_path, schema} -> {:ok, schema_path, schema}
+    end
+  end
+
+  defp get_all_schemas(table) do
+    :ets.match_object(table, {{:param_schema, :_}, :_})
+    |> Enum.map(fn {{:param_schema, path}, schema} -> {path, schema} end)
+  end
+
+  defp find_schema_for_path(schemas, path) do
+    # Find the schema where path is exactly one level deeper than schema_path
+    # e.g., path [:motion, :max_speed] matches schema_path [:motion]
+    # but path [:totally_fake, :param] does NOT match schema_path []
+    schemas
+    |> Enum.filter(fn {schema_path, _schema} ->
+      List.starts_with?(path, schema_path) and length(path) == length(schema_path) + 1
+    end)
+    |> Enum.max_by(fn {schema_path, _schema} -> length(schema_path) end, fn -> nil end)
+  end
+
+  defp build_parameter_metadata(value, nil, _path) do
+    # No schema - this shouldn't happen for registered parameters
+    %{value: value}
+  end
+
+  defp build_parameter_metadata(value, {schema_path, %Spark.Options{schema: schema_opts}}, path) do
+    # The parameter name is the part of the path after the schema path
+    param_name =
+      path
+      |> Enum.drop(length(schema_path))
+      |> List.first()
+
+    param_opts = Keyword.get(schema_opts, param_name, [])
+
+    %{
+      value: value,
+      type: Keyword.get(param_opts, :type),
+      doc: Keyword.get(param_opts, :doc),
+      default: Keyword.get(param_opts, :default)
+    }
+  end
+
   defp initialise_joints(%__MODULE__{table: table, robot: robot}) do
     joint_entries =
       robot.joints

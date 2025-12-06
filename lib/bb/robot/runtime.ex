@@ -43,6 +43,7 @@ defmodule BB.Robot.Runtime do
   alias BB.Dsl.Info
   alias BB.{Message, PubSub}
   alias BB.Message.Sensor.JointState
+  alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Robot.State, as: RobotState
   alias BB.StateMachine.Transition
 
@@ -81,7 +82,9 @@ defmodule BB.Robot.Runtime do
     :current_task,
     :current_task_ref,
     :current_command_name,
-    :current_execution_id
+    :current_execution_id,
+    :parameter_store,
+    :parameter_store_state
   ]
 
   @type robot_state :: :disarmed | :idle | :executing
@@ -94,7 +97,9 @@ defmodule BB.Robot.Runtime do
           current_task: Task.t() | nil,
           current_task_ref: reference() | nil,
           current_command_name: atom() | nil,
-          current_execution_id: reference() | nil
+          current_execution_id: reference() | nil,
+          parameter_store: module() | nil,
+          parameter_store_state: term() | nil
         }
 
   @doc """
@@ -293,6 +298,9 @@ defmodule BB.Robot.Runtime do
     # Subscribe to all sensor messages to receive JointState updates
     PubSub.subscribe(robot_module, [:sensor])
 
+    # Initialize parameter store if configured
+    {store_module, store_state} = init_parameter_store(robot_module)
+
     state = %__MODULE__{
       robot_module: robot_module,
       robot: robot,
@@ -302,8 +310,16 @@ defmodule BB.Robot.Runtime do
       current_task: nil,
       current_task_ref: nil,
       current_command_name: nil,
-      current_execution_id: nil
+      current_execution_id: nil,
+      parameter_store: store_module,
+      parameter_store_state: store_state
     }
+
+    # Register DSL-defined parameters (applies defaults)
+    register_dsl_parameters(state)
+
+    # Load and apply persisted values (override defaults)
+    state = load_persisted_parameters(state)
 
     {:ok, state}
   end
@@ -354,6 +370,45 @@ defmodule BB.Robot.Runtime do
     end
 
     {:reply, :ok, state}
+  end
+
+  # Parameter handling
+
+  def handle_call({:set_parameter, path, value}, _from, state) do
+    case validate_and_set_parameter(state, path, value) do
+      {:ok, old_value} ->
+        save_to_store(state, path, value)
+        publish_parameter_change(state.robot_module, path, old_value, value, :local)
+        {:reply, :ok, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  def handle_call({:set_parameters, params}, _from, state) do
+    case validate_all_parameters(state, params) do
+      :ok ->
+        # All valid - apply changes, save, and notify
+        Enum.each(params, fn {path, value} ->
+          old_value = get_current_param_value(state, path)
+          RobotState.set_parameter(state.robot_state, path, value)
+          save_to_store(state, path, value)
+          publish_parameter_change(state.robot_module, path, old_value, value, :local)
+        end)
+
+        {:reply, :ok, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  def handle_call({:register_parameters, path, component_module}, _from, state) do
+    case register_component_parameters(state, path, component_module) do
+      :ok -> {:reply, :ok, state}
+      {:error, _} = error -> {:reply, error, state}
+    end
   end
 
   @impl GenServer
@@ -420,6 +475,9 @@ defmodule BB.Robot.Runtime do
 
   @impl GenServer
   def terminate(_reason, state) do
+    # Close parameter store
+    close_parameter_store(state)
+
     if state.robot_state do
       RobotState.delete(state.robot_state)
     end
@@ -596,5 +654,221 @@ defmodule BB.Robot.Runtime do
     |> Enum.each(fn {name, velocity} ->
       RobotState.set_joint_velocity(robot_state, name, velocity)
     end)
+  end
+
+  # Parameter helpers
+
+  defp validate_and_set_parameter(state, path, value) do
+    old_value = get_current_param_value(state, path)
+
+    case validate_parameter(state, path, value) do
+      :ok ->
+        RobotState.set_parameter(state.robot_state, path, value)
+        {:ok, old_value}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp validate_all_parameters(state, params) do
+    errors =
+      params
+      |> Enum.map(fn {path, value} ->
+        case validate_parameter(state, path, value) do
+          :ok -> nil
+          {:error, reason} -> {path, reason}
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    case errors do
+      [] -> :ok
+      errors -> {:error, errors}
+    end
+  end
+
+  defp validate_parameter(state, path, value) do
+    case RobotState.find_schema_for_parameter(state.robot_state, path) do
+      {:ok, schema_path, schema} ->
+        # Extract the parameter name from the path
+        param_name =
+          path
+          |> Enum.drop(length(schema_path))
+          |> List.first()
+
+        validate_against_schema(schema, param_name, value)
+
+      {:error, :not_found} ->
+        {:error, {:unregistered_parameter, path}}
+    end
+  end
+
+  defp validate_against_schema(%Spark.Options{schema: schema_opts}, param_name, value) do
+    case Keyword.fetch(schema_opts, param_name) do
+      {:ok, param_opts} ->
+        # Build a mini-schema for just this parameter
+        mini_schema = Spark.Options.new!([{param_name, param_opts}])
+
+        case Spark.Options.validate([{param_name, value}], mini_schema) do
+          {:ok, _} -> :ok
+          {:error, error} -> {:error, error}
+        end
+
+      :error ->
+        {:error, {:unknown_parameter, param_name}}
+    end
+  end
+
+  defp get_current_param_value(state, path) do
+    case RobotState.get_parameter(state.robot_state, path) do
+      {:ok, value} -> value
+      {:error, :not_found} -> nil
+    end
+  end
+
+  defp register_component_parameters(state, path, component_module) do
+    if BB.Parameter.implements?(component_module) do
+      schema = component_module.param_schema()
+      RobotState.register_parameter_schema(state.robot_state, path, schema)
+
+      # Initialise parameters with defaults from schema
+      initialise_defaults_from_schema(state, path, schema)
+
+      :ok
+    else
+      {:error, {:not_a_parameter_component, component_module}}
+    end
+  end
+
+  defp initialise_defaults_from_schema(state, base_path, %Spark.Options{schema: schema_opts}) do
+    Enum.each(schema_opts, fn {param_name, param_opts} ->
+      case Keyword.fetch(param_opts, :default) do
+        {:ok, default} ->
+          full_path = base_path ++ [param_name]
+          RobotState.set_parameter(state.robot_state, full_path, default)
+          publish_parameter_change(state.robot_module, full_path, nil, default, :init)
+
+        :error ->
+          :ok
+      end
+    end)
+  end
+
+  defp publish_parameter_change(robot_module, path, old_value, new_value, source) do
+    message =
+      Message.new!(ParameterChanged, :parameter,
+        path: path,
+        old_value: old_value,
+        new_value: new_value,
+        source: source
+      )
+
+    PubSub.publish(robot_module, [:param | path], message)
+  end
+
+  # Parameter store helpers
+
+  defp init_parameter_store(robot_module) do
+    case Info.settings(robot_module).parameter_store do
+      nil ->
+        {nil, nil}
+
+      store_module when is_atom(store_module) ->
+        init_store(store_module, robot_module, [])
+
+      {store_module, opts} when is_atom(store_module) and is_list(opts) ->
+        init_store(store_module, robot_module, opts)
+    end
+  end
+
+  defp init_store(store_module, robot_module, opts) do
+    case store_module.init(robot_module, opts) do
+      {:ok, store_state} ->
+        {store_module, store_state}
+
+      {:error, reason} ->
+        require Logger
+
+        Logger.warning(
+          "Failed to initialize parameter store #{inspect(store_module)}: #{inspect(reason)}"
+        )
+
+        {nil, nil}
+    end
+  end
+
+  defp load_persisted_parameters(%{parameter_store: nil} = state), do: state
+
+  defp load_persisted_parameters(
+         %{parameter_store: store, parameter_store_state: store_state} = state
+       ) do
+    case store.load(store_state) do
+      {:ok, parameters} ->
+        Enum.each(parameters, &apply_persisted_value(state, &1))
+        state
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("Failed to load persisted parameters: #{inspect(reason)}")
+        state
+    end
+  end
+
+  defp apply_persisted_value(state, {path, value}) do
+    case RobotState.get_parameter(state.robot_state, path) do
+      {:ok, _current} ->
+        RobotState.set_parameter(state.robot_state, path, value)
+        publish_parameter_change(state.robot_module, path, nil, value, :persisted)
+
+      {:error, :not_found} ->
+        :ok
+    end
+  end
+
+  defp save_to_store(%{parameter_store: nil}, _path, _value), do: :ok
+
+  defp save_to_store(%{parameter_store: store, parameter_store_state: store_state}, path, value) do
+    case store.save(store_state, path, value) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("Failed to persist parameter #{inspect(path)}: #{inspect(reason)}")
+        :ok
+    end
+  end
+
+  defp close_parameter_store(%{parameter_store: nil}), do: :ok
+
+  defp close_parameter_store(%{parameter_store: store, parameter_store_state: store_state}) do
+    store.close(store_state)
+  end
+
+  defp register_dsl_parameters(state) do
+    robot_module = state.robot_module
+
+    if function_exported?(robot_module, :__bb_parameter_schema__, 0) do
+      schema_list = robot_module.__bb_parameter_schema__()
+      defaults = robot_module.__bb_default_parameters__()
+
+      schema_list
+      |> Enum.group_by(fn {path, _opts} -> Enum.take(path, length(path) - 1) end)
+      |> Enum.each(&register_schema_group(state.robot_state, &1))
+
+      Enum.each(defaults, &apply_default_value(state, &1))
+    end
+  end
+
+  defp register_schema_group(robot_state, {prefix_path, params}) do
+    schema_opts = Enum.map(params, fn {path, opts} -> {List.last(path), opts} end)
+    schema = Spark.Options.new!(schema_opts)
+    RobotState.register_parameter_schema(robot_state, prefix_path, schema)
+  end
+
+  defp apply_default_value(state, {path, value}) do
+    RobotState.set_parameter(state.robot_state, path, value)
+    publish_parameter_change(state.robot_module, path, nil, value, :init)
   end
 end

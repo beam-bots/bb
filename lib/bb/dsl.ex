@@ -11,6 +11,23 @@ defmodule BB.Dsl do
   import BB.Unit
   import BB.Unit.Option
 
+  @simple_param_types [:float, :integer, :boolean, :string, :atom]
+
+  @doc false
+  def validate_param_type(type) when type in @simple_param_types, do: {:ok, type}
+
+  def validate_param_type({:unit, unit_type}) when is_atom(unit_type) do
+    case BB.Cldr.Unit.validate_unit(unit_type) do
+      {:ok, _, _} -> {:ok, {:unit, unit_type}}
+      {:error, _} -> {:error, "Invalid unit type: #{inspect(unit_type)}"}
+    end
+  end
+
+  def validate_param_type(other) do
+    {:error,
+     "Expected one of #{inspect(@simple_param_types)} or {:unit, unit_type}, got: #{inspect(other)}"}
+  end
+
   @origin %Entity{
     name: :origin,
     target: BB.Dsl.Origin,
@@ -153,12 +170,57 @@ defmodule BB.Dsl do
     ]
   }
 
+  @param %Entity{
+    name: :param,
+    describe: "A runtime-adjustable parameter.",
+    target: BB.Dsl.Param,
+    identifier: :name,
+    args: [:name],
+    imports: [BB.Unit],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the parameter"
+      ],
+      type: [
+        type: {:custom, __MODULE__, :validate_param_type, []},
+        required: true,
+        doc:
+          "The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type})"
+      ],
+      default: [
+        type: :any,
+        required: false,
+        doc: "Default value for the parameter"
+      ],
+      min: [
+        type: :number,
+        required: false,
+        doc: "Minimum value for numeric parameters"
+      ],
+      max: [
+        type: :number,
+        required: false,
+        doc: "Maximum value for numeric parameters"
+      ],
+      doc: [
+        type: :string,
+        required: false,
+        doc: "Documentation for the parameter"
+      ]
+    ]
+  }
+
   @sensor %Entity{
     name: :sensor,
     describe: "A sensor attached to the robot, a link, or a joint.",
     target: BB.Dsl.Sensor,
     identifier: :name,
     args: [:name, :child_spec],
+    entities: [
+      params: [@param]
+    ],
     schema: [
       name: [
         type: :atom,
@@ -180,6 +242,9 @@ defmodule BB.Dsl do
     target: BB.Dsl.Actuator,
     identifier: :name,
     args: [:name, :child_spec],
+    entities: [
+      params: [@param]
+    ],
     schema: [
       name: [
         type: :atom,
@@ -568,6 +633,16 @@ defmodule BB.Dsl do
         doc: "The supervisor module to use",
         required: false,
         default: Supervisor
+      ],
+      parameter_store: [
+        type:
+          {:or,
+           [
+             {:behaviour, BB.Parameter.Store},
+             {:tuple, [{:behaviour, BB.Parameter.Store}, :keyword_list]}
+           ]},
+        doc: "Optional parameter persistence backend. Use a module or `{Module, opts}` tuple.",
+        required: false
       ]
     ]
   }
@@ -584,6 +659,9 @@ defmodule BB.Dsl do
     target: BB.Dsl.Controller,
     identifier: :name,
     args: [:name, :child_spec],
+    entities: [
+      params: [@param]
+    ],
     schema: [
       name: [
         type: :atom,
@@ -686,6 +764,57 @@ defmodule BB.Dsl do
     entities: [@command]
   }
 
+  @param_group %Entity{
+    name: :group,
+    describe: "A group of runtime-adjustable parameters.",
+    target: BB.Dsl.ParamGroup,
+    identifier: :name,
+    args: [:name],
+    recursive_as: :groups,
+    entities: [
+      params: [@param],
+      groups: []
+    ],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the parameter group"
+      ],
+      doc: [
+        type: :string,
+        required: false,
+        doc: "Documentation for the parameter group"
+      ]
+    ]
+  }
+
+  @parameters %Section{
+    name: :parameters,
+    describe: """
+    Runtime-adjustable parameters for the robot.
+
+    Parameters provide a way to configure robot behaviour at runtime without
+    recompilation. They support validation, change notifications via PubSub,
+    and optional persistence.
+
+    ## Example
+
+        parameters do
+          group :motion do
+            param :max_linear_speed, type: :float, default: 1.0,
+              min: 0.0, max: 10.0, doc: "Max velocity in m/s"
+            param :max_angular_speed, type: :float, default: 0.5
+          end
+
+          group :safety do
+            param :collision_distance, type: :float, default: 0.3
+          end
+        end
+    """,
+    entities: [@param_group, @param]
+  }
+
   @topology %Section{
     name: :topology,
     describe: "Robot topology",
@@ -693,13 +822,14 @@ defmodule BB.Dsl do
   }
 
   use Spark.Dsl.Extension,
-    sections: [@topology, @settings, @sensors, @controllers, @commands],
+    sections: [@topology, @settings, @sensors, @controllers, @commands, @parameters],
     transformers: [
       __MODULE__.DefaultNameTransformer,
       __MODULE__.TopologyTransformer,
       __MODULE__.SupervisorTransformer,
       __MODULE__.UniquenessTransformer,
       __MODULE__.RobotTransformer,
-      __MODULE__.CommandTransformer
+      __MODULE__.CommandTransformer,
+      __MODULE__.ParameterTransformer
     ]
 end
