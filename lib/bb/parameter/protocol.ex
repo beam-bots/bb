@@ -12,7 +12,7 @@ defmodule BB.Parameter.Protocol do
   ## Two Directions
 
   **Outbound (local → remote):** Expose BB's parameters to remote clients
-  - Subscribe to `[:param]` via `BB.PubSub` in `init/2`
+  - Subscribe to `[:param]` via `BB.PubSub` in GenServer `init/1`
   - Implement `handle_change/3` to push local changes to remote clients
   - Remote clients query local params via bridge (calls `BB.Parameter.list/get/set`)
 
@@ -65,17 +65,10 @@ defmodule BB.Parameter.Protocol do
       end
     end
 
-    # GenServer init extracts robot from :bb metadata
+    # GenServer init - extract robot from :bb metadata, subscribe to param changes
     @impl GenServer
     def init(opts) do
       %{robot: robot} = Keyword.fetch!(opts, :bb)
-      {:ok, state} = __MODULE__.init(robot, Keyword.delete(opts, :bb))
-      {:ok, state}
-    end
-
-    # Protocol init
-    @impl BB.Parameter.Protocol
-    def init(robot, opts) do
       BB.PubSub.subscribe(robot, [:param])
       conn = connect_to_mavlink(opts[:conn])
       {:ok, %{robot: robot, conn: conn, subscriptions: MapSet.new()}}
@@ -153,14 +146,6 @@ defmodule BB.Parameter.Protocol do
   # ==========================================================================
   # Outbound: local → remote
   # ==========================================================================
-
-  @doc """
-  Initialise transport state for a robot.
-
-  Called when the bridge process starts. Should set up connections and
-  subscribe to `[:param]` via `BB.PubSub` for local change notifications.
-  """
-  @callback init(robot, opts :: keyword()) :: {:ok, state} | {:error, term()}
 
   @doc """
   Handle a local parameter change.

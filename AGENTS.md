@@ -22,6 +22,8 @@ See `documentation/tutorials/` for guided tutorials:
 4. `04-kinematics.md` - computing link positions with forward kinematics
 5. `05-commands.md` - the command system and robot state machine
 6. `06-urdf-export.md` - exporting to URDF for ROS tools
+7. `07-parameters.md` - runtime-adjustable configuration
+8. `08-parameter-bridges.md` - bidirectional parameter access with remote systems
 
 The DSL reference is in `documentation/dsls/DSL-BB.md`.
 
