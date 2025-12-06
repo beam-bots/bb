@@ -55,16 +55,9 @@ defmodule BB.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: [
-        "README.md",
-        "documentation/tutorials/01-first-robot.md",
-        "documentation/tutorials/02-starting-and-stopping.md",
-        "documentation/tutorials/03-sensors-and-pubsub.md",
-        "documentation/tutorials/04-kinematics.md",
-        "documentation/tutorials/05-commands.md",
-        "documentation/tutorials/06-urdf-export.md",
-        "documentation/dsls/DSL-BB.md"
-      ],
+      extras:
+        ["README.md", "CHANGELOG.md"]
+        |> Enum.concat(Path.wildcard("documentation/**/*.{md,livemd,cheatmd}")),
       groups_for_extras: [
         Tutorials: ~r/tutorials\//,
         "DSL Reference": ~r/dsls\//

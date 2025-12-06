@@ -496,4 +496,4 @@ You've now learned the complete parameter system. You can:
 - Subscribe to changes via PubSub
 - Connect to remote systems via bridges
 
-For reference documentation on all parameter options, see the [DSL Reference](../dsls/DSL-BB.md).
+For reference documentation on all parameter options, see the [DSL Reference](DSL-BB.md).
