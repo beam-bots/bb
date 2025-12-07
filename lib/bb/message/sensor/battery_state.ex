@@ -48,8 +48,6 @@ defmodule BB.Message.Sensor.BatteryState do
       )
   """
 
-  @behaviour BB.Message
-
   defstruct [
     :voltage,
     :current,
@@ -60,6 +58,30 @@ defmodule BB.Message.Sensor.BatteryState do
     :power_supply_health,
     :present
   ]
+
+  use BB.Message,
+    schema: [
+      voltage: [type: :float, required: true, doc: "Voltage in Volts"],
+      current: [type: :float, default: 0.0, doc: "Current in Amperes"],
+      charge: [type: :float, default: 0.0, doc: "Charge in Ampere-hours"],
+      capacity: [type: :float, default: 0.0, doc: "Capacity in Ampere-hours"],
+      percentage: [
+        type: {:or, [:float, {:literal, nil}]},
+        default: nil,
+        doc: "Charge percentage (0.0 to 1.0)"
+      ],
+      power_supply_status: [
+        type: {:in, [:unknown, :charging, :discharging, :not_charging, :full]},
+        default: :unknown,
+        doc: "Power supply status"
+      ],
+      power_supply_health: [
+        type: {:in, [:unknown, :good, :overheat, :dead, :overvoltage, :cold]},
+        default: :unknown,
+        doc: "Power supply health"
+      ],
+      present: [type: :boolean, default: true, doc: "Whether battery is present"]
+    ]
 
   @type power_supply_status :: :unknown | :charging | :discharging | :not_charging | :full
   @type power_supply_health :: :unknown | :good | :overheat | :dead | :overvoltage | :cold
@@ -74,52 +96,4 @@ defmodule BB.Message.Sensor.BatteryState do
           power_supply_health: power_supply_health(),
           present: boolean()
         }
-
-  @schema Spark.Options.new!(
-            voltage: [type: :float, required: true, doc: "Voltage in Volts"],
-            current: [type: :float, default: 0.0, doc: "Current in Amperes"],
-            charge: [type: :float, default: 0.0, doc: "Charge in Ampere-hours"],
-            capacity: [type: :float, default: 0.0, doc: "Capacity in Ampere-hours"],
-            percentage: [
-              type: {:or, [:float, {:literal, nil}]},
-              default: nil,
-              doc: "Charge percentage (0.0 to 1.0)"
-            ],
-            power_supply_status: [
-              type: {:in, [:unknown, :charging, :discharging, :not_charging, :full]},
-              default: :unknown,
-              doc: "Power supply status"
-            ],
-            power_supply_health: [
-              type: {:in, [:unknown, :good, :overheat, :dead, :overvoltage, :cold]},
-              default: :unknown,
-              doc: "Power supply health"
-            ],
-            present: [type: :boolean, default: true, doc: "Whether battery is present"]
-          )
-
-  @impl BB.Message
-  def schema, do: @schema
-
-  defimpl BB.Message.Payload do
-    def schema(_), do: @for.schema()
-  end
-
-  @doc """
-  Create a new BatteryState message.
-
-  Returns `{:ok, %BB.Message{}}` with the battery state as payload.
-
-  ## Examples
-
-      {:ok, msg} = BatteryState.new(:battery,
-        voltage: 12.6,
-        power_supply_status: :discharging,
-        present: true
-      )
-  """
-  @spec new(atom(), keyword()) :: {:ok, BB.Message.t()} | {:error, term()}
-  def new(frame_id, attrs) when is_atom(frame_id) and is_list(attrs) do
-    BB.Message.new(__MODULE__, frame_id, attrs)
-  end
 end

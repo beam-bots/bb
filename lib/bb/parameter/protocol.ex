@@ -53,16 +53,10 @@ defmodule BB.Parameter.Protocol do
 
     # Define a payload type for remote param change messages
     defmodule ParamValue do
-      @behaviour BB.Message
       defstruct [:value]
 
-      @schema Spark.Options.new!(value: [type: :any, required: true])
-      @impl BB.Message
-      def schema, do: @schema
-
-      defimpl BB.Message.Payload do
-        def schema(_), do: @for.schema()
-      end
+      use BB.Message,
+        schema: [value: [type: :any, required: true]]
     end
 
     # GenServer init - extract robot from :bb metadata, subscribe to param changes

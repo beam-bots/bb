@@ -19,28 +19,20 @@ defmodule BB.Message.Geometry.Twist do
       {:ok, msg} = Twist.new(:base_link, Vec3.new(1.0, 0.0, 0.0), Vec3.zero())
   """
 
-  @behaviour BB.Message
-
   import BB.Message.Option
 
   defstruct [:linear, :angular]
+
+  use BB.Message,
+    schema: [
+      linear: [type: vec3_type(), required: true, doc: "Linear velocity in m/s"],
+      angular: [type: vec3_type(), required: true, doc: "Angular velocity in rad/s"]
+    ]
 
   @type t :: %__MODULE__{
           linear: BB.Message.Vec3.t(),
           angular: BB.Message.Vec3.t()
         }
-
-  @schema Spark.Options.new!(
-            linear: [type: vec3_type(), required: true, doc: "Linear velocity in m/s"],
-            angular: [type: vec3_type(), required: true, doc: "Angular velocity in rad/s"]
-          )
-
-  @impl BB.Message
-  def schema, do: @schema
-
-  defimpl BB.Message.Payload do
-    def schema(_), do: @for.schema()
-  end
 
   @doc """
   Create a new Twist message.
@@ -56,9 +48,6 @@ defmodule BB.Message.Geometry.Twist do
   @spec new(atom(), BB.Message.Vec3.t(), BB.Message.Vec3.t()) ::
           {:ok, BB.Message.t()} | {:error, term()}
   def new(frame_id, {:vec3, _, _, _} = linear, {:vec3, _, _, _} = angular) do
-    BB.Message.new(__MODULE__, frame_id,
-      linear: linear,
-      angular: angular
-    )
+    new(frame_id, linear: linear, angular: angular)
   end
 end

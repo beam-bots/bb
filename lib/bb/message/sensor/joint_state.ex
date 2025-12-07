@@ -28,9 +28,15 @@ defmodule BB.Message.Sensor.JointState do
       )
   """
 
-  @behaviour BB.Message
-
   defstruct [:names, :positions, :velocities, :efforts]
+
+  use BB.Message,
+    schema: [
+      names: [type: {:list, :atom}, required: true, doc: "Joint names"],
+      positions: [type: {:list, :float}, default: [], doc: "Joint positions in radians or metres"],
+      velocities: [type: {:list, :float}, default: [], doc: "Joint velocities in rad/s or m/s"],
+      efforts: [type: {:list, :float}, default: [], doc: "Joint efforts in Nm or N"]
+    ]
 
   @type t :: %__MODULE__{
           names: [atom()],
@@ -38,51 +44,4 @@ defmodule BB.Message.Sensor.JointState do
           velocities: [float()],
           efforts: [float()]
         }
-
-  @schema Spark.Options.new!(
-            names: [
-              type: {:list, :atom},
-              required: true,
-              doc: "Joint names"
-            ],
-            positions: [
-              type: {:list, :float},
-              default: [],
-              doc: "Joint positions in radians or metres"
-            ],
-            velocities: [
-              type: {:list, :float},
-              default: [],
-              doc: "Joint velocities in rad/s or m/s"
-            ],
-            efforts: [
-              type: {:list, :float},
-              default: [],
-              doc: "Joint efforts in Nm or N"
-            ]
-          )
-
-  @impl BB.Message
-  def schema, do: @schema
-
-  defimpl BB.Message.Payload do
-    def schema(_), do: @for.schema()
-  end
-
-  @doc """
-  Create a new JointState message.
-
-  Returns `{:ok, %BB.Message{}}` with the joint state as payload.
-
-  ## Examples
-
-      {:ok, msg} = JointState.new(:arm,
-        names: [:joint1, :joint2],
-        positions: [0.0, 1.57]
-      )
-  """
-  @spec new(atom(), keyword()) :: {:ok, BB.Message.t()} | {:error, term()}
-  def new(frame_id, attrs) when is_atom(frame_id) and is_list(attrs) do
-    BB.Message.new(__MODULE__, frame_id, attrs)
-  end
 end

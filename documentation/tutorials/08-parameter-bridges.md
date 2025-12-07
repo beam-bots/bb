@@ -156,16 +156,10 @@ defmodule MyFlightControllerBridge do
 
   # Define a message type for remote param changes
   defmodule ParamValue do
-    @behaviour BB.Message
     defstruct [:value]
 
-    @schema Spark.Options.new!(value: [type: :any, required: true])
-    @impl BB.Message
-    def schema, do: @schema
-
-    defimpl BB.Message.Payload do
-      def schema(_), do: @for.schema()
-    end
+    use BB.Message,
+      schema: [value: [type: :any, required: true]]
   end
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
@@ -344,14 +338,10 @@ defmodule MockFCBridge do
   @behaviour BB.Parameter.Protocol
 
   defmodule ParamValue do
-    @behaviour BB.Message
     defstruct [:value]
-    @schema Spark.Options.new!(value: [type: :any, required: true])
-    @impl BB.Message
-    def schema, do: @schema
-    defimpl BB.Message.Payload do
-      def schema(_), do: @for.schema()
-    end
+
+    use BB.Message,
+      schema: [value: [type: :any, required: true]]
   end
 
   # Simulated FC parameters

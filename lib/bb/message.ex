@@ -9,40 +9,28 @@ defmodule BB.Message do
   Messages in BB are wrapped in a standard envelope containing timing,
   coordinate frame, and payload data.
 
-  ## Behaviour
+  ## Usage
 
-  Payload modules must implement the `BB.Message` behaviour:
-
-  - `schema/0` - Returns a compiled `Spark.Options` schema for validation
-
-  ## Protocol
-
-  Payload structs must also implement the `BB.Message.Payload` protocol
-  for runtime introspection.
-
-  ## Example
+  Use the `use BB.Message` macro to define a payload type:
 
       defmodule MyPayload do
-        @behaviour BB.Message
-
         defstruct [:value]
 
-        @schema Spark.Options.new!([
-          value: [type: :float, required: true]
-        ])
-
-        @impl BB.Message
-        def schema, do: @schema
-
-        defimpl BB.Message.Payload do
-          def schema(_), do: @for.schema()
-        end
+        use BB.Message,
+          schema: [
+            value: [type: :float, required: true]
+          ]
       end
 
-      {:ok, msg} = BB.Message.new(MyPayload, :base_link, value: 1.5)
-  """
+      {:ok, msg} = MyPayload.new(:base_link, value: 1.5)
 
-  alias BB.Message.Payload
+  The macro will:
+  - Validate struct fields match schema keys at compile time
+  - Implement the `schema/0` callback
+  - Generate a `new/2` helper function
+
+  Note: `defstruct` must be defined before `use BB.Message`.
+  """
 
   defstruct [:timestamp, :frame_id, :payload]
 
@@ -54,6 +42,25 @@ defmodule BB.Message do
 
   @doc "Returns a compiled Spark.Options schema for this payload type"
   @callback schema() :: Spark.Options.t()
+
+  @doc false
+  defmacro __using__(opts) do
+    schema_opts = opts[:schema] || raise ArgumentError, "schema option is required"
+
+    quote do
+      @behaviour BB.Message
+
+      @__bb_message_schema Spark.Options.new!(unquote(schema_opts))
+
+      @impl BB.Message
+      def schema, do: @__bb_message_schema
+
+      @spec new(atom(), keyword()) :: {:ok, BB.Message.t()} | {:error, term()}
+      def new(frame_id, attrs) when is_atom(frame_id) and is_list(attrs) do
+        BB.Message.new(__MODULE__, frame_id, attrs)
+      end
+    end
+  end
 
   @doc """
   Create a new message with validated payload.
@@ -109,12 +116,10 @@ defmodule BB.Message do
   @doc """
   Get the payload schema from a message.
 
-  Delegates to the `BB.Message.Payload` protocol.
-
   ## Examples
 
       BB.Message.schema(msg)  #=> %Spark.Options{...}
   """
   @spec schema(t()) :: Spark.Options.t()
-  def schema(%__MODULE__{payload: payload}), do: Payload.schema(payload)
+  def schema(%__MODULE__{payload: payload}), do: payload.__struct__.schema()
 end

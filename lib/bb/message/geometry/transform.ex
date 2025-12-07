@@ -21,28 +21,20 @@ defmodule BB.Message.Geometry.Transform do
       {:ok, msg} = Transform.new(:base_link, Vec3.new(0.0, 0.0, 1.0), Quaternion.identity())
   """
 
-  @behaviour BB.Message
-
   import BB.Message.Option
 
   defstruct [:translation, :rotation]
+
+  use BB.Message,
+    schema: [
+      translation: [type: vec3_type(), required: true, doc: "Translation in metres"],
+      rotation: [type: quaternion_type(), required: true, doc: "Rotation as quaternion"]
+    ]
 
   @type t :: %__MODULE__{
           translation: BB.Message.Vec3.t(),
           rotation: BB.Message.Quaternion.t()
         }
-
-  @schema Spark.Options.new!(
-            translation: [type: vec3_type(), required: true, doc: "Translation in metres"],
-            rotation: [type: quaternion_type(), required: true, doc: "Rotation as quaternion"]
-          )
-
-  @impl BB.Message
-  def schema, do: @schema
-
-  defimpl BB.Message.Payload do
-    def schema(_), do: @for.schema()
-  end
 
   @doc """
   Create a new Transform message.
@@ -58,9 +50,6 @@ defmodule BB.Message.Geometry.Transform do
   @spec new(atom(), BB.Message.Vec3.t(), BB.Message.Quaternion.t()) ::
           {:ok, BB.Message.t()} | {:error, term()}
   def new(frame_id, {:vec3, _, _, _} = translation, {:quaternion, _, _, _, _} = rotation) do
-    BB.Message.new(__MODULE__, frame_id,
-      translation: translation,
-      rotation: rotation
-    )
+    new(frame_id, translation: translation, rotation: rotation)
   end
 end

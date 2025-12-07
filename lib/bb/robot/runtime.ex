@@ -372,6 +372,42 @@ defmodule BB.Robot.Runtime do
     {:reply, :ok, state}
   end
 
+  def handle_call(
+        {:command_complete, execution_id, next_state},
+        _from,
+        %{current_execution_id: execution_id} = state
+      ) do
+    # Command completed normally - handle state transition synchronously
+    old_state = state.state
+
+    # Demonitor and flush any pending :DOWN message
+    if state.current_task_ref do
+      Process.demonitor(state.current_task_ref, [:flush])
+    end
+
+    state = %{
+      state
+      | state: next_state,
+        current_task: nil,
+        current_task_ref: nil,
+        current_command_name: nil,
+        current_execution_id: nil
+    }
+
+    state = set_robot_machine_state(state, next_state)
+
+    if old_state != next_state do
+      publish_transition(state, old_state, next_state)
+    end
+
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:command_complete, _execution_id, _next_state}, _from, state) do
+    # Stale completion (execution_id doesn't match) - ignore
+    {:reply, :ok, state}
+  end
+
   # Parameter handling
 
   def handle_call({:set_parameter, path, value}, _from, state) do
@@ -412,38 +448,8 @@ defmodule BB.Robot.Runtime do
   end
 
   @impl GenServer
-  def handle_info(
-        {:command_task_done, execution_id, next_state},
-        %{current_execution_id: execution_id} = state
-      ) do
-    # Task completed normally - handle state transition
-    old_state = state.state
-
-    # Demonitor and flush any pending :DOWN message
-    if state.current_task_ref do
-      Process.demonitor(state.current_task_ref, [:flush])
-    end
-
-    state = %{
-      state
-      | state: next_state,
-        current_task: nil,
-        current_task_ref: nil,
-        current_command_name: nil,
-        current_execution_id: nil
-    }
-
-    state = set_robot_machine_state(state, next_state)
-
-    if old_state != next_state do
-      publish_transition(state, old_state, next_state)
-    end
-
-    {:noreply, state}
-  end
-
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{current_task_ref: ref} = state) do
-    # Task crashed before sending command_task_done - fall back to :idle
+    # Task crashed before calling {:command_complete, ...} - fall back to :idle
     old_state = state.state
 
     state = %{
@@ -519,7 +525,7 @@ defmodule BB.Robot.Runtime do
     robot_module = state.robot_module
     robot = state.robot
     robot_state = state.robot_state
-    runtime_pid = self()
+    runtime = via(robot_module)
     path = [:command, command.name, execution_id]
 
     Task.Supervisor.async_nolink(
@@ -540,7 +546,11 @@ defmodule BB.Robot.Runtime do
         raw_result = command.handler.handle_command(goal, context)
         {result, next_state} = parse_handler_result(raw_result)
 
-        # Broadcast result
+        # Transition state synchronously BEFORE publishing completion event
+        # This ensures state is updated before any subscriber receives the event
+        GenServer.call(runtime, {:command_complete, execution_id, next_state})
+
+        # Broadcast result after state transition
         case result do
           {:ok, value} ->
             publish_command_event(robot_module, path, :succeeded, %{result: value})
@@ -548,9 +558,6 @@ defmodule BB.Robot.Runtime do
           {:error, reason} ->
             publish_command_event(robot_module, path, :failed, %{reason: reason})
         end
-
-        # Notify runtime with next state before returning
-        send(runtime_pid, {:command_task_done, execution_id, next_state})
 
         result
       end

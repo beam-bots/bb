@@ -222,60 +222,49 @@ And geometry types for transforms and motion:
 
 ## Creating Custom Payload Types
 
-You can define your own payload types for domain-specific sensor data. A payload type must:
-
-1. Implement the `BB.Message` behaviour (provides the schema)
-2. Implement the `BB.Message.Payload` protocol (enables runtime introspection)
-
-Here's a complete example for a custom temperature sensor:
+You can define your own payload types for domain-specific sensor data. Use the `use BB.Message` macro with a schema:
 
 ```elixir
 defmodule MyApp.Message.Temperature do
   @moduledoc "Temperature reading from a thermal sensor."
 
-  @behaviour BB.Message
-
   defstruct [:celsius, :sensor_id]
+
+  use BB.Message,
+    schema: [
+      celsius: [
+        type: :float,
+        required: true,
+        doc: "Temperature in degrees Celsius"
+      ],
+      sensor_id: [
+        type: :atom,
+        required: true,
+        doc: "Identifier of the temperature sensor"
+      ]
+    ]
 
   @type t :: %__MODULE__{
           celsius: float(),
           sensor_id: atom()
         }
 
-  # Define the schema using Spark.Options
-  @schema Spark.Options.new!(
-            celsius: [
-              type: :float,
-              required: true,
-              doc: "Temperature in degrees Celsius"
-            ],
-            sensor_id: [
-              type: :atom,
-              required: true,
-              doc: "Identifier of the temperature sensor"
-            ]
-          )
-
-  # Behaviour callback - returns the compiled schema
-  @impl BB.Message
-  def schema, do: @schema
-
-  # Protocol implementation - enables runtime schema lookup
-  defimpl BB.Message.Payload do
-    def schema(_payload), do: @for.schema()
-  end
-
-  # Convenience constructor (optional but recommended)
+  # Custom convenience constructor (in addition to generated new/2)
   @spec new(atom(), atom(), float()) ::
           {:ok, BB.Message.t()} | {:error, term()}
   def new(frame_id, sensor_id, celsius) do
-    BB.Message.new(__MODULE__, frame_id,
-      celsius: celsius,
-      sensor_id: sensor_id
-    )
+    new(frame_id, celsius: celsius, sensor_id: sensor_id)
   end
 end
 ```
+
+The `use BB.Message` macro:
+- Sets up the `BB.Message` behaviour
+- Compiles the schema via `Spark.Options`
+- Generates a `new/2` function: `new(frame_id, attrs)`
+- Implements the `schema/0` callback
+
+Note: Define `defstruct` before `use BB.Message`.
 
 Use your custom payload in a sensor:
 
