@@ -19,28 +19,20 @@ defmodule BB.Message.Geometry.Wrench do
       {:ok, msg} = Wrench.new(:end_effector, Vec3.new(0.0, 0.0, -10.0), Vec3.zero())
   """
 
-  @behaviour BB.Message
-
   import BB.Message.Option
 
   defstruct [:force, :torque]
+
+  use BB.Message,
+    schema: [
+      force: [type: vec3_type(), required: true, doc: "Force in Newtons"],
+      torque: [type: vec3_type(), required: true, doc: "Torque in Newton-metres"]
+    ]
 
   @type t :: %__MODULE__{
           force: BB.Message.Vec3.t(),
           torque: BB.Message.Vec3.t()
         }
-
-  @schema Spark.Options.new!(
-            force: [type: vec3_type(), required: true, doc: "Force in Newtons"],
-            torque: [type: vec3_type(), required: true, doc: "Torque in Newton-metres"]
-          )
-
-  @impl BB.Message
-  def schema, do: @schema
-
-  defimpl BB.Message.Payload do
-    def schema(_), do: @for.schema()
-  end
 
   @doc """
   Create a new Wrench message.
@@ -56,9 +48,6 @@ defmodule BB.Message.Geometry.Wrench do
   @spec new(atom(), BB.Message.Vec3.t(), BB.Message.Vec3.t()) ::
           {:ok, BB.Message.t()} | {:error, term()}
   def new(frame_id, {:vec3, _, _, _} = force, {:vec3, _, _, _} = torque) do
-    BB.Message.new(__MODULE__, frame_id,
-      force: force,
-      torque: torque
-    )
+    new(frame_id, force: force, torque: torque)
   end
 end

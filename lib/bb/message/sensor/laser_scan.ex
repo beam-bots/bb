@@ -34,8 +34,6 @@ defmodule BB.Message.Sensor.LaserScan do
       )
   """
 
-  @behaviour BB.Message
-
   defstruct [
     :angle_min,
     :angle_max,
@@ -48,6 +46,27 @@ defmodule BB.Message.Sensor.LaserScan do
     :intensities
   ]
 
+  use BB.Message,
+    schema: [
+      angle_min: [type: :float, required: true, doc: "Start angle in radians"],
+      angle_max: [type: :float, required: true, doc: "End angle in radians"],
+      angle_increment: [
+        type: :float,
+        required: true,
+        doc: "Angular distance between measurements in radians"
+      ],
+      time_increment: [
+        type: :float,
+        required: true,
+        doc: "Time between measurements in seconds"
+      ],
+      scan_time: [type: :float, required: true, doc: "Time between scans in seconds"],
+      range_min: [type: :float, required: true, doc: "Minimum range in metres"],
+      range_max: [type: :float, required: true, doc: "Maximum range in metres"],
+      ranges: [type: {:list, :float}, required: true, doc: "Range data in metres"],
+      intensities: [type: {:list, :float}, default: [], doc: "Intensity data (optional)"]
+    ]
+
   @type t :: %__MODULE__{
           angle_min: float(),
           angle_max: float(),
@@ -59,41 +78,4 @@ defmodule BB.Message.Sensor.LaserScan do
           ranges: [float()],
           intensities: [float()]
         }
-
-  @schema Spark.Options.new!(
-            angle_min: [type: :float, required: true, doc: "Start angle in radians"],
-            angle_max: [type: :float, required: true, doc: "End angle in radians"],
-            angle_increment: [
-              type: :float,
-              required: true,
-              doc: "Angular distance between measurements in radians"
-            ],
-            time_increment: [
-              type: :float,
-              required: true,
-              doc: "Time between measurements in seconds"
-            ],
-            scan_time: [type: :float, required: true, doc: "Time between scans in seconds"],
-            range_min: [type: :float, required: true, doc: "Minimum range in metres"],
-            range_max: [type: :float, required: true, doc: "Maximum range in metres"],
-            ranges: [type: {:list, :float}, required: true, doc: "Range data in metres"],
-            intensities: [type: {:list, :float}, default: [], doc: "Intensity data (optional)"]
-          )
-
-  @impl BB.Message
-  def schema, do: @schema
-
-  defimpl BB.Message.Payload do
-    def schema(_), do: @for.schema()
-  end
-
-  @doc """
-  Create a new LaserScan message.
-
-  Returns `{:ok, %BB.Message{}}` with the laser scan as payload.
-  """
-  @spec new(atom(), keyword()) :: {:ok, BB.Message.t()} | {:error, term()}
-  def new(frame_id, attrs) when is_atom(frame_id) and is_list(attrs) do
-    BB.Message.new(__MODULE__, frame_id, attrs)
-  end
 end

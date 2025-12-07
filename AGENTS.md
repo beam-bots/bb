@@ -102,7 +102,7 @@ Transformers run in sequence to process DSL at compile-time:
 
 ### Message System
 
-`BB.Message` wraps payloads with timestamp/frame_id. Payload types implement a behaviour and protocol for schema validation via Spark.Options.
+`BB.Message` wraps payloads with timestamp/frame_id. Payload types use `use BB.Message` with a schema for validation via Spark.Options.
 
 ## Key Patterns
 

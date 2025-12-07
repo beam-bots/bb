@@ -19,32 +19,20 @@ defmodule BB.Message.Geometry.Pose do
       {:ok, msg} = Pose.new(:end_effector, Vec3.new(1.0, 0.0, 0.5), Quaternion.identity())
   """
 
-  @behaviour BB.Message
-
   import BB.Message.Option
 
   defstruct [:position, :orientation]
+
+  use BB.Message,
+    schema: [
+      position: [type: vec3_type(), required: true, doc: "Position in metres"],
+      orientation: [type: quaternion_type(), required: true, doc: "Orientation as quaternion"]
+    ]
 
   @type t :: %__MODULE__{
           position: BB.Message.Vec3.t(),
           orientation: BB.Message.Quaternion.t()
         }
-
-  @schema Spark.Options.new!(
-            position: [type: vec3_type(), required: true, doc: "Position in metres"],
-            orientation: [
-              type: quaternion_type(),
-              required: true,
-              doc: "Orientation as quaternion"
-            ]
-          )
-
-  @impl BB.Message
-  def schema, do: @schema
-
-  defimpl BB.Message.Payload do
-    def schema(_), do: @for.schema()
-  end
 
   @doc """
   Create a new Pose message.
@@ -60,9 +48,6 @@ defmodule BB.Message.Geometry.Pose do
   @spec new(atom(), BB.Message.Vec3.t(), BB.Message.Quaternion.t()) ::
           {:ok, BB.Message.t()} | {:error, term()}
   def new(frame_id, {:vec3, _, _, _} = position, {:quaternion, _, _, _, _} = orientation) do
-    BB.Message.new(__MODULE__, frame_id,
-      position: position,
-      orientation: orientation
-    )
+    new(frame_id, position: position, orientation: orientation)
   end
 end

@@ -30,11 +30,27 @@ defmodule BB.Message.Sensor.Range do
       )
   """
 
-  @behaviour BB.Message
-
   defstruct [:radiation_type, :field_of_view, :min_range, :max_range, :range]
 
+  use BB.Message,
+    schema: [
+      radiation_type: [
+        type: {:in, [:ultrasound, :infrared]},
+        required: true,
+        doc: "Type of radiation"
+      ],
+      field_of_view: [type: :float, required: true, doc: "Size of the arc in radians"],
+      min_range: [type: :float, required: true, doc: "Minimum range in metres"],
+      max_range: [type: :float, required: true, doc: "Maximum range in metres"],
+      range: [
+        type: {:or, [:float, {:literal, :infinity}]},
+        required: true,
+        doc: "Measured range in metres or :infinity"
+      ]
+    ]
+
   @type radiation_type :: :ultrasound | :infrared
+
   @type t :: %__MODULE__{
           radiation_type: radiation_type(),
           field_of_view: float(),
@@ -42,51 +58,4 @@ defmodule BB.Message.Sensor.Range do
           max_range: float(),
           range: float() | :infinity
         }
-
-  @schema Spark.Options.new!(
-            radiation_type: [
-              type: {:in, [:ultrasound, :infrared]},
-              required: true,
-              doc: "Type of radiation"
-            ],
-            field_of_view: [
-              type: :float,
-              required: true,
-              doc: "Size of the arc in radians"
-            ],
-            min_range: [type: :float, required: true, doc: "Minimum range in metres"],
-            max_range: [type: :float, required: true, doc: "Maximum range in metres"],
-            range: [
-              type: {:or, [:float, {:literal, :infinity}]},
-              required: true,
-              doc: "Measured range in metres or :infinity"
-            ]
-          )
-
-  @impl BB.Message
-  def schema, do: @schema
-
-  defimpl BB.Message.Payload do
-    def schema(_), do: @for.schema()
-  end
-
-  @doc """
-  Create a new Range message.
-
-  Returns `{:ok, %BB.Message{}}` with the range data as payload.
-
-  ## Examples
-
-      {:ok, msg} = Range.new(:ultrasonic_sensor,
-        radiation_type: :ultrasound,
-        field_of_view: 0.26,
-        min_range: 0.02,
-        max_range: 4.0,
-        range: 1.5
-      )
-  """
-  @spec new(atom(), keyword()) :: {:ok, BB.Message.t()} | {:error, term()}
-  def new(frame_id, attrs) when is_atom(frame_id) and is_list(attrs) do
-    BB.Message.new(__MODULE__, frame_id, attrs)
-  end
 end
