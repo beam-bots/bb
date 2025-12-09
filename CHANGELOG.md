@@ -11,6 +11,11 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.2.1](https://github.com/beam-bots/bb/compare/v0.2.0...v0.2.1) (2025-12-09)
+
+
+
+
 ## [v0.2.0](https://github.com/beam-bots/bb/compare/v0.1.0...v0.2.0) (2025-12-06)
 ### Breaking Changes:
 
