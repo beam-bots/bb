@@ -107,6 +107,7 @@ defmodule BB.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:ease, "~> 1.0"},
       {:ex_cldr_numbers, "~> 2.36"},
       {:ex_cldr_units, "~> 3.0"},
       {:nx, "~> 0.10"},
@@ -119,6 +120,7 @@ defmodule BB.MixProject do
       {:ex_doc, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:git_ops, "~> 2.9", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.6", optional: true},
+      {:mimic, "~> 1.10", only: :test},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
     ]
   end
