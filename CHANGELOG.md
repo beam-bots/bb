@@ -11,6 +11,19 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.3.0](https://github.com/beam-bots/bb/compare/v0.2.1...v0.3.0) (2025-12-13)
+
+
+
+
+### Features:
+
+* add standard actuator command interface (#9) by James Harton
+
+* add `BB.Message.Actuator.EndMotion` (#8) by James Harton
+
+* add `BB.Sensor.OpenLoopPositionEstimator` (#7) by James Harton
+
 ## [v0.2.1](https://github.com/beam-bots/bb/compare/v0.2.0...v0.2.1) (2025-12-09)
 
 
