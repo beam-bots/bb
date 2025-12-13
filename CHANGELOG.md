@@ -11,6 +11,23 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.4.0](https://github.com/beam-bots/bb/compare/v0.3.0...v0.4.0) (2025-12-13)
+
+
+
+
+### Features:
+
+* add BB.Safety system for centralised arm/disarm control (#10) by James Harton
+
+* add BB.Safety system for centralised arm/disarm control by James Harton
+
+### Improvements:
+
+* concurrent disarm callbacks and :disarming state by James Harton
+
+* refactor terminate callback and add safety docs to CLAUDE.md by James Harton
+
 ## [v0.3.0](https://github.com/beam-bots/bb/compare/v0.2.1...v0.3.0) (2025-12-13)
 
 
