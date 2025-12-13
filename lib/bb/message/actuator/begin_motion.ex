@@ -14,6 +14,8 @@ defmodule BB.Message.Actuator.BeginMotion do
   - `initial_position` - Position before motion begins (radians or metres)
   - `target_position` - Target position (radians or metres)
   - `expected_arrival` - When motion should complete (monotonic milliseconds)
+  - `command_id` - Optional correlation ID from the originating command
+  - `command_type` - Optional type of command that initiated this motion
 
   ## Example
 
@@ -29,7 +31,9 @@ defmodule BB.Message.Actuator.BeginMotion do
       )
   """
 
-  defstruct [:initial_position, :target_position, :expected_arrival]
+  @command_types [:position, :velocity, :effort, :trajectory]
+
+  defstruct [:initial_position, :target_position, :expected_arrival, :command_id, :command_type]
 
   use BB.Message,
     schema: [
@@ -43,12 +47,26 @@ defmodule BB.Message.Actuator.BeginMotion do
         type: :integer,
         required: true,
         doc: "Expected arrival time (monotonic milliseconds)"
+      ],
+      command_id: [
+        type: :reference,
+        required: false,
+        doc: "Correlation ID from originating command"
+      ],
+      command_type: [
+        type: {:in, @command_types},
+        required: false,
+        doc: "Type of command that initiated this motion"
       ]
     ]
+
+  @type command_type :: :position | :velocity | :effort | :trajectory
 
   @type t :: %__MODULE__{
           initial_position: float(),
           target_position: float(),
-          expected_arrival: integer()
+          expected_arrival: integer(),
+          command_id: reference() | nil,
+          command_type: command_type() | nil
         }
 end

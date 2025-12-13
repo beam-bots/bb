@@ -16,6 +16,7 @@ defmodule BB.Message.Actuator.EndMotion do
   - `reason` - Why motion ended (`:completed`, `:cancelled`, `:limit_reached`, `:fault`)
   - `detail` - Optional atom with additional context (e.g. `:end_stop`, `:stall`)
   - `message` - Optional human-readable information for operators
+  - `command_id` - Optional correlation ID from the originating command
 
   ## Examples
 
@@ -46,7 +47,7 @@ defmodule BB.Message.Actuator.EndMotion do
 
   @reasons [:completed, :cancelled, :limit_reached, :fault]
 
-  defstruct [:position, :reason, :detail, :message]
+  defstruct [:position, :reason, :detail, :message, :command_id]
 
   use BB.Message,
     schema: [
@@ -69,6 +70,11 @@ defmodule BB.Message.Actuator.EndMotion do
         type: :string,
         required: false,
         doc: "Human-readable information for operators"
+      ],
+      command_id: [
+        type: :reference,
+        required: false,
+        doc: "Correlation ID from originating command"
       ]
     ]
 
@@ -78,6 +84,7 @@ defmodule BB.Message.Actuator.EndMotion do
           position: float(),
           reason: reason(),
           detail: atom() | nil,
-          message: String.t() | nil
+          message: String.t() | nil,
+          command_id: reference() | nil
         }
 end
