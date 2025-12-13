@@ -48,7 +48,8 @@ defmodule BB.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :xmerl]
+      extra_applications: [:logger, :xmerl],
+      mod: {BB.Application, []}
     ]
   end
 

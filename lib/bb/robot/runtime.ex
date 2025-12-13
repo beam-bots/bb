@@ -38,13 +38,15 @@ defmodule BB.Robot.Runtime do
   """
 
   use GenServer
+  require Logger
 
   alias BB.Command.{Context, Event}
-  alias BB.Dsl.Info
+  alias BB.Dsl.{Info, Joint, Link}
   alias BB.{Message, PubSub}
   alias BB.Message.Sensor.JointState
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Robot.State, as: RobotState
+  alias BB.Safety.Controller, as: SafetyController
   alias BB.StateMachine.Transition
 
   defmodule StateError do
@@ -87,7 +89,7 @@ defmodule BB.Robot.Runtime do
     :parameter_store_state
   ]
 
-  @type robot_state :: :disarmed | :idle | :executing
+  @type robot_state :: :disarmed | :idle | :executing | :error
   @type t :: %__MODULE__{
           robot_module: module(),
           robot: BB.Robot.t(),
@@ -119,12 +121,26 @@ defmodule BB.Robot.Runtime do
   @doc """
   Get the current robot state machine state.
 
+  Returns `:disarmed` if the robot is not armed (via BB.Safety),
+  otherwise returns the internal state (`:idle` or `:executing`).
+
   Reads directly from ETS for fast concurrent access.
   """
   @spec state(module()) :: robot_state()
   def state(robot_module) do
-    robot_state = get_robot_state(robot_module)
-    RobotState.get_robot_state(robot_state)
+    safety_state = BB.Safety.state(robot_module)
+
+    case safety_state do
+      :armed ->
+        robot_state = get_robot_state(robot_module)
+        RobotState.get_robot_state(robot_state)
+
+      :disarmed ->
+        :disarmed
+
+      :error ->
+        :error
+    end
   end
 
   @doc """
@@ -287,6 +303,9 @@ defmodule BB.Robot.Runtime do
 
   @impl GenServer
   def init({robot_module, _opts}) do
+    # Register robot with the safety controller for arm/disarm state management
+    :ok = SafetyController.register_robot(robot_module)
+
     robot = robot_module.robot()
     {:ok, robot_state} = RobotState.new(robot)
 
@@ -301,11 +320,13 @@ defmodule BB.Robot.Runtime do
     # Initialize parameter store if configured
     {store_module, store_state} = init_parameter_store(robot_module)
 
+    # Internal state tracks :idle/:executing (not :disarmed)
+    # The armed/disarmed state is owned by SafetyController
     state = %__MODULE__{
       robot_module: robot_module,
       robot: robot,
       robot_state: robot_state,
-      state: :disarmed,
+      state: :idle,
       commands: commands,
       current_task: nil,
       current_task_ref: nil,
@@ -321,7 +342,15 @@ defmodule BB.Robot.Runtime do
     # Load and apply persisted values (override defaults)
     state = load_persisted_parameters(state)
 
-    {:ok, state}
+    # Schedule safety registration verification after children have started
+    {:ok, state, {:continue, :schedule_safety_verification}}
+  end
+
+  @impl GenServer
+  def handle_continue(:schedule_safety_verification, state) do
+    # Allow time for child processes to start and register
+    Process.send_after(self(), :verify_safety_registrations, 1000)
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -475,6 +504,11 @@ defmodule BB.Robot.Runtime do
     {:noreply, state}
   end
 
+  def handle_info(:verify_safety_registrations, state) do
+    verify_safety_registrations(state)
+    {:noreply, state}
+  end
+
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -587,11 +621,32 @@ defmodule BB.Robot.Runtime do
   end
 
   defp check_state_allowed(command, state) do
-    if state.state in command.allowed_states do
-      :ok
-    else
-      {:error,
-       StateError.exception(current_state: state.state, allowed_states: command.allowed_states)}
+    # Get effective state based on safety controller
+    safety_state = BB.Safety.state(state.robot_module)
+
+    case safety_state do
+      :error ->
+        # Robot is in error state - cannot execute any commands
+        {:error, :safety_error}
+
+      :armed ->
+        if state.state in command.allowed_states do
+          :ok
+        else
+          {:error,
+           StateError.exception(
+             current_state: state.state,
+             allowed_states: command.allowed_states
+           )}
+        end
+
+      :disarmed ->
+        if :disarmed in command.allowed_states do
+          :ok
+        else
+          {:error,
+           StateError.exception(current_state: :disarmed, allowed_states: command.allowed_states)}
+        end
     end
   end
 
@@ -877,5 +932,99 @@ defmodule BB.Robot.Runtime do
   defp apply_default_value(state, {path, value}) do
     RobotState.set_parameter(state.robot_state, path, value)
     publish_parameter_change(state.robot_module, path, nil, value, :init)
+  end
+
+  # Safety registration verification
+
+  defp verify_safety_registrations(state) do
+    robot_module = state.robot_module
+    expected = find_safety_implementers(robot_module)
+    registered = SafetyController.registered_handlers(robot_module)
+
+    missing = expected -- registered
+
+    if missing != [] do
+      Logger.warning(
+        "Safety verification for #{inspect(robot_module)}: " <>
+          "#{length(missing)} module(s) implement BB.Safety but have not registered: " <>
+          inspect(missing)
+      )
+    end
+  end
+
+  defp find_safety_implementers(robot_module) do
+    # Collect modules from robot-level sensors
+    robot_sensors =
+      robot_module
+      |> Info.sensors()
+      |> Enum.map(&extract_module(&1.child_spec))
+      |> Enum.filter(&implements_safety?/1)
+
+    # Collect modules from controllers
+    controllers =
+      robot_module
+      |> Info.controllers()
+      |> Enum.map(&extract_module(&1.child_spec))
+      |> Enum.filter(&implements_safety?/1)
+
+    # Collect modules from topology (link sensors, joint sensors/actuators)
+    topology_modules = find_topology_safety_implementers(robot_module)
+
+    Enum.uniq(robot_sensors ++ controllers ++ topology_modules)
+  end
+
+  defp find_topology_safety_implementers(robot_module) do
+    robot_module
+    |> Info.topology()
+    |> collect_from_topology([])
+  end
+
+  defp collect_from_topology([], acc), do: acc
+
+  defp collect_from_topology([entity | rest], acc) do
+    acc = collect_entity_modules(entity, acc)
+    collect_from_topology(rest, acc)
+  end
+
+  defp collect_entity_modules(%Link{sensors: sensors, joints: joints}, acc) do
+    sensor_modules =
+      sensors
+      |> Enum.map(&extract_module(&1.child_spec))
+      |> Enum.filter(&implements_safety?/1)
+
+    acc = acc ++ sensor_modules
+    collect_from_topology(joints, acc)
+  end
+
+  defp collect_entity_modules(
+         %Joint{sensors: sensors, actuators: actuators, link: link},
+         acc
+       ) do
+    sensor_modules =
+      sensors
+      |> Enum.map(&extract_module(&1.child_spec))
+      |> Enum.filter(&implements_safety?/1)
+
+    actuator_modules =
+      actuators
+      |> Enum.map(&extract_module(&1.child_spec))
+      |> Enum.filter(&implements_safety?/1)
+
+    acc = acc ++ sensor_modules ++ actuator_modules
+
+    if link do
+      collect_entity_modules(link, acc)
+    else
+      acc
+    end
+  end
+
+  defp collect_entity_modules(_other, acc), do: acc
+
+  defp extract_module({module, _opts}) when is_atom(module), do: module
+  defp extract_module(module) when is_atom(module), do: module
+
+  defp implements_safety?(module) do
+    Spark.implements_behaviour?(module, BB.Safety)
   end
 end
