@@ -20,10 +20,14 @@ defmodule BB.Safety do
 
   - `:disarmed` - Robot is safely disarmed, all disarm callbacks succeeded
   - `:armed` - Robot is armed and ready to operate
+  - `:disarming` - Disarm in progress, callbacks running concurrently
   - `:error` - Disarm attempted but one or more callbacks failed; hardware may not be safe
 
   When in `:error` state, the robot cannot be armed until `force_disarm/1` is called
   to acknowledge the error and reset to `:disarmed`.
+
+  Disarm callbacks run concurrently with a timeout. If any callback fails or times out,
+  the robot transitions to `:error` state.
 
   ## Example
 
@@ -83,7 +87,7 @@ defmodule BB.Safety do
   Get current safety state for a robot.
 
   Fast ETS read - does not go through GenServer.
-  Returns `:armed`, `:disarmed`, or `:error`.
+  Returns `:armed`, `:disarmed`, `:disarming`, or `:error`.
   """
   defdelegate state(robot_module), to: BB.Safety.Controller
 
@@ -96,6 +100,15 @@ defmodule BB.Safety do
   Fast ETS read - does not go through GenServer.
   """
   defdelegate in_error?(robot_module), to: BB.Safety.Controller
+
+  @doc """
+  Check if a robot is currently disarming.
+
+  Returns `true` while disarm callbacks are running.
+
+  Fast ETS read - does not go through GenServer.
+  """
+  defdelegate disarming?(robot_module), to: BB.Safety.Controller
 
   @doc """
   Arm the robot.

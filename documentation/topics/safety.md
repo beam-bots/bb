@@ -30,12 +30,24 @@ The safety system has four key components:
 |-------|-------------|
 | `:disarmed` | Robot is safely disarmed, all disarm callbacks succeeded |
 | `:armed` | Robot is armed and ready to operate |
+| `:disarming` | Disarm in progress, callbacks running concurrently |
 | `:error` | Disarm attempted but callbacks failed; hardware may not be safe |
 
-When a disarm operation fails (any callback returns an error or raises), the robot
-transitions to `:error` state instead of `:disarmed`. This prevents the robot from
-being armed again until an operator manually acknowledges the failure using
-`BB.Safety.force_disarm/1`.
+When disarm is called, the robot immediately transitions to `:disarming` state.
+Commands are rejected while in this state. Disarm callbacks run concurrently with
+a 5 second timeout per callback.
+
+If all callbacks succeed, the robot transitions to `:disarmed`. If any callback
+fails (returns an error, raises, throws, or times out), the robot transitions to
+`:error` state instead. This prevents the robot from being armed again until an
+operator manually acknowledges the failure using `BB.Safety.force_disarm/1`.
+
+### Shutdown Behaviour
+
+When the safety controller terminates (e.g. during application shutdown), it
+attempts to disarm all armed robots. This is a best-effort operation - if the
+system is shutting down quickly, callbacks may not complete. Always rely on
+hardware safety controls for critical applications.
 
 ### Example Implementation
 
@@ -218,3 +230,6 @@ component.
 | Will disarm callbacks run if the BEAM VM crashes? | No |
 | What happens if a disarm callback fails? | Robot enters `:error` state |
 | Can I arm a robot in `:error` state? | No, use `force_disarm/1` first |
+| Do disarm callbacks run concurrently? | Yes, with 5 second timeout |
+| Can commands execute while disarming? | No, rejected with `:disarming` error |
+| Are robots disarmed on shutdown? | Yes, best-effort during controller terminate |

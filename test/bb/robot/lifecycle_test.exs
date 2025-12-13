@@ -229,9 +229,12 @@ defmodule BB.Robot.LifecycleTest do
       assert_receive {:bb, [:state_machine],
                       %BB.Message{payload: %Transition{from: :executing, to: :idle}}}
 
-      # Safety.Controller publishes disarm transition
+      # Safety.Controller publishes disarm transitions
       assert_receive {:bb, [:state_machine],
-                      %BB.Message{payload: %Transition{from: :armed, to: :disarmed}}}
+                      %BB.Message{payload: %Transition{from: :armed, to: :disarming}}}
+
+      assert_receive {:bb, [:state_machine],
+                      %BB.Message{payload: %Transition{from: :disarming, to: :disarmed}}}
     end
   end
 end

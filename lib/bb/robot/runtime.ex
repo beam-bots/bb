@@ -89,7 +89,7 @@ defmodule BB.Robot.Runtime do
     :parameter_store_state
   ]
 
-  @type robot_state :: :disarmed | :idle | :executing | :error
+  @type robot_state :: :disarmed | :disarming | :idle | :executing | :error
   @type t :: %__MODULE__{
           robot_module: module(),
           robot: BB.Robot.t(),
@@ -137,6 +137,9 @@ defmodule BB.Robot.Runtime do
 
       :disarmed ->
         :disarmed
+
+      :disarming ->
+        :disarming
 
       :error ->
         :error
@@ -621,13 +624,14 @@ defmodule BB.Robot.Runtime do
   end
 
   defp check_state_allowed(command, state) do
-    # Get effective state based on safety controller
     safety_state = BB.Safety.state(state.robot_module)
 
     case safety_state do
       :error ->
-        # Robot is in error state - cannot execute any commands
         {:error, :safety_error}
+
+      :disarming ->
+        {:error, :disarming}
 
       :armed ->
         if state.state in command.allowed_states do

@@ -20,10 +20,14 @@ defmodule BB.Safety.Controller do
 
   - `:disarmed` - Robot is safely disarmed, all disarm callbacks succeeded
   - `:armed` - Robot is armed and ready to operate
+  - `:disarming` - Disarm in progress, callbacks running concurrently
   - `:error` - Disarm attempted but one or more callbacks failed; hardware may not be safe
 
   When in `:error` state, the robot cannot be armed until `force_disarm/1` is called
   to acknowledge the error and reset to `:disarmed`.
+
+  Disarm callbacks run concurrently with a timeout. If any callback fails or times out,
+  the robot transitions to `:error` state.
 
   Note: The executing/idle distinction is handled by Runtime as it's not safety-critical.
   """
@@ -35,8 +39,10 @@ defmodule BB.Safety.Controller do
 
   @robots_table Module.concat(__MODULE__, Robots)
   @handlers_table Module.concat(__MODULE__, Handlers)
+  @disarm_timeout_ms 5_000
+  @disarm_call_timeout_ms 10_000
 
-  @type safety_state :: :disarmed | :armed | :error
+  @type safety_state :: :disarmed | :armed | :disarming | :error
 
   @doc false
   def start_link(opts) do
@@ -82,6 +88,21 @@ defmodule BB.Safety.Controller do
   def in_error?(robot_module) do
     case :ets.lookup(@robots_table, robot_module) do
       [{^robot_module, :error, _ref}] -> true
+      _ -> false
+    end
+  end
+
+  @doc """
+  Check if a robot is currently disarming.
+
+  Returns `true` while disarm callbacks are running.
+
+  Fast ETS read - does not go through GenServer.
+  """
+  @spec disarming?(module()) :: boolean()
+  def disarming?(robot_module) do
+    case :ets.lookup(@robots_table, robot_module) do
+      [{^robot_module, :disarming, _ref}] -> true
       _ -> false
     end
   end
@@ -156,7 +177,8 @@ defmodule BB.Safety.Controller do
   """
   @spec disarm(module()) ::
           :ok | {:error, :already_disarmed | :not_registered | {:disarm_failed, list()}}
-  def disarm(robot_module), do: GenServer.call(__MODULE__, {:disarm, robot_module})
+  def disarm(robot_module),
+    do: GenServer.call(__MODULE__, {:disarm, robot_module}, @disarm_call_timeout_ms)
 
   @doc """
   Force disarm from error state.
@@ -212,6 +234,9 @@ defmodule BB.Safety.Controller do
       [{^robot_module, :armed, _}] ->
         {:reply, {:error, :already_armed}, state}
 
+      [{^robot_module, :disarming, _}] ->
+        {:reply, {:error, :disarming}, state}
+
       [{^robot_module, :error, _}] ->
         {:reply, {:error, :in_error}, state}
 
@@ -225,20 +250,27 @@ defmodule BB.Safety.Controller do
       [{^robot_module, :disarmed, _}] ->
         {:reply, {:error, :already_disarmed}, state}
 
+      [{^robot_module, :disarming, _}] ->
+        {:reply, {:error, :already_disarming}, state}
+
       [{^robot_module, :error, _}] ->
         {:reply, {:error, :already_in_error}, state}
 
       [{^robot_module, :armed, ref}] ->
-        # Call all registered disarm handlers and collect failures
+        # Immediately transition to :disarming to prevent new commands
+        :ets.insert(@robots_table, {robot_module, :disarming, ref})
+        publish_transition(robot_module, :armed, :disarming)
+
+        # Run callbacks concurrently with timeout
         case disarm_all_handlers(robot_module) do
           :ok ->
             :ets.insert(@robots_table, {robot_module, :disarmed, ref})
-            publish_transition(robot_module, :armed, :disarmed)
+            publish_transition(robot_module, :disarming, :disarmed)
             {:reply, :ok, state}
 
           {:error, failures} ->
             :ets.insert(@robots_table, {robot_module, :error, ref})
-            publish_transition(robot_module, :armed, :error)
+            publish_transition(robot_module, :disarming, :error)
             {:reply, {:error, {:disarm_failed, failures}}, state}
         end
 
@@ -322,15 +354,22 @@ defmodule BB.Safety.Controller do
     # Bag table: each row is {robot_module, module, path, opts, pid}
     handlers = :ets.lookup(@handlers_table, robot_module)
 
+    # Run callbacks concurrently with timeout
     failures =
       handlers
-      |> Enum.reduce([], fn {_robot, module, path, opts, _pid}, acc ->
-        case safe_disarm(module, path, opts) do
-          :ok -> acc
-          {:error, error} -> [{path, error} | acc]
-        end
+      |> Task.async_stream(
+        fn {_robot, module, path, opts, _pid} ->
+          {path, safe_disarm(module, path, opts)}
+        end,
+        timeout: @disarm_timeout_ms,
+        on_timeout: :kill_task,
+        ordered: false
+      )
+      |> Enum.reduce([], fn
+        {:ok, {_path, :ok}}, acc -> acc
+        {:ok, {path, {:error, error}}}, acc -> [{path, error} | acc]
+        {:exit, :timeout}, acc -> [{:unknown, {:timeout, @disarm_timeout_ms}} | acc]
       end)
-      |> Enum.reverse()
 
     case failures do
       [] -> :ok
@@ -356,6 +395,37 @@ defmodule BB.Safety.Controller do
     kind, reason ->
       Logger.error("Disarm failed for #{inspect(path)}: #{inspect({kind, reason})}")
       {:error, {kind, reason}}
+  end
+
+  @impl GenServer
+  def terminate(reason, _state) do
+    armed_robots =
+      @robots_table
+      |> :ets.tab2list()
+      |> Enum.filter(fn {_robot_module, safety_state, _ref} ->
+        safety_state in [:armed, :disarming]
+      end)
+
+    if armed_robots != [] do
+      Logger.warning("Safety controller terminating (#{inspect(reason)}), disarming all robots")
+
+      Enum.each(armed_robots, fn {robot_module, _safety_state, _ref} ->
+        Logger.info("Attempting emergency disarm for #{inspect(robot_module)}")
+
+        case disarm_all_handlers(robot_module) do
+          :ok ->
+            Logger.info("Emergency disarm succeeded for #{inspect(robot_module)}")
+
+          {:error, failures} ->
+            Logger.critical(
+              "EMERGENCY DISARM FAILED for #{inspect(robot_module)}: " <>
+                "#{length(failures)} handler(s) failed - HARDWARE MAY NOT BE SAFE"
+            )
+        end
+      end)
+    end
+
+    :ok
   end
 
   defp publish_transition(robot_module, from, to) do
