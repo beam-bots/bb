@@ -206,11 +206,9 @@ defmodule BB.Robot.LifecycleTest do
       {:ok, task} = SimpleArm.arm()
       Task.await(task)
 
+      # Safety.Controller publishes arm transition
       assert_receive {:bb, [:state_machine],
-                      %BB.Message{payload: %Transition{from: :disarmed, to: :executing}}}
-
-      assert_receive {:bb, [:state_machine],
-                      %BB.Message{payload: %Transition{from: :executing, to: :idle}}}
+                      %BB.Message{payload: %Transition{from: :disarmed, to: :armed}}}
     end
 
     test "disarm broadcasts transition to disarmed" do
@@ -224,11 +222,19 @@ defmodule BB.Robot.LifecycleTest do
       {:ok, task} = SimpleArm.disarm()
       Task.await(task)
 
+      # Runtime publishes command execution transitions
       assert_receive {:bb, [:state_machine],
                       %BB.Message{payload: %Transition{from: :idle, to: :executing}}}
 
       assert_receive {:bb, [:state_machine],
-                      %BB.Message{payload: %Transition{from: :executing, to: :disarmed}}}
+                      %BB.Message{payload: %Transition{from: :executing, to: :idle}}}
+
+      # Safety.Controller publishes disarm transitions
+      assert_receive {:bb, [:state_machine],
+                      %BB.Message{payload: %Transition{from: :armed, to: :disarming}}}
+
+      assert_receive {:bb, [:state_machine],
+                      %BB.Message{payload: %Transition{from: :disarming, to: :disarmed}}}
     end
   end
 end

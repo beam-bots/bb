@@ -393,7 +393,8 @@ defmodule BB.Robot.State do
         ]
       end)
 
-    entries = [{:robot_state, :disarmed} | joint_entries]
+    # Internal state is :idle/:executing (armed/disarmed is in BB.Safety.Controller)
+    entries = [{:robot_state, :idle} | joint_entries]
     :ets.insert(table, entries)
   end
 end

@@ -53,29 +53,33 @@ defmodule BB.Robot.RuntimeTest do
       start_supervised!(TestRobot)
 
       assert Runtime.state(TestRobot) == :disarmed
+      assert BB.Safety.armed?(TestRobot) == false
     end
 
-    test "can transition to idle state" do
+    test "can arm robot via BB.Safety" do
       start_supervised!(TestRobot)
 
-      assert {:ok, :idle} = Runtime.transition(TestRobot, :idle)
+      assert :ok = BB.Safety.arm(TestRobot)
+      assert BB.Safety.armed?(TestRobot) == true
       assert Runtime.state(TestRobot) == :idle
     end
 
-    test "can transition to executing state" do
+    test "can transition to executing state when armed" do
       start_supervised!(TestRobot)
 
-      {:ok, :idle} = Runtime.transition(TestRobot, :idle)
+      :ok = BB.Safety.arm(TestRobot)
       {:ok, :executing} = Runtime.transition(TestRobot, :executing)
       assert Runtime.state(TestRobot) == :executing
     end
 
-    test "can transition back to disarmed" do
+    test "can disarm robot via BB.Safety" do
       start_supervised!(TestRobot)
 
-      {:ok, :idle} = Runtime.transition(TestRobot, :idle)
-      {:ok, :disarmed} = Runtime.transition(TestRobot, :disarmed)
+      :ok = BB.Safety.arm(TestRobot)
+      assert Runtime.state(TestRobot) == :idle
+      :ok = BB.Safety.disarm(TestRobot)
       assert Runtime.state(TestRobot) == :disarmed
+      assert BB.Safety.armed?(TestRobot) == false
     end
   end
 
@@ -104,10 +108,10 @@ defmodule BB.Robot.RuntimeTest do
   end
 
   describe "state transition with idle state" do
-    test "check_allowed works after transition" do
+    test "check_allowed works when armed" do
       start_supervised!(TestRobot)
 
-      {:ok, :idle} = Runtime.transition(TestRobot, :idle)
+      :ok = BB.Safety.arm(TestRobot)
 
       assert :ok = Runtime.check_allowed(TestRobot, [:idle])
       assert {:error, _} = Runtime.check_allowed(TestRobot, [:disarmed])
@@ -122,18 +126,21 @@ defmodule BB.Robot.RuntimeTest do
 
       BB.PubSub.subscribe(TestRobot, [:state_machine])
 
-      {:ok, :idle} = Runtime.transition(TestRobot, :idle)
+      :ok = BB.Safety.arm(TestRobot)
 
       assert_receive {:bb, [:state_machine],
-                      %BB.Message{payload: %Transition{from: :disarmed, to: :idle}}}
+                      %BB.Message{payload: %Transition{from: :disarmed, to: :armed}}}
     end
 
     test "does not publish when state doesn't change" do
       start_supervised!(TestRobot)
 
+      :ok = BB.Safety.arm(TestRobot)
+
       BB.PubSub.subscribe(TestRobot, [:state_machine])
 
-      {:ok, :disarmed} = Runtime.transition(TestRobot, :disarmed)
+      # Already in :idle state, transitioning to :idle should not publish
+      {:ok, :idle} = Runtime.transition(TestRobot, :idle)
 
       refute_receive {:bb, [:state_machine], _}
     end
@@ -168,7 +175,7 @@ defmodule BB.Robot.RuntimeTest do
     test "executes command that succeeds immediately" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
       assert {:ok, :done} = Task.await(task)
@@ -177,7 +184,7 @@ defmodule BB.Robot.RuntimeTest do
     test "rejects unknown commands" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       # Errors now come through the awaited task
       {:ok, task} = Runtime.execute(RobotWithCommands, :nonexistent, %{})
@@ -187,7 +194,7 @@ defmodule BB.Robot.RuntimeTest do
     test "handler can return error" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, task} = Runtime.execute(RobotWithCommands, :rejecting, %{})
       assert {:error, :not_allowed} = Task.await(task)
@@ -196,7 +203,7 @@ defmodule BB.Robot.RuntimeTest do
     test "async command transitions state to executing" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, _task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
 
@@ -207,7 +214,7 @@ defmodule BB.Robot.RuntimeTest do
     test "async command transitions back to idle on completion" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       assert_receive :executing, 500
@@ -222,7 +229,7 @@ defmodule BB.Robot.RuntimeTest do
     test "command can preempt executing command" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, task1} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       assert_receive :executing, 500
@@ -242,7 +249,7 @@ defmodule BB.Robot.RuntimeTest do
     test "non-preemptable command rejected when executing" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, _task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       assert_receive :executing, 500
@@ -261,7 +268,7 @@ defmodule BB.Robot.RuntimeTest do
     test "cancel terminates running command" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       assert_receive :executing, 500
@@ -287,7 +294,7 @@ defmodule BB.Robot.RuntimeTest do
     test "generated functions execute commands and return tasks" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, task} = RobotWithCommands.immediate()
       assert {:ok, :done} = Task.await(task)
@@ -296,7 +303,7 @@ defmodule BB.Robot.RuntimeTest do
     test "generated functions pass goals to handler" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, task} = RobotWithCommands.async_cmd(notify: self())
       assert_receive :executing, 500
@@ -310,7 +317,7 @@ defmodule BB.Robot.RuntimeTest do
     test "broadcasts command started event" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       BB.PubSub.subscribe(RobotWithCommands, [:command, :immediate])
       {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
@@ -324,7 +331,7 @@ defmodule BB.Robot.RuntimeTest do
     test "broadcasts command succeeded event" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       BB.PubSub.subscribe(RobotWithCommands, [:command, :immediate])
       {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
@@ -339,7 +346,7 @@ defmodule BB.Robot.RuntimeTest do
     test "broadcasts command failed event" do
       start_supervised!(RobotWithCommands)
 
-      {:ok, :idle} = Runtime.transition(RobotWithCommands, :idle)
+      :ok = BB.Safety.arm(RobotWithCommands)
 
       BB.PubSub.subscribe(RobotWithCommands, [:command, :rejecting])
       {:ok, task} = Runtime.execute(RobotWithCommands, :rejecting, %{})

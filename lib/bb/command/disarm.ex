@@ -6,8 +6,9 @@ defmodule BB.Command.Disarm do
   @moduledoc """
   Standard command handler for disarming a robot.
 
-  When executed from the `:idle` state, this command transitions the robot
-  to `:disarmed`, preventing further motion commands until re-armed.
+  When executed from the `:idle` state, this command disarms the robot
+  via `BB.Safety.Controller`, which calls all registered `BB.Safety.disarm/1`
+  callbacks to ensure hardware is made safe.
 
   ## Usage
 
@@ -29,7 +30,10 @@ defmodule BB.Command.Disarm do
   @behaviour BB.Command
 
   @impl true
-  def handle_command(_goal, _context) do
-    {:ok, :disarmed, next_state: :disarmed}
+  def handle_command(_goal, context) do
+    case BB.Safety.disarm(context.robot_module) do
+      :ok -> {:ok, :disarmed}
+      {:error, reason} -> {:error, reason}
+    end
   end
 end

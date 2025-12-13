@@ -6,8 +6,8 @@ defmodule BB.Command.Arm do
   @moduledoc """
   Standard command handler for arming a robot.
 
-  When executed from the `:disarmed` state, this command transitions the robot
-  to `:idle`, making it ready to accept motion commands.
+  When executed from the `:disarmed` state, this command arms the robot
+  via `BB.Safety.Controller`, making it ready to accept motion commands.
 
   ## Usage
 
@@ -29,7 +29,10 @@ defmodule BB.Command.Arm do
   @behaviour BB.Command
 
   @impl true
-  def handle_command(_goal, _context) do
-    {:ok, :armed}
+  def handle_command(_goal, context) do
+    case BB.Safety.arm(context.robot_module) do
+      :ok -> {:ok, :armed}
+      {:error, reason} -> {:error, reason}
+    end
   end
 end
