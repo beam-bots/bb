@@ -408,24 +408,25 @@ defmodule BB.Safety.Controller do
 
     if armed_robots != [] do
       Logger.warning("Safety controller terminating (#{inspect(reason)}), disarming all robots")
-
-      Enum.each(armed_robots, fn {robot_module, _safety_state, _ref} ->
-        Logger.info("Attempting emergency disarm for #{inspect(robot_module)}")
-
-        case disarm_all_handlers(robot_module) do
-          :ok ->
-            Logger.info("Emergency disarm succeeded for #{inspect(robot_module)}")
-
-          {:error, failures} ->
-            Logger.critical(
-              "EMERGENCY DISARM FAILED for #{inspect(robot_module)}: " <>
-                "#{length(failures)} handler(s) failed - HARDWARE MAY NOT BE SAFE"
-            )
-        end
-      end)
+      Enum.each(armed_robots, &emergency_disarm_robot/1)
     end
 
     :ok
+  end
+
+  defp emergency_disarm_robot({robot_module, _safety_state, _ref}) do
+    Logger.info("Attempting emergency disarm for #{inspect(robot_module)}")
+
+    case disarm_all_handlers(robot_module) do
+      :ok ->
+        Logger.info("Emergency disarm succeeded for #{inspect(robot_module)}")
+
+      {:error, failures} ->
+        Logger.critical(
+          "EMERGENCY DISARM FAILED for #{inspect(robot_module)}: " <>
+            "#{length(failures)} handler(s) failed - HARDWARE MAY NOT BE SAFE"
+        )
+    end
   end
 
   defp publish_transition(robot_module, from, to) do

@@ -100,6 +100,19 @@ Transformers run in sequence to process DSL at compile-time:
 
 **URDF Export** (`lib/bb/urdf/exporter.ex`): Converts robot definitions to URDF XML format for use with ROS tools like RViz and Gazebo. Available via `mix bb.to_urdf`.
 
+### Safety System (CRITICAL)
+
+See `documentation/topics/safety.md` for comprehensive safety documentation.
+
+**Changes to safety-critical code require extra care** - bugs here could result in physical harm.
+
+Key points:
+- Actuators controlling hardware MUST implement `BB.Safety` behaviour
+- `disarm/1` callback must work without GenServer state (process may have crashed)
+- Safety states: `:disarmed` → `:armed` → `:disarming` → `:disarmed` (or `:error` on failure)
+- Disarm callbacks run concurrently with 5 second timeout
+- The `:error` state means hardware may not be safe - requires `force_disarm/1` to recover
+
 ### Message System
 
 `BB.Message` wraps payloads with timestamp/frame_id. Payload types use `use BB.Message` with a schema for validation via Spark.Options.
@@ -112,3 +125,4 @@ Transformers run in sequence to process DSL at compile-time:
 - DSL entities are structs in `lib/bb/dsl/` matching entity names
 - Commands: Return `{:ok, result}` or `{:ok, result, next_state: state}` for state transitions
 - State machine: Robots start `:disarmed`, transition to `:idle` when armed, `:executing` during commands
+- **Safety**: Actuators controlling physical hardware must implement `BB.Safety` behaviour. Test disarm callbacks thoroughly - they run when things have already gone wrong
