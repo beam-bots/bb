@@ -121,7 +121,7 @@ defmodule BB.MixProject do
       {:ex_doc, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:git_ops, "~> 2.9", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.6", optional: true},
-      {:mimic, "~> 1.10", only: :test},
+      {:mimic, "~> 2.2", only: :test},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
     ]
   end
