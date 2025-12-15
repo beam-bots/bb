@@ -4,6 +4,8 @@
 
 Application.ensure_all_started(:mimic)
 
-ExUnit.start()
+:logger.add_primary_filter(:test_filter, {&TestLogFilter.log/2, []})
+
+ExUnit.start(capture_log: true)
 
 Mimic.copy(BB.PubSub)
