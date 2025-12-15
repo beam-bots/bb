@@ -147,3 +147,10 @@ end
 
 Then create a robot module manually (see [Your First Robot](https://hexdocs.pm/bb/01-first-robot.html)).
 
+## Sponsors
+
+This project is made possible by the generous support of our sponsors:
+
+- **[Alembic](https://alembic.com.au)** ([@team-alembic](https://github.com/team-alembic)) - Development Support
+- **Frank Hunleth** ([@fhunleth](https://github.com/fhunleth)) - Hardware Donation
+
