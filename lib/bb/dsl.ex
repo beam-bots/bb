@@ -423,7 +423,8 @@ defmodule BB.Dsl do
       alpha: [
         type: {:custom, BB.Dsl.Color, :validate, []},
         doc: "The alpha element of the color",
-        required: true
+        required: false,
+        default: 1
       ]
     ]
   }

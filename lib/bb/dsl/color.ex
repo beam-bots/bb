@@ -11,7 +11,7 @@ defmodule BB.Dsl.Color do
             red: nil,
             green: nil,
             blue: nil,
-            alpha: nil
+            alpha: 1
 
   alias Spark.Dsl.Entity
 
