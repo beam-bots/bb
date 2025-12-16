@@ -37,7 +37,7 @@ defmodule BB.Message.Actuator.Command.Hold do
   use BB.Message,
     schema: [
       command_id: [
-        type: :reference,
+        type: {:or, [nil, :reference]},
         required: false,
         doc: "Correlation ID for feedback"
       ]
