@@ -59,15 +59,15 @@ case FABRIK.solve(robot, state, :end_effector_link, target) do
   {:ok, positions, meta} ->
     IO.puts("Solved in #{meta.iterations} iterations")
     IO.puts("Distance to target: #{Float.round(meta.residual * 1000, 2)}mm")
-
-    # Apply the solution
-    State.set_positions(state, positions)
+    IO.inspect(positions, label: "Joint angles")
 
   {:error, :unreachable, meta} ->
     IO.puts("Target is out of reach")
     IO.puts("Best distance achieved: #{Float.round(meta.residual * 1000, 2)}mm")
 end
 ```
+
+> **Note:** This example just solves for joint angles. To actually move the robot, see the [Motion Integration](#motion-integration) section below.
 
 ## Understanding the Result
 
@@ -82,22 +82,19 @@ The solver returns a `meta` map with useful information:
 
 On error, `meta` also contains `:positions` with the best-effort joint values.
 
-## Practical Example: Moving to a Target
+## Practical Example: Validating Reachability
 
 Here's a complete example that solves IK and verifies the result with forward kinematics:
 
 ```elixir
 defmodule IKDemo do
   alias BB.IK.FABRIK
-  alias BB.Robot.{Kinematics, State}
+  alias BB.Robot.Kinematics
 
-  def move_to_target(robot, state, target_link, target) do
+  def check_reachability(robot, state, target_link, target) do
     # Solve IK
     case FABRIK.solve(robot, state, target_link, target) do
       {:ok, positions, meta} ->
-        # Apply the solution
-        State.set_positions(state, positions)
-
         # Verify with forward kinematics
         {x, y, z} = Kinematics.link_position(robot, positions, target_link)
 
@@ -120,8 +117,10 @@ end
 # Usage
 robot = MyRobot.robot()
 {:ok, state} = BB.Robot.State.new(robot)
-IKDemo.move_to_target(robot, state, :tip, {0.3, 0.2, 0.0})
+IKDemo.check_reachability(robot, state, :tip, {0.3, 0.2, 0.0})
 ```
+
+> **Note:** This validates reachability without moving the robot. To actually move, use `BB.Motion.move_to/4` as shown in [Motion Integration](#motion-integration).
 
 ## Solver Options
 
@@ -155,10 +154,10 @@ case FABRIK.solve(robot, state, :tip, target) do
     # meta.positions contains the best-effort joint angles
     IO.puts("Target unreachable")
     IO.puts("Best distance: #{meta.residual}m")
+    IO.inspect(meta.positions, label: "Best effort angles")
 
-    # You might still want to use the best-effort result
-    # to point the arm in the right direction
-    State.set_positions(state, meta.positions)
+    # If you want to move to the best-effort position,
+    # use BB.Motion.send_positions(MyRobot, meta.positions)
 end
 ```
 
@@ -181,19 +180,21 @@ target = BB.Robot.Transform.translation(0.3, 0.2, 0.1)
 
 ## Using solve_and_update/5
 
-For convenience, `solve_and_update/5` solves and applies the result in one call:
+For convenience, `solve_and_update/5` solves and updates the state in one call:
 
 ```elixir
 case FABRIK.solve_and_update(robot, state, :tip, target) do
   {:ok, positions, meta} ->
     # State has already been updated
-    IO.puts("Moved to target")
+    IO.puts("Solved and updated state")
 
   {:error, reason, _meta} ->
     # State is unchanged on error
     IO.puts("Failed: #{reason}")
 end
 ```
+
+> **Note:** This updates `BB.Robot.State` but doesn't send actuator commands. Use `BB.Motion.move_to/4` to actually move the robot.
 
 ## Motion Integration
 
