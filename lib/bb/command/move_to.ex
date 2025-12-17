@@ -16,7 +16,7 @@ defmodule BB.Command.MoveTo do
   ### Single Target Mode
 
   Required:
-  - `target` - Target position as `{x, y, z}` tuple in metres
+  - `target` - Target position as `{x, y, z}` or `{:vec3, x, y, z}` in metres
   - `target_link` - Name of the link to move (end-effector)
   - `solver` - Module implementing `BB.IK.Solver` behaviour
 
@@ -35,19 +35,12 @@ defmodule BB.Command.MoveTo do
 
   ## Usage
 
-  Add to your robot's command definitions:
-
-      commands do
-        command :move_to do
-          handler BB.Command.MoveTo
-          allowed_states [:idle]
-        end
-      end
-
   ### Single Target
 
+      alias BB.Message.Vec3
+
       {:ok, task} = MyRobot.move_to(%{
-        target: {0.3, 0.2, 0.1},
+        target: Vec3.new(0.3, 0.2, 0.1),
         target_link: :gripper,
         solver: BB.IK.FABRIK
       })
@@ -110,6 +103,7 @@ defmodule BB.Command.MoveTo do
          {:ok, target_link} <- fetch_required(goal, :target_link),
          {:ok, solver} <- fetch_required(goal, :solver) do
       opts = build_opts(goal, solver)
+      target = normalize_target(target)
 
       case Motion.move_to(context, target_link, target, opts) do
         {:ok, meta} ->
@@ -153,4 +147,8 @@ defmodule BB.Command.MoveTo do
     ]
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end
+
+  defp normalize_target({:vec3, x, y, z}), do: {x, y, z}
+  defp normalize_target(%BB.Message.Geometry.Point3D{x: x, y: y, z: z}), do: {x, y, z}
+  defp normalize_target({_x, _y, _z} = target), do: target
 end

@@ -697,9 +697,15 @@ defmodule BB.Dsl do
         doc: "A unique name for the argument"
       ],
       type: [
-        type: {:or, [:atom, :module]},
+        type: :any,
         required: true,
-        doc: "The type of the argument (e.g., `:float`, `:integer`, `BB.Pose`)"
+        doc: """
+        The type of the argument. Supported types:
+        - Simple: `:float`, `:integer`, `:boolean`, `:atom`, `:string`
+        - Enum: `{:in, [:value1, :value2]}`
+        - Map: `{:map, [x: :float, y: :float, z: :float]}`
+        - Module: `MyModule`
+        """
       ],
       required: [
         type: :boolean,
