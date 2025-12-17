@@ -46,7 +46,7 @@ defmodule BB.Message.Actuator.Command.Stop do
         doc: "Stop mode: :immediate or :decelerate"
       ],
       command_id: [
-        type: :reference,
+        type: {:or, [nil, :reference]},
         required: false,
         doc: "Correlation ID for feedback"
       ]

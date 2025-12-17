@@ -46,17 +46,17 @@ defmodule BB.Message.Actuator.Command.Position do
         doc: "Target position (radians or metres)"
       ],
       velocity: [
-        type: :float,
+        type: {:or, [nil, :float]},
         required: false,
         doc: "Velocity hint (rad/s or m/s)"
       ],
       duration: [
-        type: :pos_integer,
+        type: {:or, [nil, :pos_integer]},
         required: false,
         doc: "Duration hint (milliseconds)"
       ],
       command_id: [
-        type: :reference,
+        type: {:or, [nil, :reference]},
         required: false,
         doc: "Correlation ID for feedback"
       ]

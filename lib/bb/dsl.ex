@@ -423,7 +423,8 @@ defmodule BB.Dsl do
       alpha: [
         type: {:custom, BB.Dsl.Color, :validate, []},
         doc: "The alpha element of the color",
-        required: true
+        required: false,
+        default: 1
       ]
     ]
   }
@@ -689,6 +690,14 @@ defmodule BB.Dsl do
     target: BB.Dsl.Command.Argument,
     identifier: :name,
     args: [:name, :type],
+    docs: """
+    Command arguments support flexible type specifications:
+
+    - Simple types: `:float`, `:integer`, `:boolean`, `:atom`, `:string`
+    - Enums: `{:in, [:value1, :value2]}`
+    - Maps: `{:map, [x: :float, y: :float, z: :float]}`
+    - Modules: `MyModule`
+    """,
     schema: [
       name: [
         type: :atom,
@@ -696,9 +705,9 @@ defmodule BB.Dsl do
         doc: "A unique name for the argument"
       ],
       type: [
-        type: {:or, [:atom, :module]},
+        type: :any,
         required: true,
-        doc: "The type of the argument (e.g., `:float`, `:integer`, `BB.Pose`)"
+        doc: "The type of the argument"
       ],
       required: [
         type: :boolean,
