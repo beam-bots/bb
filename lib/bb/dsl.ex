@@ -690,6 +690,14 @@ defmodule BB.Dsl do
     target: BB.Dsl.Command.Argument,
     identifier: :name,
     args: [:name, :type],
+    docs: """
+    Command arguments support flexible type specifications:
+
+    - Simple types: `:float`, `:integer`, `:boolean`, `:atom`, `:string`
+    - Enums: `{:in, [:value1, :value2]}`
+    - Maps: `{:map, [x: :float, y: :float, z: :float]}`
+    - Modules: `MyModule`
+    """,
     schema: [
       name: [
         type: :atom,
@@ -699,13 +707,7 @@ defmodule BB.Dsl do
       type: [
         type: :any,
         required: true,
-        doc: """
-        The type of the argument. Supported types:
-        - Simple: `:float`, `:integer`, `:boolean`, `:atom`, `:string`
-        - Enum: `{:in, [:value1, :value2]}`
-        - Map: `{:map, [x: :float, y: :float, z: :float]}`
-        - Module: `MyModule`
-        """
+        doc: "The type of the argument"
       ],
       required: [
         type: :boolean,

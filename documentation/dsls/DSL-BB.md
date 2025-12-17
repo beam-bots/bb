@@ -341,7 +341,7 @@ The color of the meterial
 | [`red`](#topology-link-visual-material-color-red){: #topology-link-visual-material-color-red .spark-required} | `any` |  | The red element of the color |
 | [`green`](#topology-link-visual-material-color-green){: #topology-link-visual-material-color-green .spark-required} | `any` |  | The green element of the color |
 | [`blue`](#topology-link-visual-material-color-blue){: #topology-link-visual-material-color-blue .spark-required} | `any` |  | The blue element of the color |
-| [`alpha`](#topology-link-visual-material-color-alpha){: #topology-link-visual-material-color-alpha .spark-required} | `any` |  | The alpha element of the color |
+| [`alpha`](#topology-link-visual-material-color-alpha){: #topology-link-visual-material-color-alpha } | `any` | `1` | The alpha element of the color |
 
 
 
@@ -1183,7 +1183,7 @@ An argument for the command.
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#commands-command-argument-name){: #commands-command-argument-name .spark-required} | `atom` |  | A unique name for the argument |
-| [`type`](#commands-command-argument-type){: #commands-command-argument-type .spark-required} | `atom \| module` |  | The type of the argument (e.g., `:float`, `:integer`, `BB.Pose`) |
+| [`type`](#commands-command-argument-type){: #commands-command-argument-type .spark-required} | `any` |  | The type of the argument |
 ### Options
 
 | Name | Type | Default | Docs |
