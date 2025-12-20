@@ -4,17 +4,11 @@
 
 defmodule BB.Safety do
   @moduledoc """
-  Safety system behaviour and API.
+  Safety system API.
 
-  Actuators, sensors, and controllers can implement the `BB.Safety` behaviour.
-  The `disarm/1` callback is called by `BB.Safety.Controller` when:
-
-  - The robot is disarmed via command
-  - The robot supervisor crashes
-
-  The callback receives the opts provided at registration and must be able to
-  disable hardware without access to any GenServer state. This ensures safety
-  even when the actuator process is dead.
+  This module provides the API for arming/disarming robots and managing safety state.
+  The `disarm/1` callback that components implement is now defined in `BB.Controller`
+  and `BB.Actuator` behaviours.
 
   ## Safety States
 
@@ -29,13 +23,15 @@ defmodule BB.Safety do
   Disarm callbacks run concurrently with a timeout. If any callback fails or times out,
   the robot transitions to `:error` state.
 
-  ## Example
+  ## Implementing Disarm Callbacks
+
+  Controllers and actuators implement the `disarm/1` callback via their behaviours:
 
       defmodule MyActuator do
         use GenServer
-        @behaviour BB.Safety
+        use BB.Actuator
 
-        @impl BB.Safety
+        @impl BB.Actuator
         def disarm(opts) do
           pin = Keyword.fetch!(opts, :pin)
           MyHardware.disable(pin)
@@ -54,7 +50,7 @@ defmodule BB.Safety do
 
   If your actuator doesn't need special disarm logic, you can implement a no-op:
 
-      @impl BB.Safety
+      @impl BB.Actuator
       def disarm(_opts), do: :ok
 
   ## Important Limitations
@@ -66,13 +62,6 @@ defmodule BB.Safety do
 
   See the Safety documentation topic for detailed recommendations.
   """
-
-  @doc """
-  Make the hardware safe.
-
-  Called with the opts provided at registration. Must work without GenServer state.
-  """
-  @callback disarm(opts :: keyword()) :: :ok | {:error, term()}
 
   # --- API (delegates to Controller) ---
 

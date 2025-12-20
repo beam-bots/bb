@@ -224,7 +224,7 @@ defmodule BB.Parameter do
 
       {:ok, 0.15} = BB.Parameter.get_remote(MyRobot, :mavlink, "PITCH_RATE_P")
   """
-  @spec get_remote(module(), atom(), BB.Parameter.Protocol.param_id()) ::
+  @spec get_remote(module(), atom(), BB.Bridge.param_id()) ::
           {:ok, term()} | {:error, term()}
   def get_remote(robot_module, bridge_name, param_id)
       when is_atom(robot_module) and is_atom(bridge_name) do
@@ -240,7 +240,7 @@ defmodule BB.Parameter do
 
       :ok = BB.Parameter.set_remote(MyRobot, :mavlink, "PITCH_RATE_P", 0.15)
   """
-  @spec set_remote(module(), atom(), BB.Parameter.Protocol.param_id(), term()) ::
+  @spec set_remote(module(), atom(), BB.Bridge.param_id(), term()) ::
           :ok | {:error, term()}
   def set_remote(robot_module, bridge_name, param_id, value)
       when is_atom(robot_module) and is_atom(bridge_name) do
@@ -259,7 +259,7 @@ defmodule BB.Parameter do
 
       :ok = BB.Parameter.subscribe_remote(MyRobot, :mavlink, "PITCH_RATE_P")
   """
-  @spec subscribe_remote(module(), atom(), BB.Parameter.Protocol.param_id()) ::
+  @spec subscribe_remote(module(), atom(), BB.Bridge.param_id()) ::
           :ok | {:error, term()}
   def subscribe_remote(robot_module, bridge_name, param_id)
       when is_atom(robot_module) and is_atom(bridge_name) do

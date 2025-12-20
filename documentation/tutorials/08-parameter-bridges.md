@@ -21,7 +21,7 @@ Parameter bridges provide bidirectional access between BB and remote systems:
 
 > **For Roboticists:** Bridges work like MAVLink's parameter protocol or ROS2's parameter services. They let you enumerate, read, write, and subscribe to parameters over any transport.
 
-> **For Elixirists:** Bridges are GenServers that implement the `BB.Parameter.Protocol` behaviour. They're supervised by the robot and integrate with PubSub for change notifications.
+> **For Elixirists:** Bridges are GenServers that implement the `BB.Bridge` behaviour. They're supervised by the robot and integrate with PubSub for change notifications.
 
 ## Defining Bridges in the DSL
 
@@ -49,9 +49,9 @@ Each bridge takes:
 
 Bridges are started as part of the robot's supervision tree.
 
-## The Protocol Behaviour
+## The Bridge Behaviour
 
-Bridges implement `BB.Parameter.Protocol`. There are two directions:
+Bridges implement `BB.Bridge`. There are two directions:
 
 ### Outbound Callback
 
@@ -88,8 +88,7 @@ Here's a bridge that logs parameter changes:
 
 ```elixir
 defmodule MyDebugBridge do
-  use GenServer
-  @behaviour BB.Parameter.Protocol
+  use BB.Bridge
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
@@ -108,7 +107,7 @@ defmodule MyDebugBridge do
   end
 
   # Handle local parameter changes
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def handle_change(_robot, changed, state) do
     IO.puts("[DEBUG] Parameter #{inspect(changed.path)} changed:")
     IO.puts("  Old: #{inspect(changed.old_value)}")
@@ -151,8 +150,7 @@ Add the inbound callbacks to your bridge:
 
 ```elixir
 defmodule MyFlightControllerBridge do
-  use GenServer
-  @behaviour BB.Parameter.Protocol
+  use BB.Bridge
 
   # Define a message type for remote param changes
   defmodule ParamValue do
@@ -177,7 +175,7 @@ defmodule MyFlightControllerBridge do
     }}
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def handle_change(_robot, changed, state) do
     # Optionally sync local changes to FC
     send_param_to_fc(state.conn, changed)
@@ -185,7 +183,7 @@ defmodule MyFlightControllerBridge do
   end
 
   # List all parameters on the flight controller
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def list_remote(state) do
     params = fetch_all_fc_params(state.conn)
     |> Enum.map(fn {id, value} ->
@@ -202,7 +200,7 @@ defmodule MyFlightControllerBridge do
   end
 
   # Get a specific parameter from the FC
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def get_remote(param_id, state) do
     case fetch_fc_param(state.conn, param_id) do
       {:ok, value} -> {:ok, value, state}
@@ -211,14 +209,14 @@ defmodule MyFlightControllerBridge do
   end
 
   # Set a parameter on the FC
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def set_remote(param_id, value, state) do
     :ok = send_fc_param_set(state.conn, param_id, value)
     {:ok, state}
   end
 
   # Subscribe to FC parameter changes
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def subscribe_remote(param_id, state) do
     state = %{state | subscriptions: MapSet.put(state.subscriptions, param_id)}
     {:ok, state}
@@ -334,8 +332,7 @@ Here's a complete example with a simulated flight controller:
 defmodule MockFCBridge do
   @moduledoc "Simulates a flight controller with tunable parameters."
 
-  use GenServer
-  @behaviour BB.Parameter.Protocol
+  use BB.Bridge
 
   defmodule ParamValue do
     defstruct [:value]
@@ -370,10 +367,10 @@ defmodule MockFCBridge do
     }}
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def handle_change(_robot, _changed, state), do: {:ok, state}
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def list_remote(state) do
     params = Enum.map(state.params, fn {id, value} ->
       %{id: id, value: value, type: :float, doc: nil, path: id_to_path(id)}
@@ -381,7 +378,7 @@ defmodule MockFCBridge do
     {:ok, params, state}
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def get_remote(param_id, state) do
     case Map.fetch(state.params, param_id) do
       {:ok, value} -> {:ok, value, state}
@@ -389,7 +386,7 @@ defmodule MockFCBridge do
     end
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def set_remote(param_id, value, state) do
     if Map.has_key?(state.params, param_id) do
       state = %{state | params: Map.put(state.params, param_id, value)}
@@ -407,7 +404,7 @@ defmodule MockFCBridge do
     end
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def subscribe_remote(param_id, state) do
     {:ok, %{state | subscriptions: MapSet.put(state.subscriptions, param_id)}}
   end
@@ -472,7 +469,7 @@ Parameter bridges enable:
 - **Bidirectional sync:** Keep parameters in sync across systems
 
 Key points:
-- Bridges implement `BB.Parameter.Protocol`
+- Bridges implement `BB.Bridge`
 - Use `init/2` and `handle_change/3` for outbound (local changes)
 - Use `list_remote/1`, `get_remote/2`, `set_remote/3` for inbound (remote access)
 - Each bridge is supervised independently for fault isolation

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule BB.Parameter.ProtocolTest do
+defmodule BB.BridgeTest do
   use ExUnit.Case, async: false
 
   alias BB.Parameter

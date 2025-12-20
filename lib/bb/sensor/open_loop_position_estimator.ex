@@ -81,7 +81,7 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
     :ease_out_circular,
     :ease_in_out_circular
   ]
-  use GenServer
+  use BB.Sensor
   import BB.Unit
   import BB.Unit.Option
 
@@ -91,57 +91,55 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
   alias BB.Message.Sensor.JointState
   alias BB.Robot.Units
 
-  @options Spark.Options.new!(
-             bb: [
-               type: :map,
-               doc: "Automatically set by the robot supervisor",
-               required: true
-             ],
-             actuator: [
-               type: :atom,
-               doc: "Name of the actuator to subscribe to",
-               required: true
-             ],
-             easing: [
-               type: {:in, @easing_functions},
-               doc: "Easing function for position interpolation",
-               default: :linear
-             ],
-             publish_rate: [
-               type: unit_type(compatible: :hertz),
-               doc: "Rate at which to publish position changes during motion",
-               default: ~u(50 hertz)
-             ],
-             max_silence: [
-               type: unit_type(compatible: :second),
-               doc: "Maximum time between publishes when idle (heartbeat)",
-               default: ~u(5 second)
-             ]
-           )
+  @impl BB.Sensor
+  def options_schema do
+    Spark.Options.new!(
+      actuator: [
+        type: :atom,
+        doc: "Name of the actuator to subscribe to",
+        required: true
+      ],
+      easing: [
+        type: {:in, @easing_functions},
+        doc: "Easing function for position interpolation",
+        default: :linear
+      ],
+      publish_rate: [
+        type: unit_type(compatible: :hertz),
+        doc: "Rate at which to publish position changes during motion",
+        default: ~u(50 hertz)
+      ],
+      max_silence: [
+        type: unit_type(compatible: :second),
+        doc: "Maximum time between publishes when idle (heartbeat)",
+        default: ~u(5 second)
+      ]
+    )
+  end
 
   @impl GenServer
   def init(opts) do
-    with {:ok, opts} <- Spark.Options.validate(opts, @options),
-         {:ok, state} <- build_state(opts) do
-      BB.subscribe(state.bb.robot, [:actuator | state.actuator_path])
-      {:ok, state, state.max_silence_ms}
-    else
-      {:error, reason} -> {:stop, reason}
-    end
+    {:ok, state} = build_state(opts)
+    BB.subscribe(state.bb.robot, [:actuator | state.actuator_path])
+    {:ok, state, state.max_silence_ms}
   end
 
   defp build_state(opts) do
     opts = Map.new(opts)
     [name, joint_name | _] = Enum.reverse(opts.bb.path)
 
+    easing = Map.get(opts, :easing, :linear)
+    publish_rate = Map.get(opts, :publish_rate, ~u(50 hertz))
+    max_silence = Map.get(opts, :max_silence, ~u(5 second))
+
     publish_interval_ms =
-      opts.publish_rate
+      publish_rate
       |> CldrUnit.convert!(:hertz)
       |> Units.extract_float()
       |> then(&round(1000 / &1))
 
     max_silence_ms =
-      opts.max_silence
+      max_silence
       |> CldrUnit.convert!(:second)
       |> Units.extract_float()
       |> then(&round(&1 * 1000))
@@ -152,7 +150,7 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
       bb: opts.bb,
       actuator: opts.actuator,
       actuator_path: actuator_path,
-      easing: opts.easing,
+      easing: easing,
       publish_interval_ms: publish_interval_ms,
       max_silence_ms: max_silence_ms,
       name: name,

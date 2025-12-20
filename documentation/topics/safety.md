@@ -8,15 +8,16 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Overview
 
-BeamBots provides a software safety system through the `BB.Safety` behaviour and
+BeamBots provides a software safety system through the `BB.Safety` module and
 `BB.Safety.Controller`. This document explains how the system works and its limitations.
 
 ## How Safety Works
 
 The safety system has four key components:
 
-1. **BB.Safety behaviour**: Actuators, sensors, and controllers can implement the
-   `disarm/1` callback to handle hardware shutdown
+1. **Behaviour callbacks**: Actuators and controllers implement the `disarm/1` callback
+   via their behaviours (`BB.Actuator`, `BB.Controller`) to handle hardware shutdown.
+   Sensors can optionally implement `disarm/1` if they control hardware.
 2. **Registration**: Processes register with the safety controller on startup,
    providing hardware-specific options needed for stateless disarm
 3. **State management**: The controller tracks safety state per robot (`:disarmed`,
@@ -54,9 +55,9 @@ hardware safety controls for critical applications.
 ```elixir
 defmodule MyServo do
   use GenServer
-  @behaviour BB.Safety
+  use BB.Actuator
 
-  @impl BB.Safety
+  @impl BB.Actuator
   def disarm(opts) do
     # This callback can be called even if the GenServer process is dead
     pin = Keyword.fetch!(opts, :pin)

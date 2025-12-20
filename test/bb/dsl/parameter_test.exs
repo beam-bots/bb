@@ -60,25 +60,34 @@ defmodule BB.Dsl.ParameterTest do
 
   defmodule TestSensor do
     @moduledoc false
-    use GenServer
+    use BB.Sensor
 
     def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+    @impl GenServer
     def init(opts), do: {:ok, opts}
   end
 
   defmodule TestActuator do
     @moduledoc false
-    use GenServer
+    use BB.Actuator
+
+    @impl BB.Actuator
+    def disarm(_opts), do: :ok
 
     def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+    @impl GenServer
     def init(opts), do: {:ok, opts}
   end
 
   defmodule TestController do
     @moduledoc false
-    use GenServer
+    use BB.Controller
 
     def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+    @impl GenServer
     def init(opts), do: {:ok, opts}
   end
 

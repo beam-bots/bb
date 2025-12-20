@@ -2,12 +2,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule BB.Parameter.Protocol do
+defmodule BB.Bridge do
   @moduledoc """
-  Behaviour for parameter protocol transports (bridges).
+  Behaviour for parameter bridge GenServers in the BB framework.
 
   Bridges provide bidirectional parameter access between BB and remote systems
-  (flight controllers, GCS, web UIs, etc.).
+  (GCS, web UIs, flight controllers).
+
+  Bridges do NOT implement safety callbacks - they handle data transport,
+  not physical hardware control.
 
   ## Two Directions
 
@@ -22,6 +25,53 @@ defmodule BB.Parameter.Protocol do
   - Implement `set_remote/3` to write remote values
   - Implement `subscribe_remote/2` to subscribe to remote changes
   - Publish remote changes via PubSub (path structure up to bridge)
+
+  ## Usage
+
+  The `use BB.Bridge` macro:
+  - Adds `use GenServer` (you must implement GenServer callbacks)
+  - Adds `@behaviour BB.Bridge`
+  - Optionally defines `options_schema/0` if you pass the `:options_schema` option
+
+  ## Options Schema
+
+  If your bridge accepts configuration options, pass them via `:options_schema`:
+
+      defmodule MyMavlinkBridge do
+        use BB.Bridge,
+          options_schema: [
+            port: [type: :string, required: true, doc: "Serial port path"],
+            baud_rate: [type: :pos_integer, default: 57600, doc: "Baud rate"]
+          ]
+
+        @impl BB.Bridge
+        def handle_change(_robot, changed, state) do
+          send_to_gcs(state.conn, changed)
+          {:ok, state}
+        end
+
+        # ... other BB.Bridge callbacks
+      end
+
+  For bridges that don't need configuration, omit `:options_schema`:
+
+      defmodule SimpleBridge do
+        use BB.Bridge
+
+        # Must be used as bare module in DSL: bridge :simple, SimpleBridge
+      end
+
+  ## DSL Usage
+
+      parameters do
+        bridge :mavlink, {MyMavlinkBridge, port: "/dev/ttyACM0", baud_rate: 115200}
+        bridge :phoenix, {PhoenixBridge, url: "ws://gcs.local/socket"}
+      end
+
+  ## Auto-injected Options
+
+  The `:bb` option is automatically provided by the supervisor and should
+  NOT be included in your `options_schema`. It contains `%{robot: module, path: [atom]}`.
 
   ## IEx Usage
 
@@ -48,8 +98,7 @@ defmodule BB.Parameter.Protocol do
 
   ```elixir
   defmodule MyMavlinkBridge do
-    use GenServer
-    @behaviour BB.Parameter.Protocol
+    use BB.Bridge
 
     # Define a payload type for remote param change messages
     defmodule ParamValue do
@@ -69,14 +118,14 @@ defmodule BB.Parameter.Protocol do
     end
 
     # Outbound: local param changed, notify remote
-    @impl BB.Parameter.Protocol
+    @impl BB.Bridge
     def handle_change(_robot, changed, state) do
       send_param_to_gcs(state.conn, changed)
       {:ok, state}
     end
 
     # Inbound: list remote params
-    @impl BB.Parameter.Protocol
+    @impl BB.Bridge
     def list_remote(state) do
       # Return params with path for PubSub subscriptions
       params = Enum.map(fetch_all_params_from_fc(state.conn), fn {id, value} ->
@@ -86,21 +135,21 @@ defmodule BB.Parameter.Protocol do
     end
 
     # Inbound: get remote param
-    @impl BB.Parameter.Protocol
+    @impl BB.Bridge
     def get_remote(param_id, state) do
       value = fetch_param_from_fc(state.conn, param_id)
       {:ok, value, state}
     end
 
     # Inbound: set remote param
-    @impl BB.Parameter.Protocol
+    @impl BB.Bridge
     def set_remote(param_id, value, state) do
       :ok = send_param_set_to_fc(state.conn, param_id, value)
       {:ok, state}
     end
 
     # Inbound: subscribe to remote param changes
-    @impl BB.Parameter.Protocol
+    @impl BB.Bridge
     def subscribe_remote(param_id, state) do
       {:ok, %{state | subscriptions: MapSet.put(state.subscriptions, param_id)}}
     end
@@ -136,6 +185,19 @@ defmodule BB.Parameter.Protocol do
           doc: String.t() | nil,
           path: [atom()] | nil
         }
+
+  # ==========================================================================
+  # Configuration
+  # ==========================================================================
+
+  @doc """
+  Returns the options schema for this bridge.
+
+  The schema should NOT include the `:bb` option - it is auto-injected.
+  If this callback is not implemented, the module cannot accept options
+  in the DSL (must be used as a bare module).
+  """
+  @callback options_schema() :: Spark.Options.t()
 
   # ==========================================================================
   # Outbound: local → remote
@@ -179,5 +241,34 @@ defmodule BB.Parameter.Protocol do
   """
   @callback subscribe_remote(param_id, state) :: {:ok, state} | {:error, term(), state}
 
-  @optional_callbacks [list_remote: 1, get_remote: 2, set_remote: 3, subscribe_remote: 2]
+  @optional_callbacks [
+    options_schema: 0,
+    list_remote: 1,
+    get_remote: 2,
+    set_remote: 3,
+    subscribe_remote: 2
+  ]
+
+  @doc false
+  defmacro __using__(opts) do
+    schema_opts = opts[:options_schema]
+
+    quote do
+      use GenServer
+      @behaviour BB.Bridge
+
+      unquote(
+        if schema_opts do
+          quote do
+            @__bb_options_schema Spark.Options.new!(unquote(schema_opts))
+
+            @impl BB.Bridge
+            def options_schema, do: @__bb_options_schema
+
+            defoverridable options_schema: 0
+          end
+        end
+      )
+    end
+  end
 end
