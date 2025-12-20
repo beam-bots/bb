@@ -8,12 +8,18 @@ defmodule BB.ControllerTest do
   alias BB.Process, as: BBProcess
 
   defmodule TestGenServer do
-    use GenServer
+    use BB.Controller,
+      options_schema: [
+        max_accel: [type: :float, required: false],
+        value: [type: :integer, required: false]
+      ]
 
+    @impl GenServer
     def init(opts) do
       {:ok, opts}
     end
 
+    @impl GenServer
     def handle_call(:get_state, _from, state) do
       {:reply, state, state}
     end

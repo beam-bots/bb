@@ -228,7 +228,8 @@ defmodule BB.Dsl do
         doc: "A unique name for the sensor"
       ],
       child_spec: [
-        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
+        type:
+          {:or, [{:behaviour, BB.Sensor}, {:tuple, [{:behaviour, BB.Sensor}, :keyword_list]}]},
         required: true,
         doc:
           "The child specification for the sensor process. Either a module or `{module, keyword_list}`"
@@ -252,7 +253,8 @@ defmodule BB.Dsl do
         doc: "A unique name for the actuator"
       ],
       child_spec: [
-        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
+        type:
+          {:or, [{:behaviour, BB.Actuator}, {:tuple, [{:behaviour, BB.Actuator}, :keyword_list]}]},
         required: true,
         doc:
           "The child specification for the actuator process. Either a module or `{module, keyword_list}`"
@@ -670,7 +672,9 @@ defmodule BB.Dsl do
         doc: "A unique name for the controller"
       ],
       child_spec: [
-        type: {:or, [:module, {:tuple, [:module, :keyword_list]}]},
+        type:
+          {:or,
+           [{:behaviour, BB.Controller}, {:tuple, [{:behaviour, BB.Controller}, :keyword_list]}]},
         required: true,
         doc:
           "The child specification for the controller process. Either a module or `{module, keyword_list}`"
@@ -804,7 +808,7 @@ defmodule BB.Dsl do
     A parameter protocol bridge for remote access.
 
     Bridges expose robot parameters to remote clients (GCS, web UI, etc.)
-    and receive parameter updates from them. They implement `BB.Parameter.Protocol`.
+    and receive parameter updates from them. They implement `BB.Bridge`.
 
     ## Example
 
@@ -824,11 +828,7 @@ defmodule BB.Dsl do
       ],
       child_spec: [
         type:
-          {:or,
-           [
-             {:behaviour, BB.Parameter.Protocol},
-             {:tuple, [{:behaviour, BB.Parameter.Protocol}, :keyword_list]}
-           ]},
+          {:or, [{:behaviour, BB.Bridge}, {:tuple, [{:behaviour, BB.Bridge}, :keyword_list]}]},
         required: true,
         doc:
           "The child specification for the bridge process. Either a module or `{module, keyword_list}`"
@@ -878,5 +878,8 @@ defmodule BB.Dsl do
       __MODULE__.RobotTransformer,
       __MODULE__.CommandTransformer,
       __MODULE__.ParameterTransformer
+    ],
+    verifiers: [
+      __MODULE__.Verifiers.ValidateChildSpecs
     ]
 end

@@ -1354,7 +1354,7 @@ bridge name, child_spec
 A parameter protocol bridge for remote access.
 
 Bridges expose robot parameters to remote clients (GCS, web UI, etc.)
-and receive parameter updates from them. They implement `BB.Parameter.Protocol`.
+and receive parameter updates from them. They implement `BB.Bridge`.
 
 #### Example
 

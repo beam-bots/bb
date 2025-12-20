@@ -4,12 +4,91 @@
 
 defmodule BB.Actuator do
   @moduledoc """
-  Interface for sending commands to actuators.
+  Behaviour and API for actuator GenServers in the BB framework.
+
+  This module serves two purposes:
+
+  1. **Behaviour** - Defines callbacks for actuator implementations
+  2. **API** - Provides functions for sending commands to actuators
+
+  ## Behaviour
+
+  Actuators receive position/velocity/effort commands and drive hardware.
+  They must implement the `disarm/1` callback for safety.
+
+  ## Usage
+
+  The `use BB.Actuator` macro:
+  - Adds `use GenServer` (you must implement GenServer callbacks)
+  - Adds `@behaviour BB.Actuator`
+  - Optionally defines `options_schema/0` if you pass the `:options_schema` option
+
+  ### Required Callbacks
+
+  - `disarm/1` - Called when the robot is disarmed or crashes. Must work without
+    GenServer state (the process may have crashed).
+
+  ### Options Schema
+
+  If your actuator accepts configuration options, pass them via `:options_schema`:
+
+      defmodule MyServoActuator do
+        use BB.Actuator,
+          options_schema: [
+            channel: [type: {:in, 0..15}, required: true, doc: "PWM channel"],
+            controller: [type: :atom, required: true, doc: "Controller name"]
+          ]
+
+        @impl BB.Actuator
+        def disarm(opts) do
+          # Make hardware safe - called without GenServer state
+          MyHardware.disable(opts[:controller], opts[:channel])
+          :ok
+        end
+
+        @impl GenServer
+        def init(opts) do
+          channel = Keyword.fetch!(opts, :channel)
+          bb = Keyword.fetch!(opts, :bb)
+
+          BB.Safety.register(__MODULE__,
+            robot: bb.robot,
+            path: bb.path,
+            opts: [channel: channel, controller: opts[:controller]]
+          )
+
+          {:ok, %{channel: channel, bb: bb}}
+        end
+      end
+
+  For actuators that don't need configuration, omit `:options_schema`:
+
+      defmodule SimpleActuator do
+        use BB.Actuator
+
+        # Must be used as bare module in DSL: actuator :motor, SimpleActuator
+
+        @impl BB.Actuator
+        def disarm(_opts), do: :ok
+
+        @impl GenServer
+        def init(opts) do
+          bb = Keyword.fetch!(opts, :bb)
+          {:ok, %{bb: bb}}
+        end
+      end
+
+  ### Auto-injected Options
+
+  The `:bb` option is automatically provided by the supervisor and should
+  NOT be included in your `options_schema`. It contains `%{robot: module, path: [atom]}`.
+
+  ## API
 
   Supports both pubsub delivery (for orchestration, logging, replay) and
   direct GenServer delivery (for time-critical control paths).
 
-  ## Delivery Methods
+  ### Delivery Methods
 
   - **Pubsub** (`set_position/4`, etc.) - Commands published to `[:actuator | path]`.
     Enables logging, replay, and multi-subscriber patterns. Actuators receive
@@ -21,7 +100,7 @@ defmodule BB.Actuator do
   - **Synchronous** (`set_position_sync/5`, etc.) - Commands sent via `BB.Process.call`.
     Returns acknowledgement or error. Actuators respond via `handle_call/3`.
 
-  ## Examples
+  ### Examples
 
       # Pubsub delivery (for kinematics/orchestration)
       BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :servo], 1.57)
@@ -32,6 +111,56 @@ defmodule BB.Actuator do
       # Synchronous with acknowledgement
       {:ok, :accepted} = BB.Actuator.set_position_sync(MyRobot, :shoulder_servo, 1.57)
   """
+
+  # ----------------------------------------------------------------------------
+  # Behaviour
+  # ----------------------------------------------------------------------------
+
+  @doc """
+  Returns the options schema for this actuator.
+
+  The schema should NOT include the `:bb` option - it is auto-injected.
+  If this callback is not implemented, the module cannot accept options
+  in the DSL (must be used as a bare module).
+  """
+  @callback options_schema() :: Spark.Options.t()
+
+  @doc """
+  Make the hardware safe.
+
+  Called with the opts provided at registration. Must work without GenServer state.
+  This callback is required for actuators since they control physical hardware.
+  """
+  @callback disarm(opts :: keyword()) :: :ok | {:error, term()}
+
+  @optional_callbacks [options_schema: 0]
+
+  @doc false
+  defmacro __using__(opts) do
+    schema_opts = opts[:options_schema]
+
+    quote do
+      use GenServer
+      @behaviour BB.Actuator
+
+      unquote(
+        if schema_opts do
+          quote do
+            @__bb_options_schema Spark.Options.new!(unquote(schema_opts))
+
+            @impl BB.Actuator
+            def options_schema, do: @__bb_options_schema
+
+            defoverridable options_schema: 0
+          end
+        end
+      )
+    end
+  end
+
+  # ----------------------------------------------------------------------------
+  # API
+  # ----------------------------------------------------------------------------
 
   alias BB.Message
   alias BB.Message.Actuator.Command

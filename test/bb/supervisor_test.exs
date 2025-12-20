@@ -6,13 +6,38 @@ defmodule BB.SupervisorTest do
   use ExUnit.Case, async: true
   alias BB.Process, as: BBProcess
 
-  defmodule TestGenServer do
-    use GenServer
+  defmodule TestSensor do
+    @moduledoc """
+    Test sensor GenServer for supervisor tests.
+    """
+    use BB.Sensor, options_schema: [frequency: [type: :pos_integer, required: false]]
 
+    @impl GenServer
     def init(opts) do
       {:ok, opts}
     end
 
+    @impl GenServer
+    def handle_call(:get_state, _from, state) do
+      {:reply, state, state}
+    end
+  end
+
+  defmodule TestActuator do
+    @moduledoc """
+    Test actuator GenServer for supervisor tests.
+    """
+    use BB.Actuator, options_schema: [pwm_pin: [type: :pos_integer, required: false]]
+
+    @impl BB.Actuator
+    def disarm(_opts), do: :ok
+
+    @impl GenServer
+    def init(opts) do
+      {:ok, opts}
+    end
+
+    @impl GenServer
     def handle_call(:get_state, _from, state) do
       {:reply, state, state}
     end
@@ -57,17 +82,17 @@ defmodule BB.SupervisorTest do
       use BB
 
       sensors do
-        sensor :camera, BB.SupervisorTest.TestGenServer
+        sensor :camera, BB.SupervisorTest.TestSensor
       end
 
       topology do
         link :base_link do
-          sensor :imu, {BB.SupervisorTest.TestGenServer, frequency: 100}
+          sensor :imu, {BB.SupervisorTest.TestSensor, frequency: 100}
 
           joint :shoulder do
             type :revolute
 
-            sensor :encoder, BB.SupervisorTest.TestGenServer
+            sensor :encoder, BB.SupervisorTest.TestSensor
 
             limit do
               effort(~u(10 newton_meter))
@@ -115,8 +140,8 @@ defmodule BB.SupervisorTest do
           joint :shoulder do
             type :revolute
 
-            actuator :motor, {BB.SupervisorTest.TestGenServer, pwm_pin: 12}
-            actuator :brake, BB.SupervisorTest.TestGenServer
+            actuator :motor, {BB.SupervisorTest.TestActuator, pwm_pin: 12}
+            actuator :brake, BB.SupervisorTest.TestActuator
 
             limit do
               effort(~u(10 newton_meter))
@@ -160,7 +185,7 @@ defmodule BB.SupervisorTest do
         link :base do
           joint :shoulder do
             type :revolute
-            actuator :shoulder_motor, BB.SupervisorTest.TestGenServer
+            actuator :shoulder_motor, BB.SupervisorTest.TestActuator
 
             limit do
               effort(~u(10 newton_meter))
@@ -170,7 +195,7 @@ defmodule BB.SupervisorTest do
             link :upper_arm do
               joint :elbow do
                 type :revolute
-                actuator :elbow_motor, BB.SupervisorTest.TestGenServer
+                actuator :elbow_motor, BB.SupervisorTest.TestActuator
 
                 limit do
                   effort(~u(5 newton_meter))
@@ -180,7 +205,7 @@ defmodule BB.SupervisorTest do
                 link :forearm do
                   joint :wrist do
                     type :revolute
-                    actuator :wrist_motor, BB.SupervisorTest.TestGenServer
+                    actuator :wrist_motor, BB.SupervisorTest.TestActuator
 
                     limit do
                       effort(~u(2 newton_meter))
@@ -227,7 +252,7 @@ defmodule BB.SupervisorTest do
 
       topology do
         link :base do
-          sensor :test_sensor, BB.SupervisorTest.TestGenServer
+          sensor :test_sensor, BB.SupervisorTest.TestSensor
         end
       end
     end

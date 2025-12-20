@@ -4,7 +4,7 @@
 
 defmodule BB.Test.ParameterBridge do
   @moduledoc """
-  Reference implementation of `BB.Parameter.Protocol` for testing.
+  Reference implementation of `BB.Bridge` for testing.
 
   Records all calls for test assertions and provides controllable responses.
 
@@ -26,8 +26,7 @@ defmodule BB.Test.ParameterBridge do
       assert_receive {:bridge_change, %BB.Parameter.Changed{}}
   """
 
-  use GenServer
-  @behaviour BB.Parameter.Protocol
+  use BB.Bridge
 
   defmodule RemoteParamValue do
     @moduledoc false
@@ -40,8 +39,8 @@ defmodule BB.Test.ParameterBridge do
           robot: module(),
           test_pid: pid() | nil,
           calls: [{atom(), list()}],
-          remote_params: %{BB.Parameter.Protocol.param_id() => term()},
-          subscriptions: MapSet.t(BB.Parameter.Protocol.param_id())
+          remote_params: %{BB.Bridge.param_id() => term()},
+          subscriptions: MapSet.t(BB.Bridge.param_id())
         }
 
   # Client API
@@ -90,9 +89,9 @@ defmodule BB.Test.ParameterBridge do
     GenServer.call(pid, {:simulate_remote_change, param_id, value})
   end
 
-  # BB.Parameter.Protocol callbacks
+  # BB.Bridge callbacks
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def handle_change(_robot, changed, state) do
     state = record_call(state, :handle_change, [changed])
 
@@ -103,7 +102,7 @@ defmodule BB.Test.ParameterBridge do
     {:ok, state}
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def list_remote(state) do
     params =
       Enum.map(state.remote_params, fn {id, value} ->
@@ -114,7 +113,7 @@ defmodule BB.Test.ParameterBridge do
     {:ok, params, state}
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def get_remote(param_id, state) do
     case Map.fetch(state.remote_params, param_id) do
       {:ok, value} -> {:ok, value, state}
@@ -122,13 +121,13 @@ defmodule BB.Test.ParameterBridge do
     end
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def set_remote(param_id, value, state) do
     state = %{state | remote_params: Map.put(state.remote_params, param_id, value)}
     {:ok, state}
   end
 
-  @impl BB.Parameter.Protocol
+  @impl BB.Bridge
   def subscribe_remote(param_id, state) do
     state = %{state | subscriptions: MapSet.put(state.subscriptions, param_id)}
     {:ok, state}

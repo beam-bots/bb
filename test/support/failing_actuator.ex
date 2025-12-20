@@ -4,10 +4,9 @@
 
 defmodule BB.Test.FailingActuator do
   @moduledoc false
-  use GenServer
-  @behaviour BB.Safety
+  use BB.Actuator, options_schema: [fail_mode: [type: :atom, required: false]]
 
-  @impl BB.Safety
+  @impl BB.Actuator
   def disarm(opts) do
     case opts[:fail_mode] do
       :error -> {:error, :hardware_failure}
