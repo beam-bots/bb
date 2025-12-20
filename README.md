@@ -104,10 +104,18 @@ The [DSL Reference](https://hexdocs.pm/bb/dsl-bb.html) documents all available o
 
 ## Status
 
-Core functionality is implemented. Planned additions:
+Core functionality is implemented. Companion packages:
+
+- [`bb_kino`](https://github.com/beam-bots/bb_kino) - Livebook widgets for robot control and visualisation
+- [`bb_liveview`](https://github.com/beam-bots/bb_liveview) - Phoenix LiveView dashboard
+- [`bb_ik_fabrik`](https://github.com/beam-bots/bb_ik_fabrik) - FABRIK inverse kinematics solver
+- [`bb_servo_pca9685`](https://github.com/beam-bots/bb_servo_pca9685) - PCA9685 PWM servo driver (I2C, 16-channel)
+- [`bb_servo_pigpio`](https://github.com/beam-bots/bb_servo_pigpio) - pigpio servo driver (Raspberry Pi GPIO)
+- [`bb_servo_robotis`](https://github.com/beam-bots/bb_servo_robotis) - Robotis/Dynamixel servo driver
+
+Planned:
 
 - `bb_sitl` - simulation integration (Gazebo, etc.)
-- `bb_rc_servo` - PWM-based RC servo driver
 - `bb_mavlink` - MAVLink protocol bridge
 - `bb_crossfire` - Crossfire RC bridge
 
