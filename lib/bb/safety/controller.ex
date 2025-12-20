@@ -34,7 +34,9 @@ defmodule BB.Safety.Controller do
   use GenServer
   require Logger
 
+  alias BB.Dsl.Info
   alias BB.{Message, PubSub}
+  alias BB.Safety.HardwareError
   alias BB.StateMachine.Transition
 
   @robots_table Module.concat(__MODULE__, Robots)
@@ -193,6 +195,17 @@ defmodule BB.Safety.Controller do
   @spec force_disarm(module()) :: :ok | {:error, :not_in_error | :not_registered}
   def force_disarm(robot_module), do: GenServer.call(__MODULE__, {:force_disarm, robot_module})
 
+  @doc """
+  Report a hardware error from a component.
+
+  Publishes a HardwareError message and optionally triggers disarm based on
+  the robot's `auto_disarm_on_error` setting.
+  """
+  @spec report_error(module(), [atom()], term()) :: :ok
+  def report_error(robot_module, path, error) do
+    GenServer.cast(__MODULE__, {:report_error, robot_module, path, error})
+  end
+
   # --- GenServer Callbacks ---
 
   @impl GenServer
@@ -305,6 +318,29 @@ defmodule BB.Safety.Controller do
     ref = Process.monitor(pid)
     # Store mapping: ref -> {robot, pid} for cleanup lookup
     {:noreply, Map.put(state, ref, {robot, pid})}
+  end
+
+  def handle_cast({:report_error, robot_module, path, error}, state) do
+    Logger.warning(
+      "Hardware error reported for #{inspect(robot_module)} at #{inspect(path)}: #{inspect(error)}"
+    )
+
+    # Always publish the error event
+    publish_hardware_error(robot_module, path, error)
+
+    # Check robot's auto_disarm_on_error setting
+    settings = Info.settings(robot_module)
+
+    if settings.auto_disarm_on_error and armed?(robot_module) do
+      Logger.warning(
+        "Auto-disarming #{inspect(robot_module)} due to hardware error (auto_disarm_on_error=true)"
+      )
+
+      # Trigger disarm - this is async so we use call to ensure it completes
+      spawn(fn -> disarm(robot_module) end)
+    end
+
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -432,5 +468,10 @@ defmodule BB.Safety.Controller do
   defp publish_transition(robot_module, from, to) do
     message = Message.new!(Transition, :state_machine, from: from, to: to)
     PubSub.publish(robot_module, [:state_machine], message)
+  end
+
+  defp publish_hardware_error(robot_module, path, error) do
+    message = Message.new!(HardwareError, :safety, path: path, error: error)
+    PubSub.publish(robot_module, [:safety, :error], message)
   end
 end

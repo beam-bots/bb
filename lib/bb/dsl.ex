@@ -646,6 +646,13 @@ defmodule BB.Dsl do
            ]},
         doc: "Optional parameter persistence backend. Use a module or `{Module, opts}` tuple.",
         required: false
+      ],
+      auto_disarm_on_error: [
+        type: :boolean,
+        doc:
+          "Automatically disarm the robot when a hardware error is reported. Defaults to true.",
+        required: false,
+        default: true
       ]
     ]
   }

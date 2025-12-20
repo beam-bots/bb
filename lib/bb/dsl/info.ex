@@ -17,7 +17,8 @@ defmodule BB.Dsl.Info do
           registry_module: module,
           registry_options: keyword,
           supervisor_module: module,
-          parameter_store: module | {module, keyword} | nil
+          parameter_store: module | {module, keyword} | nil,
+          auto_disarm_on_error: boolean
         }
   def settings(robot_module) do
     registry_options =
@@ -29,7 +30,9 @@ defmodule BB.Dsl.Info do
       registry_options: registry_options,
       supervisor_module:
         Extension.get_opt(robot_module, [:settings], :supervisor_module, Supervisor),
-      parameter_store: Extension.get_opt(robot_module, [:settings], :parameter_store)
+      parameter_store: Extension.get_opt(robot_module, [:settings], :parameter_store),
+      auto_disarm_on_error:
+        Extension.get_opt(robot_module, [:settings], :auto_disarm_on_error, true)
     }
   end
 end
