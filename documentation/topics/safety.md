@@ -91,6 +91,125 @@ end
 - **Protected state changes**: Arm/disarm state changes go through the GenServer
   to ensure callbacks are invoked and events are published.
 
+## Hardware Error Reporting
+
+Controllers and actuators can report hardware errors using `BB.Safety.report_error/3`.
+By default, this automatically disarms the robot - a safe default for most applications.
+
+### Default Behaviour (Auto-Disarm)
+
+When a hardware error is reported:
+
+1. A `BB.Safety.HardwareError` message is published to `[:safety, :error]`
+2. If `auto_disarm_on_error` is `true` (default) and the robot is armed, it is automatically disarmed
+3. The error is logged for debugging
+
+```elixir
+# In a controller detecting a hardware fault:
+BB.Safety.report_error(MyRobot, [:dynamixel, :servo_1], {:overheating, 85.0})
+```
+
+### Custom Error Handling
+
+For applications that need more nuanced error handling, disable auto-disarm and
+handle errors yourself:
+
+```elixir
+defmodule MyRobot do
+  use BB
+
+  settings do
+    auto_disarm_on_error false
+  end
+
+  # ... rest of robot definition
+end
+```
+
+Then subscribe to error events and implement your own logic:
+
+```elixir
+defmodule MyRobot.ErrorHandler do
+  use GenServer
+
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  def init(_opts) do
+    BB.subscribe(MyRobot, [:safety, :error])
+    {:ok, %{}}
+  end
+
+  def handle_info({:bb, [:safety, :error], message}, state) do
+    %{payload: %BB.Safety.HardwareError{path: path, error: error}} = message
+
+    case categorise_error(error) do
+      :critical ->
+        # Critical errors still trigger disarm
+        BB.Safety.disarm(MyRobot)
+
+      :warning ->
+        # Warnings are logged but operation continues
+        Logger.warning("Hardware warning at #{inspect(path)}: #{inspect(error)}")
+
+      :transient ->
+        # Transient errors are ignored (e.g., brief communication glitches)
+        :ok
+    end
+
+    {:noreply, state}
+  end
+
+  defp categorise_error({:hardware_error, flags}) when Bitwise.band(flags, 0x04) != 0 do
+    :critical  # Overheating
+  end
+
+  defp categorise_error({:hardware_error, _flags}) do
+    :warning
+  end
+
+  defp categorise_error(_) do
+    :transient
+  end
+end
+```
+
+### Implementing Error Reporting in Controllers
+
+If you're writing a controller that monitors hardware for errors, call
+`BB.Safety.report_error/3` when you detect a problem:
+
+```elixir
+defmodule MyController do
+  use GenServer
+  use BB.Controller
+
+  # ... init and other callbacks ...
+
+  def handle_info(:poll_status, state) do
+    case read_hardware_status(state.device) do
+      {:ok, status} when status.error_flags != 0 ->
+        # Report the error - safety system handles the rest
+        BB.Safety.report_error(
+          state.robot,
+          state.path,
+          {:hardware_error, status.error_flags}
+        )
+        {:noreply, state}
+
+      {:ok, _status} ->
+        {:noreply, state}
+
+      {:error, reason} ->
+        # Communication errors might also warrant reporting
+        BB.Safety.report_error(state.robot, state.path, {:comm_error, reason})
+        {:noreply, state}
+    end
+  end
+end
+```
+
 ## Important Limitations
 
 ### BEAM is Soft Real-Time
@@ -234,3 +353,5 @@ component.
 | Do disarm callbacks run concurrently? | Yes, with 5 second timeout |
 | Can commands execute while disarming? | No, rejected with `:disarming` error |
 | Are robots disarmed on shutdown? | Yes, best-effort during controller terminate |
+| What happens when a hardware error is reported? | Auto-disarm (default) or custom handling |
+| How do I disable auto-disarm on error? | Set `auto_disarm_on_error false` in settings |

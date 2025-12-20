@@ -9,6 +9,7 @@ spark_locals_without_parens = [
   alpha: 1,
   argument: 2,
   argument: 3,
+  auto_disarm_on_error: 1,
   axis: 0,
   axis: 1,
   blue: 1,

@@ -263,4 +263,134 @@ defmodule BB.Safety.ControllerTest do
       assert {:unknown, {:timeout, 5000}} in failures
     end
   end
+
+  # Robot with default auto_disarm_on_error (true)
+  defmodule RobotWithAutoDisarm do
+    @moduledoc false
+    use BB
+    import BB.Unit
+
+    topology do
+      link :base do
+        joint :joint1 do
+          type :revolute
+          actuator :servo, BB.Test.MockActuator
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(100 degree_per_second))
+          end
+
+          link :child
+        end
+      end
+    end
+  end
+
+  # Robot with auto_disarm_on_error disabled
+  defmodule RobotWithoutAutoDisarm do
+    @moduledoc false
+    use BB
+    import BB.Unit
+
+    settings do
+      auto_disarm_on_error(false)
+    end
+
+    topology do
+      link :base do
+        joint :joint1 do
+          type :revolute
+          actuator :servo, BB.Test.MockActuator
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(100 degree_per_second))
+          end
+
+          link :child
+        end
+      end
+    end
+  end
+
+  describe "report_error/3" do
+    test "publishes hardware error message" do
+      start_supervised!(RobotWithAutoDisarm)
+
+      BB.PubSub.subscribe(RobotWithAutoDisarm, [:safety, :error])
+
+      BB.Safety.report_error(
+        RobotWithAutoDisarm,
+        [:controller, :servo_1],
+        {:hardware_error, 0x04}
+      )
+
+      assert_receive {:bb, [:safety, :error],
+                      %BB.Message{
+                        payload: %BB.Safety.HardwareError{
+                          path: [:controller, :servo_1],
+                          error: {:hardware_error, 0x04}
+                        }
+                      }}
+    end
+
+    test "auto-disarms when auto_disarm_on_error is true and robot is armed" do
+      start_supervised!(RobotWithAutoDisarm)
+
+      :ok = BB.Safety.arm(RobotWithAutoDisarm)
+      assert BB.Safety.armed?(RobotWithAutoDisarm)
+
+      BB.Safety.report_error(
+        RobotWithAutoDisarm,
+        [:controller, :servo_1],
+        {:hardware_error, 0x04}
+      )
+
+      # Give the async disarm time to complete
+      Process.sleep(100)
+
+      assert BB.Safety.state(RobotWithAutoDisarm) == :disarmed
+    end
+
+    test "does not disarm when robot is already disarmed" do
+      start_supervised!(RobotWithAutoDisarm)
+
+      assert BB.Safety.state(RobotWithAutoDisarm) == :disarmed
+
+      BB.Safety.report_error(
+        RobotWithAutoDisarm,
+        [:controller, :servo_1],
+        {:hardware_error, 0x04}
+      )
+
+      Process.sleep(50)
+
+      assert BB.Safety.state(RobotWithAutoDisarm) == :disarmed
+    end
+
+    test "does not auto-disarm when auto_disarm_on_error is false" do
+      start_supervised!(RobotWithoutAutoDisarm)
+
+      :ok = BB.Safety.arm(RobotWithoutAutoDisarm)
+      assert BB.Safety.armed?(RobotWithoutAutoDisarm)
+
+      BB.PubSub.subscribe(RobotWithoutAutoDisarm, [:safety, :error])
+
+      BB.Safety.report_error(
+        RobotWithoutAutoDisarm,
+        [:controller, :servo_1],
+        {:hardware_error, 0x04}
+      )
+
+      # Should still receive the error message
+      assert_receive {:bb, [:safety, :error], %BB.Message{}}
+
+      # Give async processing time
+      Process.sleep(100)
+
+      # Should still be armed
+      assert BB.Safety.armed?(RobotWithoutAutoDisarm)
+    end
+  end
 end

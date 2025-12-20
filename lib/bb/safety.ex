@@ -157,4 +157,45 @@ defmodule BB.Safety do
       )
   """
   defdelegate register(module, opts), to: BB.Safety.Controller
+
+  @doc """
+  Report a hardware error from a component.
+
+  This function should be called by controllers, actuators, or sensors when
+  they detect a hardware error condition. The behaviour depends on the robot's
+  `auto_disarm_on_error` setting:
+
+  - If `true` (default): The robot is automatically disarmed
+  - If `false`: The error is published but no automatic action is taken
+
+  In both cases, a `BB.Safety.HardwareError` message is published to
+  `[:safety, :error]` for subscribers to handle.
+
+  ## Parameters
+
+  - `robot_module` - The robot module
+  - `path` - Path to the component reporting the error (e.g., `[:dynamixel, :servo_1]`)
+  - `error` - Component-specific error details
+
+  ## Example
+
+      # In a controller detecting servo overheating:
+      BB.Safety.report_error(MyRobot, [:dynamixel, :servo_1], {:hardware_error, 0x04})
+
+  ## Customising Error Handling
+
+  To implement custom error handling instead of auto-disarm:
+
+      defmodule MyRobot do
+        use BB
+
+        settings do
+          auto_disarm_on_error false
+        end
+      end
+
+      # Then subscribe to error events:
+      BB.subscribe(MyRobot, [:safety, :error])
+  """
+  defdelegate report_error(robot_module, path, error), to: BB.Safety.Controller
 end
