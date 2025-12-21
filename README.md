@@ -161,4 +161,4 @@ This project is made possible by the generous support of our sponsors:
 
 - **[Alembic](https://alembic.com.au)** ([@team-alembic](https://github.com/team-alembic)) - Development Support
 - **Frank Hunleth** ([@fhunleth](https://github.com/fhunleth)) - Hardware Donation
-
+- **Pascal Charbonneau** ([@pcharbon70](https://github.com/pcharbon70)) - GitHub Sponsor
