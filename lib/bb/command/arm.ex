@@ -31,7 +31,7 @@ defmodule BB.Command.Arm do
   @impl true
   def handle_command(_goal, context) do
     case BB.Safety.arm(context.robot_module) do
-      :ok -> {:ok, :armed}
+      :ok -> {:ok, :armed, next_state: :idle}
       {:error, reason} -> {:error, reason}
     end
   end

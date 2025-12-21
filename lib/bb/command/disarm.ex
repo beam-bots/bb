@@ -32,7 +32,7 @@ defmodule BB.Command.Disarm do
   @impl true
   def handle_command(_goal, context) do
     case BB.Safety.disarm(context.robot_module) do
-      :ok -> {:ok, :disarmed}
+      :ok -> {:ok, :disarmed, next_state: :disarmed}
       {:error, reason} -> {:error, reason}
     end
   end
