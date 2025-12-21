@@ -458,4 +458,111 @@ defmodule BB.Dsl.ParameterTest do
       assert {:error, _} = Parameter.set(RobotWithUnitParams, [:motion, :max_speed], "fast")
     end
   end
+
+  describe "start_link params" do
+    test "params override defaults" do
+      start_supervised!({RobotWithParameters, params: [motion: [max_speed: 5.0]]})
+
+      assert {:ok, 5.0} = Parameter.get(RobotWithParameters, [:motion, :max_speed])
+      assert {:ok, 0.5} = Parameter.get(RobotWithParameters, [:motion, :acceleration])
+    end
+
+    test "multiple params can be set" do
+      start_supervised!(
+        {RobotWithParameters,
+         params: [motion: [max_speed: 5.0, acceleration: 2.0], debug_mode: true]}
+      )
+
+      assert {:ok, 5.0} = Parameter.get(RobotWithParameters, [:motion, :max_speed])
+      assert {:ok, 2.0} = Parameter.get(RobotWithParameters, [:motion, :acceleration])
+      assert {:ok, true} = Parameter.get(RobotWithParameters, [:debug_mode])
+    end
+
+    test "nested group params work" do
+      start_supervised!({RobotWithNestedGroups, params: [controller: [pid: [kp: 2.5, ki: 0.2]]]})
+
+      assert {:ok, 2.5} = Parameter.get(RobotWithNestedGroups, [:controller, :pid, :kp])
+      assert {:ok, 0.2} = Parameter.get(RobotWithNestedGroups, [:controller, :pid, :ki])
+      assert {:ok, 0.01} = Parameter.get(RobotWithNestedGroups, [:controller, :pid, :kd])
+    end
+
+    test "empty params is valid" do
+      start_supervised!({RobotWithParameters, params: []})
+
+      assert {:ok, 1.0} = Parameter.get(RobotWithParameters, [:motion, :max_speed])
+    end
+
+    test "unknown params cause startup failure" do
+      assert {:error, {{:shutdown, {:failed_to_start_child, _, reason}}, _}} =
+               start_supervised({RobotWithParameters, params: [unknown_param: 42]})
+
+      assert %Spark.Options.ValidationError{} = reason
+    end
+
+    test "unknown nested params cause startup failure" do
+      assert {:error, {{:shutdown, {:failed_to_start_child, _, reason}}, _}} =
+               start_supervised({RobotWithParameters, params: [motion: [unknown: 1.0]]})
+
+      assert %Spark.Options.ValidationError{} = reason
+    end
+
+    test "type mismatch causes startup failure" do
+      assert {:error, {{:shutdown, {:failed_to_start_child, _, reason}}, _}} =
+               start_supervised(
+                 {RobotWithParameters, params: [motion: [max_speed: "not a float"]]}
+               )
+
+      assert %Spark.Options.ValidationError{} = reason
+    end
+
+    test "startup params override defaults when setting later" do
+      start_supervised!({RobotWithParameters, params: [motion: [max_speed: 7.0]]})
+
+      BB.PubSub.subscribe(RobotWithParameters, [:param, :motion, :max_speed])
+
+      Parameter.set(RobotWithParameters, [:motion, :max_speed], 8.0)
+
+      assert_receive {:bb, [:param, :motion, :max_speed],
+                      %BB.Message{
+                        payload: %ParameterChanged{
+                          old_value: 7.0,
+                          new_value: 8.0,
+                          source: :local
+                        }
+                      }}
+    end
+
+    test "robot with no parameters accepts empty params" do
+      start_supervised!({RobotWithNoParameters, params: []})
+    end
+
+    test "component params can be set at startup" do
+      start_supervised!(
+        {RobotWithComponentParams,
+         params: [
+           controller: [pid_ctrl: [kp: 3.0]],
+           sensor: [gps: [update_rate: 20]]
+         ]}
+      )
+
+      assert {:ok, 3.0} = Parameter.get(RobotWithComponentParams, [:controller, :pid_ctrl, :kp])
+      assert {:ok, 20} = Parameter.get(RobotWithComponentParams, [:sensor, :gps, :update_rate])
+    end
+
+    test "unit params can be set at startup" do
+      start_supervised!(
+        {RobotWithUnitParams, params: [motion: [max_speed: ~u(3.0 meter_per_second)]]}
+      )
+
+      assert {:ok, value} = Parameter.get(RobotWithUnitParams, [:motion, :max_speed])
+      assert Cldr.Unit.compare(value, ~u(3.0 meter_per_second)) == :eq
+    end
+
+    test "unit params with incompatible units cause startup failure" do
+      assert {:error, {{:shutdown, {:failed_to_start_child, _, reason}}, _}} =
+               start_supervised({RobotWithUnitParams, params: [motion: [max_speed: ~u(1 meter)]]})
+
+      assert %Spark.Options.ValidationError{} = reason
+    end
+  end
 end

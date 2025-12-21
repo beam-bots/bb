@@ -45,6 +45,7 @@ defmodule BB.Robot.Runtime do
   alias BB.{Message, PubSub}
   alias BB.Message.Sensor.JointState
   alias BB.Parameter.Changed, as: ParameterChanged
+  alias BB.Parameter.Schema, as: ParameterSchema
   alias BB.Robot.State, as: RobotState
   alias BB.Safety.Controller, as: SafetyController
   alias BB.StateMachine.Transition
@@ -305,7 +306,7 @@ defmodule BB.Robot.Runtime do
   end
 
   @impl GenServer
-  def init({robot_module, _opts}) do
+  def init({robot_module, opts}) do
     # Register robot with the safety controller for arm/disarm state management
     :ok = SafetyController.register_robot(robot_module)
 
@@ -345,8 +346,14 @@ defmodule BB.Robot.Runtime do
     # Load and apply persisted values (override defaults)
     state = load_persisted_parameters(state)
 
-    # Schedule safety registration verification after children have started
-    {:ok, state, {:continue, :schedule_safety_verification}}
+    # Apply start_link params (override persisted values)
+    case apply_startup_params(state, opts) do
+      {:ok, state} ->
+        {:ok, state, {:continue, :schedule_safety_verification}}
+
+      {:error, reason} ->
+        {:stop, reason}
+    end
   end
 
   @impl GenServer
@@ -936,6 +943,41 @@ defmodule BB.Robot.Runtime do
   defp apply_default_value(state, {path, value}) do
     RobotState.set_parameter(state.robot_state, path, value)
     publish_parameter_change(state.robot_module, path, nil, value, :init)
+  end
+
+  defp apply_startup_params(state, opts) do
+    case Keyword.fetch(opts, :params) do
+      {:ok, params} when is_list(params) ->
+        validate_and_apply_startup_params(state, params)
+
+      :error ->
+        {:ok, state}
+    end
+  end
+
+  defp validate_and_apply_startup_params(state, params) do
+    robot_module = state.robot_module
+
+    if function_exported?(robot_module, :__bb_parameter_schema__, 0) do
+      schema = ParameterSchema.build_nested_schema(robot_module.__bb_parameter_schema__())
+
+      with {:ok, validated} <- Spark.Options.validate(params, schema) do
+        apply_validated_startup_params(state, validated)
+      end
+    else
+      {:ok, state}
+    end
+  end
+
+  defp apply_validated_startup_params(state, validated) do
+    validated
+    |> ParameterSchema.flatten_params()
+    |> Enum.each(fn {path, value} ->
+      RobotState.set_parameter(state.robot_state, path, value)
+      publish_parameter_change(state.robot_module, path, nil, value, :startup)
+    end)
+
+    {:ok, state}
   end
 
   # Safety registration verification

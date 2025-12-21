@@ -29,7 +29,7 @@ defmodule BB.Parameter.Changed do
         doc: "The new value"
       ],
       source: [
-        type: {:in, [:local, :remote, :init, :persisted]},
+        type: {:in, [:local, :remote, :init, :persisted, :startup]},
         required: false,
         default: :local,
         doc: "The source of the change"
@@ -40,6 +40,6 @@ defmodule BB.Parameter.Changed do
           path: [atom()],
           old_value: term(),
           new_value: term(),
-          source: :local | :remote | :init | :persisted
+          source: :local | :remote | :init | :persisted | :startup
         }
 end
