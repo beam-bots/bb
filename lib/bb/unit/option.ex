@@ -132,9 +132,23 @@ defmodule BB.Unit.Option do
 
       iex> BB.Unit.Option.validate(Cldr.Unit.new!(:meter, 5), eq: Cldr.Unit.new!(:meter, 10))
       {:error, "Expected 5 m to equal 10 m"}
+
+  ParamRef values are accepted and annotated with expected unit type:
+
+      iex> ref = BB.Dsl.ParamRef.param([:motion, :max_speed])
+      iex> {:ok, validated} = BB.Unit.Option.validate(ref, compatible: :meter)
+      iex> validated.expected_unit_type
+      :meter
   """
-  @spec validate(any, Keyword.t()) :: {:ok, Cldr.Unit.t()} | {:error, String.t()}
-  def validate(value, options \\ []) do
+  @spec validate(any, Keyword.t()) ::
+          {:ok, Cldr.Unit.t()} | {:ok, BB.Dsl.ParamRef.t()} | {:error, String.t()}
+  def validate(value, options \\ [])
+
+  def validate(%BB.Dsl.ParamRef{} = ref, options) do
+    {:ok, %{ref | expected_unit_type: options[:compatible]}}
+  end
+
+  def validate(value, options) do
     with {:ok, value} <- validate_is_unit(value),
          {:ok, value} <- validate_compatible(value, options[:compatible]),
          {:ok, value} <- validate_min(value, options[:min]),

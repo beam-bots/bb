@@ -11,6 +11,7 @@ defmodule BB.Robot.Builder do
   """
 
   alias BB.Dsl
+  alias BB.Dsl.ParamRef
   alias BB.Robot
   alias BB.Robot.{Joint, Link, Topology, Transform, Units}
 
@@ -28,7 +29,7 @@ defmodule BB.Robot.Builder do
   """
   @spec build_from_dsl(atom(), Dsl.Link.t()) :: Robot.t()
   def build_from_dsl(name, %Dsl.Link{} = root_dsl_link) do
-    {links, joints, sensors, actuators} = collect_all(root_dsl_link)
+    {links, joints, sensors, actuators, param_subscriptions} = collect_all(root_dsl_link)
     topology = build_topology(root_dsl_link.name, links, joints)
 
     %Robot{
@@ -38,7 +39,8 @@ defmodule BB.Robot.Builder do
       joints: joints,
       sensors: sensors,
       actuators: actuators,
-      topology: topology
+      topology: topology,
+      param_subscriptions: param_subscriptions
     }
   end
 
@@ -47,12 +49,13 @@ defmodule BB.Robot.Builder do
       links: %{},
       joints: %{},
       sensors: %{},
-      actuators: %{}
+      actuators: %{},
+      param_subscriptions: %{}
     }
 
     acc = collect_link(root_dsl_link, nil, acc)
 
-    {acc.links, acc.joints, acc.sensors, acc.actuators}
+    {acc.links, acc.joints, acc.sensors, acc.actuators, acc.param_subscriptions}
   end
 
   defp collect_link(%Dsl.Link{} = dsl_link, parent_joint_name, acc) do
@@ -68,13 +71,23 @@ defmodule BB.Robot.Builder do
 
   defp collect_joint(%Dsl.Joint{} = dsl_joint, parent_link_name, acc) do
     child_link_name = dsl_joint.link.name
-    joint = convert_joint(dsl_joint, parent_link_name, child_link_name)
+    {joint, param_subs} = convert_joint(dsl_joint, parent_link_name, child_link_name)
     acc = put_in(acc.joints[joint.name], joint)
+    acc = merge_param_subscriptions(acc, param_subs)
 
     acc = collect_joint_sensors(dsl_joint.sensors, joint.name, acc)
     acc = collect_actuators(dsl_joint.actuators, joint.name, acc)
 
     collect_link(dsl_joint.link, joint.name, acc)
+  end
+
+  defp merge_param_subscriptions(acc, new_subs) do
+    merged =
+      Enum.reduce(new_subs, acc.param_subscriptions, fn {path, location}, subs ->
+        Map.update(subs, path, [location], &[location | &1])
+      end)
+
+    %{acc | param_subscriptions: merged}
   end
 
   defp collect_link_sensors(sensors, link_name, acc) do
@@ -110,18 +123,28 @@ defmodule BB.Robot.Builder do
   end
 
   defp convert_joint(%Dsl.Joint{} = dsl_joint, parent_link_name, child_link_name) do
-    %Joint{
-      name: dsl_joint.name,
+    joint_name = dsl_joint.name
+
+    {origin, origin_subs} = convert_origin(dsl_joint.origin, joint_name)
+    {axis, axis_subs} = convert_axis(dsl_joint.axis, joint_name)
+    {limits, limits_subs} = convert_limits(dsl_joint.limit, dsl_joint.type, joint_name)
+    {dynamics, dynamics_subs} = convert_dynamics(dsl_joint.dynamics, dsl_joint.type, joint_name)
+
+    joint = %Joint{
+      name: joint_name,
       type: dsl_joint.type,
       parent_link: parent_link_name,
       child_link: child_link_name,
-      origin: convert_origin(dsl_joint.origin),
-      axis: convert_axis(dsl_joint.axis),
-      limits: convert_limits(dsl_joint.limit, dsl_joint.type),
-      dynamics: convert_dynamics(dsl_joint.dynamics, dsl_joint.type),
+      origin: origin,
+      axis: axis,
+      limits: limits,
+      dynamics: dynamics,
       sensors: Enum.map(dsl_joint.sensors, & &1.name),
       actuators: Enum.map(dsl_joint.actuators, & &1.name)
     }
+
+    param_subs = origin_subs ++ axis_subs ++ limits_subs ++ dynamics_subs
+    {joint, param_subs}
   end
 
   defp convert_mass(nil), do: nil
@@ -153,88 +176,228 @@ defmodule BB.Robot.Builder do
     }
   end
 
-  defp convert_origin(nil), do: nil
+  defp convert_origin(nil, _joint_name), do: {nil, []}
 
-  defp convert_origin(%Dsl.Origin{} = origin) do
-    %{
-      position: {
-        Units.to_meters(origin.x),
-        Units.to_meters(origin.y),
-        Units.to_meters(origin.z)
-      },
-      orientation: {
-        Units.to_radians(origin.roll),
-        Units.to_radians(origin.pitch),
-        Units.to_radians(origin.yaw)
-      }
+  defp convert_origin(%Dsl.Origin{} = origin, joint_name) do
+    {x, x_subs} = convert_value_with_ref(origin.x, &Units.to_meters/1, joint_name, [:origin, :x])
+    {y, y_subs} = convert_value_with_ref(origin.y, &Units.to_meters/1, joint_name, [:origin, :y])
+    {z, z_subs} = convert_value_with_ref(origin.z, &Units.to_meters/1, joint_name, [:origin, :z])
+
+    {roll, roll_subs} =
+      convert_value_with_ref(origin.roll, &Units.to_radians/1, joint_name, [:origin, :roll])
+
+    {pitch, pitch_subs} =
+      convert_value_with_ref(origin.pitch, &Units.to_radians/1, joint_name, [:origin, :pitch])
+
+    {yaw, yaw_subs} =
+      convert_value_with_ref(origin.yaw, &Units.to_radians/1, joint_name, [:origin, :yaw])
+
+    converted = %{
+      position: {x, y, z},
+      orientation: {roll, pitch, yaw}
     }
+
+    subs = x_subs ++ y_subs ++ z_subs ++ roll_subs ++ pitch_subs ++ yaw_subs
+    {converted, subs}
   end
 
-  defp convert_axis(nil), do: nil
-
-  defp convert_axis(%Dsl.Axis{} = axis) do
-    roll = Units.to_radians(axis.roll)
-    pitch = Units.to_radians(axis.pitch)
-    yaw = Units.to_radians(axis.yaw)
-
-    # Build rotation matrix from Euler angles and apply to default Z axis
-    rotation =
-      Transform.rotation_x(roll)
-      |> Transform.compose(Transform.rotation_y(pitch))
-      |> Transform.compose(Transform.rotation_z(yaw))
-
-    Transform.apply_to_point(rotation, {0.0, 0.0, 1.0})
+  defp convert_value_with_ref(%ParamRef{path: path}, _converter, joint_name, field_path) do
+    {nil, [{path, {:joint, joint_name, field_path}}]}
   end
 
-  defp convert_limits(nil, _type), do: nil
-
-  defp convert_limits(%Dsl.Limit{} = limit, type) when type in [:revolute, :continuous] do
-    %{
-      lower: Units.to_radians_or_nil(limit.lower),
-      upper: Units.to_radians_or_nil(limit.upper),
-      velocity: Units.to_radians_per_second(limit.velocity),
-      effort: Units.to_newton_meters(limit.effort)
-    }
+  defp convert_value_with_ref(value, converter, _joint_name, _field_path) do
+    {converter.(value), []}
   end
 
-  defp convert_limits(%Dsl.Limit{} = limit, :prismatic) do
-    %{
-      lower: Units.to_meters_or_nil(limit.lower),
-      upper: Units.to_meters_or_nil(limit.upper),
-      velocity: Units.to_meters_per_second(limit.velocity),
-      effort: Units.to_newton(limit.effort)
-    }
+  defp convert_axis(nil, _joint_name), do: {nil, []}
+
+  defp convert_axis(%Dsl.Axis{} = axis, joint_name) do
+    # Check if any values are ParamRefs - axis computation needs all values
+    has_param_ref =
+      Enum.any?([axis.roll, axis.pitch, axis.yaw], &is_struct(&1, ParamRef))
+
+    if has_param_ref do
+      # Collect subscriptions for param refs, return nil for axis (resolved at runtime)
+      subs = collect_axis_param_refs(axis, joint_name)
+      {nil, subs}
+    else
+      roll = Units.to_radians(axis.roll)
+      pitch = Units.to_radians(axis.pitch)
+      yaw = Units.to_radians(axis.yaw)
+
+      # Build rotation matrix from Euler angles and apply to default Z axis
+      rotation =
+        Transform.rotation_x(roll)
+        |> Transform.compose(Transform.rotation_y(pitch))
+        |> Transform.compose(Transform.rotation_z(yaw))
+
+      axis_vector = Transform.apply_to_point(rotation, {0.0, 0.0, 1.0})
+      {axis_vector, []}
+    end
   end
 
-  defp convert_limits(%Dsl.Limit{} = limit, _type) do
-    %{
-      lower: nil,
-      upper: nil,
-      velocity: Units.to_radians_per_second(limit.velocity),
-      effort: Units.to_newton_meters(limit.effort)
-    }
+  defp collect_axis_param_refs(axis, joint_name) do
+    [:roll, :pitch, :yaw]
+    |> Enum.flat_map(fn field ->
+      case Map.get(axis, field) do
+        %ParamRef{path: path} -> [{path, {:joint, joint_name, [:axis, field]}}]
+        _ -> []
+      end
+    end)
   end
 
-  defp convert_dynamics(nil, _type), do: nil
+  defp convert_limits(nil, _type, _joint_name), do: {nil, []}
 
-  defp convert_dynamics(%Dsl.Dynamics{} = dynamics, type)
+  defp convert_limits(%Dsl.Limit{} = limit, type, joint_name)
        when type in [:revolute, :continuous] do
-    %{
-      damping: Units.to_rotational_damping_or_nil(dynamics.damping),
-      friction: Units.to_newton_meters_or_nil(dynamics.friction)
-    }
+    {lower, lower_subs} =
+      convert_value_with_ref_or_nil(
+        limit.lower,
+        &Units.to_radians_or_nil/1,
+        joint_name,
+        [:limits, :lower]
+      )
+
+    {upper, upper_subs} =
+      convert_value_with_ref_or_nil(
+        limit.upper,
+        &Units.to_radians_or_nil/1,
+        joint_name,
+        [:limits, :upper]
+      )
+
+    {velocity, velocity_subs} =
+      convert_value_with_ref(
+        limit.velocity,
+        &Units.to_radians_per_second/1,
+        joint_name,
+        [:limits, :velocity]
+      )
+
+    {effort, effort_subs} =
+      convert_value_with_ref(
+        limit.effort,
+        &Units.to_newton_meters/1,
+        joint_name,
+        [:limits, :effort]
+      )
+
+    limits = %{lower: lower, upper: upper, velocity: velocity, effort: effort}
+    subs = lower_subs ++ upper_subs ++ velocity_subs ++ effort_subs
+    {limits, subs}
   end
 
-  defp convert_dynamics(%Dsl.Dynamics{} = dynamics, type)
+  defp convert_limits(%Dsl.Limit{} = limit, :prismatic, joint_name) do
+    {lower, lower_subs} =
+      convert_value_with_ref_or_nil(
+        limit.lower,
+        &Units.to_meters_or_nil/1,
+        joint_name,
+        [:limits, :lower]
+      )
+
+    {upper, upper_subs} =
+      convert_value_with_ref_or_nil(
+        limit.upper,
+        &Units.to_meters_or_nil/1,
+        joint_name,
+        [:limits, :upper]
+      )
+
+    {velocity, velocity_subs} =
+      convert_value_with_ref(
+        limit.velocity,
+        &Units.to_meters_per_second/1,
+        joint_name,
+        [:limits, :velocity]
+      )
+
+    {effort, effort_subs} =
+      convert_value_with_ref(limit.effort, &Units.to_newton/1, joint_name, [:limits, :effort])
+
+    limits = %{lower: lower, upper: upper, velocity: velocity, effort: effort}
+    subs = lower_subs ++ upper_subs ++ velocity_subs ++ effort_subs
+    {limits, subs}
+  end
+
+  defp convert_limits(%Dsl.Limit{} = limit, _type, joint_name) do
+    {velocity, velocity_subs} =
+      convert_value_with_ref(
+        limit.velocity,
+        &Units.to_radians_per_second/1,
+        joint_name,
+        [:limits, :velocity]
+      )
+
+    {effort, effort_subs} =
+      convert_value_with_ref(
+        limit.effort,
+        &Units.to_newton_meters/1,
+        joint_name,
+        [:limits, :effort]
+      )
+
+    limits = %{lower: nil, upper: nil, velocity: velocity, effort: effort}
+    subs = velocity_subs ++ effort_subs
+    {limits, subs}
+  end
+
+  defp convert_value_with_ref_or_nil(nil, _converter, _joint_name, _field_path), do: {nil, []}
+
+  defp convert_value_with_ref_or_nil(value, converter, joint_name, field_path) do
+    convert_value_with_ref(value, converter, joint_name, field_path)
+  end
+
+  defp convert_dynamics(nil, _type, _joint_name), do: {nil, []}
+
+  defp convert_dynamics(%Dsl.Dynamics{} = dynamics, type, joint_name)
+       when type in [:revolute, :continuous] do
+    {damping, damping_subs} =
+      convert_value_with_ref_or_nil(
+        dynamics.damping,
+        &Units.to_rotational_damping_or_nil/1,
+        joint_name,
+        [:dynamics, :damping]
+      )
+
+    {friction, friction_subs} =
+      convert_value_with_ref_or_nil(
+        dynamics.friction,
+        &Units.to_newton_meters_or_nil/1,
+        joint_name,
+        [:dynamics, :friction]
+      )
+
+    converted = %{damping: damping, friction: friction}
+    subs = damping_subs ++ friction_subs
+    {converted, subs}
+  end
+
+  defp convert_dynamics(%Dsl.Dynamics{} = dynamics, type, joint_name)
        when type in [:prismatic, :planar] do
-    %{
-      damping: Units.to_linear_damping_or_nil(dynamics.damping),
-      friction: Units.to_newtons_or_nil(dynamics.friction)
-    }
+    {damping, damping_subs} =
+      convert_value_with_ref_or_nil(
+        dynamics.damping,
+        &Units.to_linear_damping_or_nil/1,
+        joint_name,
+        [:dynamics, :damping]
+      )
+
+    {friction, friction_subs} =
+      convert_value_with_ref_or_nil(
+        dynamics.friction,
+        &Units.to_newtons_or_nil/1,
+        joint_name,
+        [:dynamics, :friction]
+      )
+
+    converted = %{damping: damping, friction: friction}
+    subs = damping_subs ++ friction_subs
+    {converted, subs}
   end
 
-  defp convert_dynamics(%Dsl.Dynamics{}, _type) do
-    nil
+  defp convert_dynamics(%Dsl.Dynamics{}, _type, _joint_name) do
+    {nil, []}
   end
 
   defp convert_visual(nil), do: nil

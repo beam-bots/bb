@@ -44,8 +44,11 @@ defmodule BB.Robot do
     :joints,
     :sensors,
     :actuators,
-    :topology
+    :topology,
+    param_subscriptions: %{}
   ]
+
+  @type param_location :: {:joint, atom(), [atom()]}
 
   @type t :: %__MODULE__{
           name: atom(),
@@ -54,7 +57,8 @@ defmodule BB.Robot do
           joints: %{atom() => Joint.t()},
           sensors: %{atom() => sensor_info()},
           actuators: %{atom() => actuator_info()},
-          topology: Topology.t()
+          topology: Topology.t(),
+          param_subscriptions: %{[atom()] => [param_location()]}
         }
 
   @type sensor_info :: %{
