@@ -113,6 +113,7 @@ defmodule BB.MixProject do
       {:ex_cldr_units, "~> 3.0"},
       {:nx, "~> 0.10"},
       {:spark, "~> 2.3"},
+      {:splode, "~> 0.2"},
 
       # dev/test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
