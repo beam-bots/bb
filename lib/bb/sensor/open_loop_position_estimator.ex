@@ -117,7 +117,7 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
     )
   end
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts) do
     {:ok, state} = build_state(opts)
     BB.subscribe(state.bb.robot, [:actuator | state.actuator_path])
@@ -171,7 +171,7 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
     Enum.reverse([actuator_name, joint_name | rest])
   end
 
-  @impl GenServer
+  @impl BB.Sensor
   def handle_info(%Message{payload: %BeginMotion{} = cmd}, state) do
     state = cancel_tick(state)
     now = System.monotonic_time(:millisecond)

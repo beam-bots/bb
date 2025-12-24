@@ -13,11 +13,14 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
     the module must define `options_schema/0`
   - If `options_schema/0` is defined, the provided options are validated
     against that schema
+
+  Options containing `param()` references are skipped from validation as they
+  will be resolved at runtime.
   """
 
   use Spark.Dsl.Verifier
 
-  alias BB.Dsl.{Actuator, Bridge, Controller, Joint, Link, Sensor}
+  alias BB.Dsl.{Actuator, Bridge, Controller, Joint, Link, ParamRef, Sensor}
   alias Spark.Dsl.Verifier
   alias Spark.Error.DslError
 
@@ -186,8 +189,9 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
 
       has_schema? ->
         schema = module.options_schema()
+        opts_without_param_refs = filter_param_refs(opts)
 
-        case Spark.Options.validate(opts, schema) do
+        case Spark.Options.validate(opts_without_param_refs, schema) do
           {:ok, _validated} ->
             :ok
 
@@ -210,6 +214,10 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
       true ->
         :ok
     end
+  end
+
+  defp filter_param_refs(opts) do
+    Enum.reject(opts, fn {_key, value} -> is_struct(value, ParamRef) end)
   end
 
   defp format_schema(%Spark.Options{schema: schema}) do

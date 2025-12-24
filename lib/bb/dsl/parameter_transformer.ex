@@ -6,22 +6,15 @@ defmodule BB.Dsl.ParameterTransformer do
   @moduledoc """
   Generates parameter schema and default values from DSL definitions.
 
-  This transformer processes the `parameters` section and component entities,
-  generating:
+  This transformer processes the `parameters` section, generating:
   - `__bb_parameter_schema__/0` - Returns the Spark.Options schema for validation
   - `__bb_default_parameters__/0` - Returns default values as `{path, value}` tuples
-
-  Parameters are collected from:
-  - The `parameters` section (groups and params)
-  - Controllers in the `controllers` section
-  - Sensors in the `sensors` section
-  - Sensors and actuators within the topology
 
   At runtime, these are used by `BB.Robot.Runtime` to register parameters with
   proper validation schemas.
   """
   use Spark.Dsl.Transformer
-  alias BB.Dsl.{Joint, Link, Param, ParamGroup}
+  alias BB.Dsl.{Param, ParamGroup}
   alias BB.Unit
   alias Spark.Dsl.Transformer
 
@@ -38,32 +31,10 @@ defmodule BB.Dsl.ParameterTransformer do
   @doc false
   @impl true
   def transform(dsl) do
-    # Collect from parameters section
-    {param_schema, param_defaults} =
+    {schema_opts, defaults} =
       dsl
       |> Transformer.get_entities([:parameters])
       |> collect_parameters([])
-
-    # Collect from controllers section
-    {ctrl_schema, ctrl_defaults} =
-      dsl
-      |> Transformer.get_entities([:controllers])
-      |> collect_component_params([:controller])
-
-    # Collect from sensors section (robot-level)
-    {sensor_schema, sensor_defaults} =
-      dsl
-      |> Transformer.get_entities([:sensors])
-      |> collect_component_params([:sensor])
-
-    # Collect from topology (links, joints, sensors, actuators)
-    {topo_schema, topo_defaults} =
-      dsl
-      |> Transformer.get_entities([:topology])
-      |> collect_topology_params([])
-
-    schema_opts = param_schema ++ ctrl_schema ++ sensor_schema ++ topo_schema
-    defaults = param_defaults ++ ctrl_defaults ++ sensor_defaults ++ topo_defaults
 
     if Enum.empty?(schema_opts) do
       inject_empty_functions(dsl)
@@ -92,65 +63,6 @@ defmodule BB.Dsl.ParameterTransformer do
       end
     end)
   end
-
-  defp collect_component_params(components, prefix) do
-    Enum.reduce(components, {[], []}, fn component, {schema_acc, defaults_acc} ->
-      path = prefix ++ [component.name]
-      {comp_schema, comp_defaults} = collect_params_from_entity(component.params, path)
-      {schema_acc ++ comp_schema, defaults_acc ++ comp_defaults}
-    end)
-  end
-
-  defp collect_topology_params(entities, path_prefix) do
-    Enum.reduce(entities, {[], []}, fn entity, acc ->
-      collect_from_topology_entity(entity, path_prefix, acc)
-    end)
-  end
-
-  defp collect_from_topology_entity(%Link{} = link, path_prefix, {schema_acc, defaults_acc}) do
-    link_path = path_prefix ++ [:link, link.name]
-
-    {sensor_schema, sensor_defaults} =
-      collect_component_params(link.sensors, link_path ++ [:sensor])
-
-    {joint_schema, joint_defaults} = collect_topology_params(link.joints, link_path)
-
-    {schema_acc ++ sensor_schema ++ joint_schema,
-     defaults_acc ++ sensor_defaults ++ joint_defaults}
-  end
-
-  defp collect_from_topology_entity(%Joint{} = joint, path_prefix, {schema_acc, defaults_acc}) do
-    joint_path = path_prefix ++ [:joint, joint.name]
-
-    {sensor_schema, sensor_defaults} =
-      collect_component_params(Map.get(joint, :sensors, []), joint_path ++ [:sensor])
-
-    {actuator_schema, actuator_defaults} =
-      collect_component_params(Map.get(joint, :actuators, []), joint_path ++ [:actuator])
-
-    {nested_schema, nested_defaults} = collect_from_nested_link(joint, path_prefix)
-
-    {schema_acc ++ sensor_schema ++ actuator_schema ++ nested_schema,
-     defaults_acc ++ sensor_defaults ++ actuator_defaults ++ nested_defaults}
-  end
-
-  defp collect_from_topology_entity(_entity, _path_prefix, acc), do: acc
-
-  defp collect_from_nested_link(joint, path_prefix) do
-    case Map.get(joint, :link) do
-      nil -> {[], []}
-      nested_link -> collect_topology_params([nested_link], path_prefix)
-    end
-  end
-
-  defp collect_params_from_entity(params, path_prefix) when is_list(params) do
-    Enum.reduce(params, {[], []}, fn param, {schema_acc, defaults_acc} ->
-      {param_schema, param_defaults} = process_param(param, path_prefix)
-      {schema_acc ++ param_schema, defaults_acc ++ param_defaults}
-    end)
-  end
-
-  defp collect_params_from_entity(nil, _path_prefix), do: {[], []}
 
   defp process_param(%Param{} = param, path_prefix) do
     path = path_prefix ++ [param.name]

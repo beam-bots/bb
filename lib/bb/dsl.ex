@@ -11,28 +11,11 @@ defmodule BB.Dsl do
   import BB.Unit
   import BB.Unit.Option
 
-  @simple_param_types [:float, :integer, :boolean, :string, :atom]
-
-  @doc false
-  def validate_param_type(type) when type in @simple_param_types, do: {:ok, type}
-
-  def validate_param_type({:unit, unit_type}) when is_atom(unit_type) do
-    case BB.Cldr.Unit.validate_unit(unit_type) do
-      {:ok, _, _} -> {:ok, {:unit, unit_type}}
-      {:error, _} -> {:error, "Invalid unit type: #{inspect(unit_type)}"}
-    end
-  end
-
-  def validate_param_type(other) do
-    {:error,
-     "Expected one of #{inspect(@simple_param_types)} or {:unit, unit_type}, got: #{inspect(other)}"}
-  end
-
   @origin %Entity{
     name: :origin,
     target: BB.Dsl.Origin,
     identifier: {:auto, :unique_integer},
-    imports: [BB.Unit],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
     schema: [
       roll: [
         type: unit_type(compatible: :degree),
@@ -85,7 +68,7 @@ defmodule BB.Dsl do
     """,
     target: BB.Dsl.Axis,
     identifier: {:auto, :unique_integer},
-    imports: [BB.Unit],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
     schema: [
       roll: [
         type: unit_type(compatible: :degree),
@@ -115,7 +98,7 @@ defmodule BB.Dsl do
     """,
     target: BB.Dsl.Dynamics,
     identifier: {:auto, :unique_integer},
-    imports: [BB.Unit],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
     schema: [
       damping: [
         type:
@@ -139,7 +122,7 @@ defmodule BB.Dsl do
     name: :limit,
     describe: "Limits applied to joint movement",
     target: BB.Dsl.Limit,
-    imports: [BB.Unit],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
     schema: [
       lower: [
         type: {:or, [unit_type(compatible: :degree), unit_type(compatible: :meter)]},
@@ -184,7 +167,7 @@ defmodule BB.Dsl do
         doc: "A unique name for the parameter"
       ],
       type: [
-        type: {:custom, __MODULE__, :validate_param_type, []},
+        type: {:custom, BB.Parameter.Type, :validate, []},
         required: true,
         doc:
           "The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type})"
@@ -218,9 +201,7 @@ defmodule BB.Dsl do
     target: BB.Dsl.Sensor,
     identifier: :name,
     args: [:name, :child_spec],
-    entities: [
-      params: [@param]
-    ],
+    imports: [BB.Dsl.ParamRef],
     schema: [
       name: [
         type: :atom,
@@ -243,9 +224,7 @@ defmodule BB.Dsl do
     target: BB.Dsl.Actuator,
     identifier: :name,
     args: [:name, :child_spec],
-    entities: [
-      params: [@param]
-    ],
+    imports: [BB.Dsl.ParamRef],
     schema: [
       name: [
         type: :atom,
@@ -269,7 +248,7 @@ defmodule BB.Dsl do
     """,
     target: BB.Dsl.Joint,
     identifier: :name,
-    imports: [BB.Unit],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
     args: [:name],
     entities: [
       link: [],
@@ -493,7 +472,7 @@ defmodule BB.Dsl do
     How the link resists rotational motion.
     """,
     identifier: {:auto, :unique_integer},
-    imports: [BB.Unit],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
     target: BB.Dsl.Inertia,
     schema: [
       ixx: [
@@ -536,7 +515,7 @@ defmodule BB.Dsl do
     """,
     target: BB.Dsl.Inertial,
     identifier: {:auto, :unique_integer},
-    imports: [BB.Unit],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
     entities: [
       origin: [
         %{
@@ -591,7 +570,7 @@ defmodule BB.Dsl do
     """,
     target: BB.Dsl.Link,
     identifier: :name,
-    imports: [BB.Unit],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
     args: [:name],
     recursive_as: :link,
     entities: [
@@ -669,9 +648,7 @@ defmodule BB.Dsl do
     target: BB.Dsl.Controller,
     identifier: :name,
     args: [:name, :child_spec],
-    entities: [
-      params: [@param]
-    ],
+    imports: [BB.Dsl.ParamRef],
     schema: [
       name: [
         type: :atom,
@@ -887,6 +864,7 @@ defmodule BB.Dsl do
       __MODULE__.ParameterTransformer
     ],
     verifiers: [
-      __MODULE__.Verifiers.ValidateChildSpecs
+      __MODULE__.Verifiers.ValidateChildSpecs,
+      __MODULE__.Verifiers.ValidateParamRefs
     ]
 end

@@ -27,7 +27,13 @@ defmodule BB.ControllerSupervisor do
       robot_module
       |> Info.controllers()
       |> Enum.map(fn controller ->
-        BB.Process.child_spec(robot_module, controller.name, controller.child_spec, [])
+        BB.Process.child_spec(
+          robot_module,
+          controller.name,
+          controller.child_spec,
+          [],
+          :controller
+        )
       end)
 
     Supervisor.init(children, strategy: :one_for_one)

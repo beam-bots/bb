@@ -45,6 +45,8 @@ defmodule BB.Robot.Runtime do
   alias BB.{Message, PubSub}
   alias BB.Message.Sensor.JointState
   alias BB.Parameter.Changed, as: ParameterChanged
+  alias BB.Parameter.Schema, as: ParameterSchema
+  alias BB.Robot.ParamResolver
   alias BB.Robot.State, as: RobotState
   alias BB.Safety.Controller, as: SafetyController
   alias BB.StateMachine.Transition
@@ -305,7 +307,7 @@ defmodule BB.Robot.Runtime do
   end
 
   @impl GenServer
-  def init({robot_module, _opts}) do
+  def init({robot_module, opts}) do
     # Register robot with the safety controller for arm/disarm state management
     :ok = SafetyController.register_robot(robot_module)
 
@@ -345,8 +347,34 @@ defmodule BB.Robot.Runtime do
     # Load and apply persisted values (override defaults)
     state = load_persisted_parameters(state)
 
-    # Schedule safety registration verification after children have started
-    {:ok, state, {:continue, :schedule_safety_verification}}
+    # Apply start_link params (override persisted values)
+    case apply_startup_params(state, opts) do
+      {:ok, state} ->
+        # Resolve param refs and subscribe to changes
+        state = resolve_and_subscribe_param_refs(state)
+        {:ok, state, {:continue, :schedule_safety_verification}}
+
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  defp resolve_and_subscribe_param_refs(state) do
+    robot = state.robot
+
+    if map_size(robot.param_subscriptions) > 0 do
+      # Resolve all param refs using current parameter values
+      resolved_robot = ParamResolver.resolve_all(robot, state.robot_state)
+
+      # Subscribe to parameter changes for all referenced parameters
+      for param_path <- Map.keys(robot.param_subscriptions) do
+        PubSub.subscribe(state.robot_module, [:param | param_path])
+      end
+
+      %{state | robot: resolved_robot}
+    else
+      state
+    end
   end
 
   @impl GenServer
@@ -505,6 +533,25 @@ defmodule BB.Robot.Runtime do
   def handle_info({:bb, _path, %Message{payload: %JointState{} = joint_state}}, state) do
     update_joint_state(state.robot_state, joint_state)
     {:noreply, state}
+  end
+
+  def handle_info(
+        {:bb, [:param | param_path], %Message{payload: %ParameterChanged{new_value: new_value}}},
+        state
+      ) do
+    if Map.has_key?(state.robot.param_subscriptions, param_path) do
+      robot =
+        ParamResolver.update_for_param(
+          state.robot,
+          param_path,
+          new_value,
+          state.robot_state
+        )
+
+      {:noreply, %{state | robot: robot}}
+    else
+      {:noreply, state}
+    end
   end
 
   def handle_info(:verify_safety_registrations, state) do
@@ -936,6 +983,41 @@ defmodule BB.Robot.Runtime do
   defp apply_default_value(state, {path, value}) do
     RobotState.set_parameter(state.robot_state, path, value)
     publish_parameter_change(state.robot_module, path, nil, value, :init)
+  end
+
+  defp apply_startup_params(state, opts) do
+    case Keyword.fetch(opts, :params) do
+      {:ok, params} when is_list(params) ->
+        validate_and_apply_startup_params(state, params)
+
+      :error ->
+        {:ok, state}
+    end
+  end
+
+  defp validate_and_apply_startup_params(state, params) do
+    robot_module = state.robot_module
+
+    if function_exported?(robot_module, :__bb_parameter_schema__, 0) do
+      schema = ParameterSchema.build_nested_schema(robot_module.__bb_parameter_schema__())
+
+      with {:ok, validated} <- Spark.Options.validate(params, schema) do
+        apply_validated_startup_params(state, validated)
+      end
+    else
+      {:ok, state}
+    end
+  end
+
+  defp apply_validated_startup_params(state, validated) do
+    validated
+    |> ParameterSchema.flatten_params()
+    |> Enum.each(fn {path, value} ->
+      RobotState.set_parameter(state.robot_state, path, value)
+      publish_parameter_change(state.robot_module, path, nil, value, :startup)
+    end)
+
+    {:ok, state}
   end
 
   # Safety registration verification

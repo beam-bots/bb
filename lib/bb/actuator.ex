@@ -4,7 +4,7 @@
 
 defmodule BB.Actuator do
   @moduledoc """
-  Behaviour and API for actuator GenServers in the BB framework.
+  Behaviour and API for actuators in the BB framework.
 
   This module serves two purposes:
 
@@ -14,19 +14,25 @@ defmodule BB.Actuator do
   ## Behaviour
 
   Actuators receive position/velocity/effort commands and drive hardware.
-  They must implement the `disarm/1` callback for safety.
+  They must implement the `init/1` and `disarm/1` callbacks.
 
   ## Usage
 
-  The `use BB.Actuator` macro:
-  - Adds `use GenServer` (you must implement GenServer callbacks)
-  - Adds `@behaviour BB.Actuator`
-  - Optionally defines `options_schema/0` if you pass the `:options_schema` option
+  The `use BB.Actuator` macro sets up your module as an actuator callback module.
+  Your module is NOT a GenServer - the framework provides a wrapper GenServer
+  (`BB.Actuator.Server`) that delegates to your callbacks.
 
   ### Required Callbacks
 
-  - `disarm/1` - Called when the robot is disarmed or crashes. Must work without
-    GenServer state (the process may have crashed).
+  - `init/1` - Initialise actuator state from resolved options
+  - `disarm/1` - Make hardware safe (called without GenServer state)
+
+  ### Optional Callbacks
+
+  - `handle_options/2` - React to parameter changes at runtime
+  - `handle_call/3`, `handle_cast/2`, `handle_info/2` - Standard GenServer-style callbacks
+  - `handle_continue/2`, `terminate/2` - Lifecycle callbacks
+  - `options_schema/0` - Define accepted configuration options
 
   ### Options Schema
 
@@ -40,24 +46,22 @@ defmodule BB.Actuator do
           ]
 
         @impl BB.Actuator
+        def init(opts) do
+          channel = Keyword.fetch!(opts, :channel)
+          bb = Keyword.fetch!(opts, :bb)
+          {:ok, %{channel: channel, bb: bb}}
+        end
+
+        @impl BB.Actuator
         def disarm(opts) do
-          # Make hardware safe - called without GenServer state
           MyHardware.disable(opts[:controller], opts[:channel])
           :ok
         end
 
-        @impl GenServer
-        def init(opts) do
-          channel = Keyword.fetch!(opts, :channel)
-          bb = Keyword.fetch!(opts, :bb)
-
-          BB.Safety.register(__MODULE__,
-            robot: bb.robot,
-            path: bb.path,
-            opts: [channel: channel, controller: opts[:controller]]
-          )
-
-          {:ok, %{channel: channel, bb: bb}}
+        @impl BB.Actuator
+        def handle_cast({:command, msg}, state) do
+          # Handle actuator commands
+          {:noreply, state}
         end
       end
 
@@ -66,22 +70,34 @@ defmodule BB.Actuator do
       defmodule SimpleActuator do
         use BB.Actuator
 
-        # Must be used as bare module in DSL: actuator :motor, SimpleActuator
+        @impl BB.Actuator
+        def init(opts) do
+          {:ok, %{bb: opts[:bb]}}
+        end
 
         @impl BB.Actuator
         def disarm(_opts), do: :ok
-
-        @impl GenServer
-        def init(opts) do
-          bb = Keyword.fetch!(opts, :bb)
-          {:ok, %{bb: bb}}
-        end
       end
+
+  ### Parameter References
+
+  Options can reference parameters for runtime-adjustable configuration:
+
+      actuator :motor, {MyMotor, max_effort: param([:motion, :max_effort])}
+
+  When the parameter changes, `handle_options/2` is called with the new resolved
+  options. Override it to update your state accordingly.
 
   ### Auto-injected Options
 
-  The `:bb` option is automatically provided by the supervisor and should
-  NOT be included in your `options_schema`. It contains `%{robot: module, path: [atom]}`.
+  The `:bb` option is automatically provided and should NOT be included in your
+  `options_schema`. It contains `%{robot: module, path: [atom]}`.
+
+  ### Safety Registration
+
+  Safety registration is automatic - the framework registers your module with
+  `BB.Safety` using the resolved options. You don't need to call `BB.Safety.register`
+  manually.
 
   ## API
 
@@ -117,13 +133,19 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
-  Returns the options schema for this actuator.
+  Initialise actuator state from resolved options.
 
-  The schema should NOT include the `:bb` option - it is auto-injected.
-  If this callback is not implemented, the module cannot accept options
-  in the DSL (must be used as a bare module).
+  Called with options after parameter references have been resolved.
+  The `:bb` key contains `%{robot: module, path: [atom]}`.
+
+  Return `{:ok, state}` or `{:ok, state, timeout_or_continue}` on success,
+  `{:stop, reason}` to abort startup, or `:ignore` to skip this actuator.
   """
-  @callback options_schema() :: Spark.Options.t()
+  @callback init(opts :: keyword()) ::
+              {:ok, state :: term()}
+              | {:ok, state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term()}
+              | :ignore
 
   @doc """
   Make the hardware safe.
@@ -133,15 +155,119 @@ defmodule BB.Actuator do
   """
   @callback disarm(opts :: keyword()) :: :ok | {:error, term()}
 
-  @optional_callbacks [options_schema: 0]
+  @doc """
+  Handle parameter changes at runtime.
+
+  Called when a referenced parameter changes. The `new_opts` contain all options
+  with the updated parameter value(s) resolved.
+
+  Return `{:ok, new_state}` to update state, or `{:stop, reason}` to shut down.
+  """
+  @callback handle_options(new_opts :: keyword(), state :: term()) ::
+              {:ok, new_state :: term()} | {:stop, reason :: term()}
+
+  @doc """
+  Handle synchronous calls.
+
+  Same semantics as `c:GenServer.handle_call/3`.
+  """
+  @callback handle_call(request :: term(), from :: GenServer.from(), state :: term()) ::
+              {:reply, reply :: term(), new_state :: term()}
+              | {:reply, reply :: term(), new_state :: term(),
+                 timeout() | :hibernate | {:continue, term()}}
+              | {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+              | {:stop, reason :: term(), reply :: term(), new_state :: term()}
+
+  @doc """
+  Handle asynchronous casts.
+
+  Same semantics as `c:GenServer.handle_cast/2`.
+  """
+  @callback handle_cast(request :: term(), state :: term()) ::
+              {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
+  Handle all other messages.
+
+  Same semantics as `c:GenServer.handle_info/2`.
+  """
+  @callback handle_info(msg :: term(), state :: term()) ::
+              {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
+  Handle continue instructions.
+
+  Same semantics as `c:GenServer.handle_continue/2`.
+  """
+  @callback handle_continue(continue_arg :: term(), state :: term()) ::
+              {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
+  Clean up before termination.
+
+  Same semantics as `c:GenServer.terminate/2`.
+  """
+  @callback terminate(reason :: term(), state :: term()) :: term()
+
+  @doc """
+  Returns the options schema for this actuator.
+
+  The schema should NOT include the `:bb` option - it is auto-injected.
+  If this callback is not implemented, the module cannot accept options
+  in the DSL (must be used as a bare module).
+  """
+  @callback options_schema() :: Spark.Options.t()
+
+  @optional_callbacks [
+    options_schema: 0,
+    handle_options: 2,
+    handle_call: 3,
+    handle_cast: 2,
+    handle_info: 2,
+    handle_continue: 2,
+    terminate: 2
+  ]
 
   @doc false
   defmacro __using__(opts) do
     schema_opts = opts[:options_schema]
 
     quote do
-      use GenServer
       @behaviour BB.Actuator
+
+      # Default implementations - all overridable
+      @impl BB.Actuator
+      def handle_options(_new_opts, state), do: {:ok, state}
+
+      @impl BB.Actuator
+      def handle_call(_request, _from, state), do: {:reply, {:error, :not_implemented}, state}
+
+      @impl BB.Actuator
+      def handle_cast(_request, state), do: {:noreply, state}
+
+      @impl BB.Actuator
+      def handle_info(_msg, state), do: {:noreply, state}
+
+      @impl BB.Actuator
+      def handle_continue(_continue_arg, state), do: {:noreply, state}
+
+      @impl BB.Actuator
+      def terminate(_reason, _state), do: :ok
+
+      defoverridable handle_options: 2,
+                     handle_call: 3,
+                     handle_cast: 2,
+                     handle_info: 2,
+                     handle_continue: 2,
+                     terminate: 2
 
       unquote(
         if schema_opts do

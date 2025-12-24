@@ -8,7 +8,7 @@ defmodule BB.Dsl.TopologyTransformer do
   """
   use Spark.Dsl.Transformer
   alias BB.Cldr.Unit
-  alias BB.Dsl.{Axis, Dynamics, Info, Joint, Limit, Link}
+  alias BB.Dsl.{Axis, Dynamics, Info, Joint, Limit, Link, ParamRef}
   alias Spark.{Dsl.Transformer, Error.DslError}
 
   @doc false
@@ -254,6 +254,9 @@ defmodule BB.Dsl.TopologyTransformer do
 
   defp validate_unit_or_nil(unit, unit_name, dsl, path),
     do: validate_unit(unit, unit_name, dsl, path)
+
+  # Skip validation for ParamRef - validated by ValidateParamRefs verifier
+  defp validate_unit(%ParamRef{}, _unit_name, _dsl, _path), do: :ok
 
   defp validate_unit(unit, unit_name, dsl, path) do
     if Unit.compatible?(unit, unit_name) do

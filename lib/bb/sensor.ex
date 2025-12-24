@@ -4,19 +4,37 @@
 
 defmodule BB.Sensor do
   @moduledoc """
-  Behaviour for sensor GenServers in the BB framework.
+  Behaviour and API for sensors in the BB framework.
+
+  This module serves two purposes:
+
+  1. **Behaviour** - Defines callbacks for sensor implementations
+  2. **API** - Provides functions for working with sensors
+
+  ## Behaviour
 
   Sensors read from hardware or other sources and publish messages. They can
   be attached at the robot level, to links, or to joints.
 
   ## Usage
 
-  The `use BB.Sensor` macro:
-  - Adds `use GenServer` (you must implement GenServer callbacks)
-  - Adds `@behaviour BB.Sensor`
-  - Optionally defines `options_schema/0` if you pass the `:options_schema` option
+  The `use BB.Sensor` macro sets up your module as a sensor callback module.
+  Your module is NOT a GenServer - the framework provides a wrapper GenServer
+  (`BB.Sensor.Server`) that delegates to your callbacks.
 
-  ## Options Schema
+  ### Required Callbacks
+
+  - `init/1` - Initialise sensor state from resolved options
+
+  ### Optional Callbacks
+
+  - `disarm/1` - Make hardware safe (only for sensors with active hardware)
+  - `handle_options/2` - React to parameter changes at runtime
+  - `handle_call/3`, `handle_cast/2`, `handle_info/2` - Standard GenServer-style callbacks
+  - `handle_continue/2`, `terminate/2` - Lifecycle callbacks
+  - `options_schema/0` - Define accepted configuration options
+
+  ### Options Schema
 
   If your sensor accepts configuration options, pass them via `:options_schema`:
 
@@ -28,25 +46,12 @@ defmodule BB.Sensor do
             poll_interval_ms: [type: :pos_integer, default: 1000, doc: "Poll interval"]
           ]
 
-        @impl GenServer
+        @impl BB.Sensor
         def init(opts) do
-          # Options already validated at compile time
           bus = Keyword.fetch!(opts, :bus)
           address = Keyword.fetch!(opts, :address)
           bb = Keyword.fetch!(opts, :bb)
           {:ok, %{bus: bus, address: address, bb: bb}}
-        end
-      end
-
-  You can override the generated `options_schema/0` if needed:
-
-      defmodule MySensor do
-        use BB.Sensor, options_schema: [frequency: [type: :pos_integer, default: 50]]
-
-        @impl BB.Sensor
-        def options_schema do
-          # Custom implementation
-          Spark.Options.new!([...])
         end
       end
 
@@ -55,16 +60,27 @@ defmodule BB.Sensor do
       defmodule SimpleSensor do
         use BB.Sensor
 
-        # Must be used as bare module in DSL: sensor :temp, SimpleSensor
-
-        @impl GenServer
+        @impl BB.Sensor
         def init(opts) do
-          bb = Keyword.fetch!(opts, :bb)
-          {:ok, %{bb: bb}}
+          {:ok, %{bb: opts[:bb]}}
         end
       end
 
-  ## Safety
+  ### Parameter References
+
+  Options can reference parameters for runtime-adjustable configuration:
+
+      sensor :temp, {MyTempSensor, poll_interval: param([:sensors, :poll_rate])}
+
+  When the parameter changes, `handle_options/2` is called with the new resolved
+  options. Override it to update your state accordingly.
+
+  ### Auto-injected Options
+
+  The `:bb` option is automatically provided and should NOT be included in your
+  `options_schema`. It contains `%{robot: module, path: [atom]}`.
+
+  ### Safety Registration
 
   Most sensors don't require safety callbacks since they only read data.
   If your sensor controls hardware that needs to be disabled on disarm
@@ -74,23 +90,34 @@ defmodule BB.Sensor do
         use BB.Sensor
 
         @impl BB.Sensor
+        def init(opts), do: {:ok, %{}}
+
+        @impl BB.Sensor
         def disarm(opts), do: stop_hardware(opts)
       end
 
-  ## Auto-injected Options
-
-  The `:bb` option is automatically provided by the supervisor and should
-  NOT be included in your `options_schema`. It contains `%{robot: module, path: [atom]}`.
+  When `disarm/1` is implemented, the framework automatically registers your
+  sensor with `BB.Safety`.
   """
+
+  # ----------------------------------------------------------------------------
+  # Behaviour
+  # ----------------------------------------------------------------------------
 
   @doc """
-  Returns the options schema for this sensor.
+  Initialise sensor state from resolved options.
 
-  The schema should NOT include the `:bb` option - it is auto-injected.
-  If this callback is not implemented, the module cannot accept options
-  in the DSL (must be used as a bare module).
+  Called with options after parameter references have been resolved.
+  The `:bb` key contains `%{robot: module, path: [atom]}`.
+
+  Return `{:ok, state}` or `{:ok, state, timeout_or_continue}` on success,
+  `{:stop, reason}` to abort startup, or `:ignore` to skip this sensor.
   """
-  @callback options_schema() :: Spark.Options.t()
+  @callback init(opts :: keyword()) ::
+              {:ok, state :: term()}
+              | {:ok, state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term()}
+              | :ignore
 
   @doc """
   Make the hardware safe.
@@ -101,15 +128,120 @@ defmodule BB.Sensor do
   """
   @callback disarm(opts :: keyword()) :: :ok | {:error, term()}
 
-  @optional_callbacks [options_schema: 0, disarm: 1]
+  @doc """
+  Handle parameter changes at runtime.
+
+  Called when a referenced parameter changes. The `new_opts` contain all options
+  with the updated parameter value(s) resolved.
+
+  Return `{:ok, new_state}` to update state, or `{:stop, reason}` to shut down.
+  """
+  @callback handle_options(new_opts :: keyword(), state :: term()) ::
+              {:ok, new_state :: term()} | {:stop, reason :: term()}
+
+  @doc """
+  Handle synchronous calls.
+
+  Same semantics as `c:GenServer.handle_call/3`.
+  """
+  @callback handle_call(request :: term(), from :: GenServer.from(), state :: term()) ::
+              {:reply, reply :: term(), new_state :: term()}
+              | {:reply, reply :: term(), new_state :: term(),
+                 timeout() | :hibernate | {:continue, term()}}
+              | {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+              | {:stop, reason :: term(), reply :: term(), new_state :: term()}
+
+  @doc """
+  Handle asynchronous casts.
+
+  Same semantics as `c:GenServer.handle_cast/2`.
+  """
+  @callback handle_cast(request :: term(), state :: term()) ::
+              {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
+  Handle all other messages.
+
+  Same semantics as `c:GenServer.handle_info/2`.
+  """
+  @callback handle_info(msg :: term(), state :: term()) ::
+              {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
+  Handle continue instructions.
+
+  Same semantics as `c:GenServer.handle_continue/2`.
+  """
+  @callback handle_continue(continue_arg :: term(), state :: term()) ::
+              {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
+  Clean up before termination.
+
+  Same semantics as `c:GenServer.terminate/2`.
+  """
+  @callback terminate(reason :: term(), state :: term()) :: term()
+
+  @doc """
+  Returns the options schema for this sensor.
+
+  The schema should NOT include the `:bb` option - it is auto-injected.
+  If this callback is not implemented, the module cannot accept options
+  in the DSL (must be used as a bare module).
+  """
+  @callback options_schema() :: Spark.Options.t()
+
+  @optional_callbacks [
+    options_schema: 0,
+    disarm: 1,
+    handle_options: 2,
+    handle_call: 3,
+    handle_cast: 2,
+    handle_info: 2,
+    handle_continue: 2,
+    terminate: 2
+  ]
 
   @doc false
   defmacro __using__(opts) do
     schema_opts = opts[:options_schema]
 
     quote do
-      use GenServer
       @behaviour BB.Sensor
+
+      # Default implementations - all overridable
+      @impl BB.Sensor
+      def handle_options(_new_opts, state), do: {:ok, state}
+
+      @impl BB.Sensor
+      def handle_call(_request, _from, state), do: {:reply, {:error, :not_implemented}, state}
+
+      @impl BB.Sensor
+      def handle_cast(_request, state), do: {:noreply, state}
+
+      @impl BB.Sensor
+      def handle_info(_msg, state), do: {:noreply, state}
+
+      @impl BB.Sensor
+      def handle_continue(_continue_arg, state), do: {:noreply, state}
+
+      @impl BB.Sensor
+      def terminate(_reason, _state), do: :ok
+
+      defoverridable handle_options: 2,
+                     handle_call: 3,
+                     handle_cast: 2,
+                     handle_info: 2,
+                     handle_continue: 2,
+                     terminate: 2
 
       unquote(
         if schema_opts do

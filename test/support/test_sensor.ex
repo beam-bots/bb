@@ -16,7 +16,7 @@ defmodule MySensor do
       ]
     ]
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts) do
     {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
   end
@@ -28,7 +28,7 @@ defmodule CameraSensor do
   @moduledoc false
   use BB.Sensor
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -36,7 +36,7 @@ defmodule ImuSensor do
   @moduledoc false
   use BB.Sensor
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -44,7 +44,7 @@ defmodule GpsSensor do
   @moduledoc false
   use BB.Sensor, options_schema: [port: [type: :string, required: false]]
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -52,7 +52,7 @@ defmodule BaseSensor do
   @moduledoc false
   use BB.Sensor
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -60,7 +60,7 @@ defmodule ChildSensor do
   @moduledoc false
   use BB.Sensor
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -68,7 +68,7 @@ defmodule Encoder do
   @moduledoc false
   use BB.Sensor, options_schema: [bus: [type: :atom, required: false]]
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -76,7 +76,7 @@ defmodule RobotSensor do
   @moduledoc false
   use BB.Sensor
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -84,7 +84,7 @@ defmodule LinkSensor do
   @moduledoc false
   use BB.Sensor
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -92,7 +92,7 @@ defmodule JointSensor do
   @moduledoc false
   use BB.Sensor
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -100,6 +100,6 @@ defmodule SomeSensor do
   @moduledoc false
   use BB.Sensor
 
-  @impl GenServer
+  @impl BB.Sensor
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end

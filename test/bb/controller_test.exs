@@ -14,12 +14,12 @@ defmodule BB.ControllerTest do
         value: [type: :integer, required: false]
       ]
 
-    @impl GenServer
+    @impl BB.Controller
     def init(opts) do
       {:ok, opts}
     end
 
-    @impl GenServer
+    @impl BB.Controller
     def handle_call(:get_state, _from, state) do
       {:reply, state, state}
     end

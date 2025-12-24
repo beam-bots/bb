@@ -8,33 +8,25 @@ defmodule BB.Test.MockActuator do
   """
   use BB.Actuator, options_schema: []
 
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: via(opts))
-  end
-
-  defp via(opts) do
-    BB.Process.via(opts[:bb][:robot], opts[:bb][:name])
-  end
-
   @impl BB.Actuator
   def disarm(_opts), do: :ok
 
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts) do
     {:ok, %{opts: opts}}
   end
 
-  @impl GenServer
+  @impl BB.Actuator
   def handle_cast({:command, _message}, state) do
     {:noreply, state}
   end
 
-  @impl GenServer
+  @impl BB.Actuator
   def handle_call({:command, _message}, _from, state) do
     {:reply, {:ok, :accepted}, state}
   end
 
-  @impl GenServer
+  @impl BB.Actuator
   def handle_info({:bb, _path, _message}, state) do
     {:noreply, state}
   end
@@ -52,7 +44,7 @@ defmodule ServoMotor do
   @impl BB.Actuator
   def disarm(_opts), do: :ok
 
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -63,7 +55,7 @@ defmodule MainMotor do
   @impl BB.Actuator
   def disarm(_opts), do: :ok
 
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -74,7 +66,7 @@ defmodule BrakeActuator do
   @impl BB.Actuator
   def disarm(_opts), do: :ok
 
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -85,7 +77,7 @@ defmodule ShoulderMotor do
   @impl BB.Actuator
   def disarm(_opts), do: :ok
 
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -96,7 +88,7 @@ defmodule ElbowMotor do
   @impl BB.Actuator
   def disarm(_opts), do: :ok
 
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -107,7 +99,7 @@ defmodule MyMotor do
   @impl BB.Actuator
   def disarm(_opts), do: :ok
 
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
 
@@ -122,6 +114,6 @@ defmodule TestActuator do
   @impl BB.Actuator
   def disarm(_opts), do: :ok
 
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 end
