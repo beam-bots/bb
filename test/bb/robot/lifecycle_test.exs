@@ -8,6 +8,7 @@ defmodule BB.Robot.LifecycleTest do
   """
   use ExUnit.Case, async: true
 
+  alias BB.Error.State.NotAllowed, as: StateError
   alias BB.Robot.Runtime
   alias BB.Robot.State, as: RobotState
 
@@ -149,7 +150,7 @@ defmodule BB.Robot.LifecycleTest do
       assert Runtime.state(SimpleArm) == :disarmed
 
       {:ok, task} = SimpleArm.move(shoulder: 0.5)
-      assert {:error, %Runtime.StateError{current_state: :disarmed}} = Task.await(task)
+      assert {:error, %StateError{current_state: :disarmed}} = Task.await(task)
     end
 
     test "arm command rejected when already armed" do
@@ -159,14 +160,14 @@ defmodule BB.Robot.LifecycleTest do
       Task.await(task)
 
       {:ok, task} = SimpleArm.arm()
-      assert {:error, %Runtime.StateError{current_state: :idle}} = Task.await(task)
+      assert {:error, %StateError{current_state: :idle}} = Task.await(task)
     end
 
     test "disarm command rejected when disarmed" do
       start_supervised!(SimpleArm)
 
       {:ok, task} = SimpleArm.disarm()
-      assert {:error, %Runtime.StateError{current_state: :disarmed}} = Task.await(task)
+      assert {:error, %StateError{current_state: :disarmed}} = Task.await(task)
     end
 
     test "full lifecycle: arm → move → move → disarm" do

@@ -4,6 +4,7 @@
 
 defmodule BB.Robot.RuntimeTest do
   use ExUnit.Case, async: true
+  alias BB.Error.State.NotAllowed, as: StateError
   alias BB.Robot.Runtime
 
   defmodule TestRobot do
@@ -93,7 +94,7 @@ defmodule BB.Robot.RuntimeTest do
     test "returns error when current state is not in allowed list" do
       start_supervised!(TestRobot)
 
-      assert {:error, %Runtime.StateError{}} =
+      assert {:error, %StateError{}} =
                Runtime.check_allowed(TestRobot, [:idle, :executing])
     end
 
@@ -169,7 +170,7 @@ defmodule BB.Robot.RuntimeTest do
       # Errors now come through the awaited task
       {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
 
-      assert {:error, %Runtime.StateError{current_state: :disarmed}} = Task.await(task)
+      assert {:error, %StateError{current_state: :disarmed}} = Task.await(task)
     end
 
     test "executes command that succeeds immediately" do
@@ -256,7 +257,7 @@ defmodule BB.Robot.RuntimeTest do
 
       # Errors come through the task now
       {:ok, task} = Runtime.execute(RobotWithCommands, :immediate, %{})
-      assert {:error, %Runtime.StateError{current_state: :executing}} = Task.await(task)
+      assert {:error, %StateError{current_state: :executing}} = Task.await(task)
     end
 
     test "cancel returns error when nothing executing" do
