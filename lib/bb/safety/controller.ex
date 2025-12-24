@@ -41,8 +41,7 @@ defmodule BB.Safety.Controller do
 
   @robots_table Module.concat(__MODULE__, Robots)
   @handlers_table Module.concat(__MODULE__, Handlers)
-  @disarm_timeout_ms 5_000
-  @disarm_call_timeout_ms 10_000
+  @default_disarm_timeout_ms 5_000
 
   @type safety_state :: :disarmed | :armed | :disarming | :error
 
@@ -176,11 +175,20 @@ defmodule BB.Safety.Controller do
 
   When in `:error` state, the robot cannot be armed until `force_disarm/1`
   is called to acknowledge the failure and reset to `:disarmed`.
+
+  ## Options
+
+    * `:timeout` - timeout in milliseconds for each disarm callback.
+      Defaults to #{@default_disarm_timeout_ms}ms. The GenServer call timeout
+      is set to `timeout + 5000` to allow for processing overhead.
   """
-  @spec disarm(module()) ::
+  @spec disarm(module(), keyword()) ::
           :ok | {:error, :already_disarmed | :not_registered | {:disarm_failed, list()}}
-  def disarm(robot_module),
-    do: GenServer.call(__MODULE__, {:disarm, robot_module}, @disarm_call_timeout_ms)
+  def disarm(robot_module, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, @default_disarm_timeout_ms)
+    call_timeout = timeout + 5_000
+    GenServer.call(__MODULE__, {:disarm, robot_module, timeout}, call_timeout)
+  end
 
   @doc """
   Force disarm from error state.
@@ -258,7 +266,7 @@ defmodule BB.Safety.Controller do
     end
   end
 
-  def handle_call({:disarm, robot_module}, _from, state) do
+  def handle_call({:disarm, robot_module, timeout}, _from, state) do
     case :ets.lookup(@robots_table, robot_module) do
       [{^robot_module, :disarmed, _}] ->
         {:reply, {:error, :already_disarmed}, state}
@@ -275,7 +283,7 @@ defmodule BB.Safety.Controller do
         publish_transition(robot_module, :armed, :disarming)
 
         # Run callbacks concurrently with timeout
-        case disarm_all_handlers(robot_module) do
+        case disarm_all_handlers(robot_module, timeout) do
           :ok ->
             :ets.insert(@robots_table, {robot_module, :disarmed, ref})
             publish_transition(robot_module, :disarming, :disarmed)
@@ -353,7 +361,7 @@ defmodule BB.Safety.Controller do
         )
 
         # Robot crashed - disarm all handlers and clean up
-        case disarm_all_handlers(robot_module) do
+        case disarm_all_handlers(robot_module, @default_disarm_timeout_ms) do
           :ok ->
             Logger.info(
               "All disarm callbacks succeeded for crashed robot #{inspect(robot_module)}"
@@ -386,7 +394,7 @@ defmodule BB.Safety.Controller do
 
   # --- Private Functions ---
 
-  defp disarm_all_handlers(robot_module) do
+  defp disarm_all_handlers(robot_module, timeout) do
     # Bag table: each row is {robot_module, module, path, opts, pid}
     handlers = :ets.lookup(@handlers_table, robot_module)
 
@@ -397,14 +405,14 @@ defmodule BB.Safety.Controller do
         fn {_robot, module, path, opts, _pid} ->
           {path, safe_disarm(module, path, opts)}
         end,
-        timeout: @disarm_timeout_ms,
+        timeout: timeout,
         on_timeout: :kill_task,
         ordered: false
       )
       |> Enum.reduce([], fn
         {:ok, {_path, :ok}}, acc -> acc
         {:ok, {path, {:error, error}}}, acc -> [{path, error} | acc]
-        {:exit, :timeout}, acc -> [{:unknown, {:timeout, @disarm_timeout_ms}} | acc]
+        {:exit, :timeout}, acc -> [{:unknown, {:timeout, timeout}} | acc]
       end)
 
     case failures do
@@ -453,7 +461,7 @@ defmodule BB.Safety.Controller do
   defp emergency_disarm_robot({robot_module, _safety_state, _ref}) do
     Logger.info("Attempting emergency disarm for #{inspect(robot_module)}")
 
-    case disarm_all_handlers(robot_module) do
+    case disarm_all_handlers(robot_module, @default_disarm_timeout_ms) do
       :ok ->
         Logger.info("Emergency disarm succeeded for #{inspect(robot_module)}")
 

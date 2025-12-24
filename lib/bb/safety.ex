@@ -116,9 +116,14 @@ defmodule BB.Safety do
   callbacks before updating state. If any callback fails, the robot transitions
   to `:error` state instead of `:disarmed`.
 
+  ## Options
+
+    * `:timeout` - timeout in milliseconds for each disarm callback.
+      Defaults to 5000ms.
+
   Returns `:ok` or `{:error, :already_disarmed | {:disarm_failed, failures}}`.
   """
-  defdelegate disarm(robot_module), to: BB.Safety.Controller
+  defdelegate disarm(robot_module, opts \\ []), to: BB.Safety.Controller
 
   @doc """
   Force disarm from error state.

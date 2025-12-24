@@ -5,8 +5,11 @@
 defmodule BB.Safety.ControllerTest do
   @moduledoc """
   Tests for BB.Safety.Controller error state handling and force_disarm/1.
+
+  These tests must run synchronously because they interact with the global
+  BB.Safety.Controller GenServer and need robots in a clean state.
   """
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias BB.StateMachine.Transition
 
