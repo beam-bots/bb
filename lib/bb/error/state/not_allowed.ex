@@ -13,8 +13,19 @@ defmodule BB.Error.State.NotAllowed do
     class: :state,
     fields: [:operation, :current_state, :allowed_states]
 
+  @type t :: %__MODULE__{
+          operation: atom() | nil,
+          current_state: atom(),
+          allowed_states: [atom()]
+        }
+
   defimpl BB.Error.Severity do
     def severity(_), do: :error
+  end
+
+  def message(%{operation: nil, current_state: current, allowed_states: allowed}) do
+    allowed_str = Enum.map_join(allowed, ", ", &inspect/1)
+    "Robot is in state #{inspect(current)}, but command requires one of: #{allowed_str}"
   end
 
   def message(%{operation: op, current_state: current, allowed_states: allowed}) do

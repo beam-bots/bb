@@ -42,6 +42,7 @@ defmodule BB.Robot.Runtime do
 
   alias BB.Command.{Context, Event}
   alias BB.Dsl.{Info, Joint, Link}
+  alias BB.Error.State.NotAllowed, as: StateError
   alias BB.{Message, PubSub}
   alias BB.Message.Sensor.JointState
   alias BB.Parameter.Changed, as: ParameterChanged
@@ -50,32 +51,6 @@ defmodule BB.Robot.Runtime do
   alias BB.Robot.State, as: RobotState
   alias BB.Safety.Controller, as: SafetyController
   alias BB.StateMachine.Transition
-
-  defmodule StateError do
-    @moduledoc """
-    Error raised when a command is not allowed in the current robot state.
-    """
-    defexception [:current_state, :allowed_states, :message]
-
-    @type t :: %__MODULE__{
-            current_state: atom(),
-            allowed_states: [atom()],
-            message: String.t()
-          }
-
-    @impl true
-    def exception(opts) do
-      current = Keyword.fetch!(opts, :current_state)
-      allowed = Keyword.fetch!(opts, :allowed_states)
-
-      msg =
-        Keyword.get_lazy(opts, :message, fn ->
-          "Robot is in state #{inspect(current)}, but command requires one of #{inspect(allowed)}"
-        end)
-
-      %__MODULE__{current_state: current, allowed_states: allowed, message: msg}
-    end
-  end
 
   defstruct [
     :robot_module,
