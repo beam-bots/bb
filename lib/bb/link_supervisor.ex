@@ -47,7 +47,7 @@ defmodule BB.LinkSupervisor do
 
     sensor_children =
       Enum.map(link.sensors, fn sensor ->
-        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, link_path)
+        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, link_path, :sensor)
       end)
 
     joint_children =

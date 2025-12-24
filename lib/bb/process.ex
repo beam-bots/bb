@@ -7,18 +7,59 @@ defmodule BB.Process do
   Helper functions for building child specs and looking up processes in the robot's registry.
   """
 
+  @type process_type :: :actuator | :sensor | :controller
+
   @doc """
   Build a child_spec that registers the process in the robot's registry.
 
-  The resulting child spec uses `GenServer.start_link/3` directly to ensure
-  the process is registered with the correct `:via` tuple.
+  The resulting child spec uses the appropriate wrapper GenServer based on type:
+  - `:actuator` → `BB.Actuator.Server`
+  - `:sensor` → `BB.Sensor.Server`
+  - `:controller` → `BB.Controller.Server`
+
+  The user's callback module is passed via `__callback_module__` and the wrapper
+  server delegates GenServer callbacks to it.
 
   The process is registered by its name (which must be globally unique across
   the robot). The full path is passed to the process in its init args for
   context, but is not used for registration.
   """
-  @spec child_spec(module, atom, module | {module, Keyword.t()}, [atom]) :: map
-  def child_spec(robot_module, name, user_child_spec, path) do
+  @spec child_spec(module, atom, module | {module, Keyword.t()}, [atom], process_type) :: map
+  def child_spec(robot_module, name, user_child_spec, path, type) do
+    {callback_module, user_args} = normalize_child_spec(user_child_spec)
+    full_path = path ++ [name]
+
+    wrapper_module = wrapper_for_type(type)
+
+    init_arg =
+      user_args
+      |> Keyword.put(:bb, %{robot: robot_module, path: full_path})
+      |> Keyword.put(:__callback_module__, callback_module)
+
+    %{
+      id: name,
+      start:
+        {wrapper_module, :start_link,
+         [
+           init_arg,
+           [name: via(robot_module, name)]
+         ]}
+    }
+  end
+
+  defp wrapper_for_type(:actuator), do: BB.Actuator.Server
+  defp wrapper_for_type(:sensor), do: BB.Sensor.Server
+  defp wrapper_for_type(:controller), do: BB.Controller.Server
+  defp wrapper_for_type(:bridge), do: nil
+
+  @doc """
+  Build a child_spec for a bridge process.
+
+  Bridges use GenServer directly (not a wrapper) as they implement the full
+  GenServer behaviour themselves.
+  """
+  @spec bridge_child_spec(module, atom, module | {module, Keyword.t()}, [atom]) :: map
+  def bridge_child_spec(robot_module, name, user_child_spec, path) do
     {module, user_args} = normalize_child_spec(user_child_spec)
     full_path = path ++ [name]
 

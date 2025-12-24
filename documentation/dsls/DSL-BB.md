@@ -30,16 +30,13 @@ Robot topology
      * sphere
      * mesh
    * sensor
-     * param
  * [joint](#topology-joint)
    * origin
    * axis
    * dynamics
    * limit
    * sensor
-     * param
    * actuator
-     * param
 
 
 
@@ -74,7 +71,6 @@ A kinematic link (ie solid body).
    * sphere
    * mesh
  * [sensor](#topology-link-sensor)
-   * param
 
 
 
@@ -594,8 +590,6 @@ sensor name, child_spec
 
 A sensor attached to the robot, a link, or a joint.
 
-### Nested DSLs
- * [param](#topology-link-sensor-param)
 
 
 
@@ -608,41 +602,6 @@ A sensor attached to the robot, a link, or a joint.
 | [`child_spec`](#topology-link-sensor-child_spec){: #topology-link-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
 
 
-
-### topology.link.sensor.param
-```elixir
-param name
-```
-
-
-A runtime-adjustable parameter.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#topology-link-sensor-param-name){: #topology-link-sensor-param-name .spark-required} | `atom` |  | A unique name for the parameter |
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`type`](#topology-link-sensor-param-type){: #topology-link-sensor-param-type .spark-required} | `any` |  | The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type}) |
-| [`default`](#topology-link-sensor-param-default){: #topology-link-sensor-param-default } | `any` |  | Default value for the parameter |
-| [`min`](#topology-link-sensor-param-min){: #topology-link-sensor-param-min } | `number` |  | Minimum value for numeric parameters |
-| [`max`](#topology-link-sensor-param-max){: #topology-link-sensor-param-max } | `number` |  | Maximum value for numeric parameters |
-| [`doc`](#topology-link-sensor-param-doc){: #topology-link-sensor-param-doc } | `String.t` |  | Documentation for the parameter |
-
-
-
-
-
-### Introspection
-
-Target: `BB.Dsl.Param`
 
 
 
@@ -673,9 +632,7 @@ A kinematic joint between a parent link and a child link.
  * [dynamics](#topology-joint-dynamics)
  * [limit](#topology-joint-limit)
  * [sensor](#topology-joint-sensor)
-   * param
  * [actuator](#topology-joint-actuator)
-   * param
 
 
 
@@ -810,8 +767,6 @@ sensor name, child_spec
 
 A sensor attached to the robot, a link, or a joint.
 
-### Nested DSLs
- * [param](#topology-joint-sensor-param)
 
 
 
@@ -824,41 +779,6 @@ A sensor attached to the robot, a link, or a joint.
 | [`child_spec`](#topology-joint-sensor-child_spec){: #topology-joint-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
 
 
-
-### topology.joint.sensor.param
-```elixir
-param name
-```
-
-
-A runtime-adjustable parameter.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#topology-joint-sensor-param-name){: #topology-joint-sensor-param-name .spark-required} | `atom` |  | A unique name for the parameter |
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`type`](#topology-joint-sensor-param-type){: #topology-joint-sensor-param-type .spark-required} | `any` |  | The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type}) |
-| [`default`](#topology-joint-sensor-param-default){: #topology-joint-sensor-param-default } | `any` |  | Default value for the parameter |
-| [`min`](#topology-joint-sensor-param-min){: #topology-joint-sensor-param-min } | `number` |  | Minimum value for numeric parameters |
-| [`max`](#topology-joint-sensor-param-max){: #topology-joint-sensor-param-max } | `number` |  | Maximum value for numeric parameters |
-| [`doc`](#topology-joint-sensor-param-doc){: #topology-joint-sensor-param-doc } | `String.t` |  | Documentation for the parameter |
-
-
-
-
-
-### Introspection
-
-Target: `BB.Dsl.Param`
 
 
 
@@ -875,8 +795,6 @@ actuator name, child_spec
 
 An actuator attached to a joint.
 
-### Nested DSLs
- * [param](#topology-joint-actuator-param)
 
 
 
@@ -889,41 +807,6 @@ An actuator attached to a joint.
 | [`child_spec`](#topology-joint-actuator-child_spec){: #topology-joint-actuator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the actuator process. Either a module or `{module, keyword_list}` |
 
 
-
-### topology.joint.actuator.param
-```elixir
-param name
-```
-
-
-A runtime-adjustable parameter.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#topology-joint-actuator-param-name){: #topology-joint-actuator-param-name .spark-required} | `atom` |  | A unique name for the parameter |
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`type`](#topology-joint-actuator-param-type){: #topology-joint-actuator-param-type .spark-required} | `any` |  | The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type}) |
-| [`default`](#topology-joint-actuator-param-default){: #topology-joint-actuator-param-default } | `any` |  | Default value for the parameter |
-| [`min`](#topology-joint-actuator-param-min){: #topology-joint-actuator-param-min } | `number` |  | Minimum value for numeric parameters |
-| [`max`](#topology-joint-actuator-param-max){: #topology-joint-actuator-param-max } | `number` |  | Maximum value for numeric parameters |
-| [`doc`](#topology-joint-actuator-param-doc){: #topology-joint-actuator-param-doc } | `String.t` |  | Documentation for the parameter |
-
-
-
-
-
-### Introspection
-
-Target: `BB.Dsl.Param`
 
 
 
@@ -971,7 +854,6 @@ Robot-level sensors
 
 ### Nested DSLs
  * [sensor](#sensors-sensor)
-   * param
 
 
 
@@ -985,8 +867,6 @@ sensor name, child_spec
 
 A sensor attached to the robot, a link, or a joint.
 
-### Nested DSLs
- * [param](#sensors-sensor-param)
 
 
 
@@ -999,41 +879,6 @@ A sensor attached to the robot, a link, or a joint.
 | [`child_spec`](#sensors-sensor-child_spec){: #sensors-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
 
 
-
-### sensors.sensor.param
-```elixir
-param name
-```
-
-
-A runtime-adjustable parameter.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#sensors-sensor-param-name){: #sensors-sensor-param-name .spark-required} | `atom` |  | A unique name for the parameter |
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`type`](#sensors-sensor-param-type){: #sensors-sensor-param-type .spark-required} | `any` |  | The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type}) |
-| [`default`](#sensors-sensor-param-default){: #sensors-sensor-param-default } | `any` |  | Default value for the parameter |
-| [`min`](#sensors-sensor-param-min){: #sensors-sensor-param-min } | `number` |  | Minimum value for numeric parameters |
-| [`max`](#sensors-sensor-param-max){: #sensors-sensor-param-max } | `number` |  | Maximum value for numeric parameters |
-| [`doc`](#sensors-sensor-param-doc){: #sensors-sensor-param-doc } | `String.t` |  | Documentation for the parameter |
-
-
-
-
-
-### Introspection
-
-Target: `BB.Dsl.Param`
 
 
 
@@ -1050,7 +895,6 @@ Robot-level controllers
 
 ### Nested DSLs
  * [controller](#controllers-controller)
-   * param
 
 
 
@@ -1064,8 +908,6 @@ controller name, child_spec
 
 A controller process at the robot level.
 
-### Nested DSLs
- * [param](#controllers-controller-param)
 
 
 
@@ -1078,41 +920,6 @@ A controller process at the robot level.
 | [`child_spec`](#controllers-controller-child_spec){: #controllers-controller-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the controller process. Either a module or `{module, keyword_list}` |
 
 
-
-### controllers.controller.param
-```elixir
-param name
-```
-
-
-A runtime-adjustable parameter.
-
-
-
-
-
-### Arguments
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`name`](#controllers-controller-param-name){: #controllers-controller-param-name .spark-required} | `atom` |  | A unique name for the parameter |
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`type`](#controllers-controller-param-type){: #controllers-controller-param-type .spark-required} | `any` |  | The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type}) |
-| [`default`](#controllers-controller-param-default){: #controllers-controller-param-default } | `any` |  | Default value for the parameter |
-| [`min`](#controllers-controller-param-min){: #controllers-controller-param-min } | `number` |  | Minimum value for numeric parameters |
-| [`max`](#controllers-controller-param-max){: #controllers-controller-param-max } | `number` |  | Maximum value for numeric parameters |
-| [`doc`](#controllers-controller-param-doc){: #controllers-controller-param-doc } | `String.t` |  | Documentation for the parameter |
-
-
-
-
-
-### Introspection
-
-Target: `BB.Dsl.Param`
 
 
 

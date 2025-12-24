@@ -27,7 +27,7 @@ defmodule BB.SensorSupervisor do
       robot_module
       |> Info.sensors()
       |> Enum.map(fn sensor ->
-        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [])
+        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [], :sensor)
       end)
 
     Supervisor.init(children, strategy: :one_for_one)

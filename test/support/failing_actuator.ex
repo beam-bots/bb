@@ -17,15 +17,13 @@ defmodule BB.Test.FailingActuator do
     end
   end
 
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
-  end
-
-  @impl GenServer
+  @impl BB.Actuator
   def init(opts) do
+    bb = Keyword.fetch!(opts, :bb)
+
     BB.Safety.register(__MODULE__,
-      robot: opts[:bb].robot,
-      path: opts[:bb].path,
+      robot: bb.robot,
+      path: bb.path,
       opts: [fail_mode: opts[:fail_mode]]
     )
 

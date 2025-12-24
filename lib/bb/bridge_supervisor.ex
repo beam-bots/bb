@@ -28,7 +28,7 @@ defmodule BB.BridgeSupervisor do
       |> Info.parameters()
       |> Enum.filter(&is_struct(&1, Bridge))
       |> Enum.map(fn bridge ->
-        BB.Process.child_spec(robot_module, bridge.name, bridge.child_spec, [])
+        BB.Process.bridge_child_spec(robot_module, bridge.name, bridge.child_spec, [])
       end)
 
     Supervisor.init(children, strategy: :one_for_one)

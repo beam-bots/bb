@@ -12,12 +12,12 @@ defmodule BB.SupervisorTest do
     """
     use BB.Sensor, options_schema: [frequency: [type: :pos_integer, required: false]]
 
-    @impl GenServer
+    @impl BB.Sensor
     def init(opts) do
       {:ok, opts}
     end
 
-    @impl GenServer
+    @impl BB.Sensor
     def handle_call(:get_state, _from, state) do
       {:reply, state, state}
     end
@@ -32,12 +32,12 @@ defmodule BB.SupervisorTest do
     @impl BB.Actuator
     def disarm(_opts), do: :ok
 
-    @impl GenServer
+    @impl BB.Actuator
     def init(opts) do
       {:ok, opts}
     end
 
-    @impl GenServer
+    @impl BB.Actuator
     def handle_call(:get_state, _from, state) do
       {:reply, state, state}
     end

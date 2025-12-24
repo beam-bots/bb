@@ -48,12 +48,18 @@ defmodule BB.JointSupervisor do
 
     sensor_children =
       Enum.map(joint.sensors, fn sensor ->
-        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, joint_path)
+        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, joint_path, :sensor)
       end)
 
     actuator_children =
       Enum.map(joint.actuators, fn actuator ->
-        BB.Process.child_spec(robot_module, actuator.name, actuator.child_spec, joint_path)
+        BB.Process.child_spec(
+          robot_module,
+          actuator.name,
+          actuator.child_spec,
+          joint_path,
+          :actuator
+        )
       end)
 
     link_child =

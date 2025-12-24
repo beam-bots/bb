@@ -201,9 +201,7 @@ defmodule BB.Dsl do
     target: BB.Dsl.Sensor,
     identifier: :name,
     args: [:name, :child_spec],
-    entities: [
-      params: [@param]
-    ],
+    imports: [BB.Dsl.ParamRef],
     schema: [
       name: [
         type: :atom,
@@ -226,9 +224,7 @@ defmodule BB.Dsl do
     target: BB.Dsl.Actuator,
     identifier: :name,
     args: [:name, :child_spec],
-    entities: [
-      params: [@param]
-    ],
+    imports: [BB.Dsl.ParamRef],
     schema: [
       name: [
         type: :atom,
@@ -652,9 +648,7 @@ defmodule BB.Dsl do
     target: BB.Dsl.Controller,
     identifier: :name,
     args: [:name, :child_spec],
-    entities: [
-      params: [@param]
-    ],
+    imports: [BB.Dsl.ParamRef],
     schema: [
       name: [
         type: :atom,

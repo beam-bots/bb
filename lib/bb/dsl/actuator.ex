@@ -8,8 +8,7 @@ defmodule BB.Dsl.Actuator do
   defstruct __identifier__: nil,
             __spark_metadata__: nil,
             name: nil,
-            child_spec: nil,
-            params: []
+            child_spec: nil
 
   alias Spark.Dsl.Entity
 
@@ -19,7 +18,6 @@ defmodule BB.Dsl.Actuator do
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
           name: atom,
-          child_spec: child_spec,
-          params: [BB.Dsl.Param.t()]
+          child_spec: child_spec
         }
 end
