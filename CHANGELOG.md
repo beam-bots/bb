@@ -11,6 +11,25 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.8.0](https://github.com/beam-bots/bb/compare/v0.7.0...v0.8.0) (2025-12-24)
+
+
+
+
+### Features:
+
+* add param() references and wrapper GenServer pattern (#19) by James Harton
+
+* parameters: allow setting params via `start_link` options by James Harton
+
+* dsl: add `param()` references for topology fields by James Harton
+
+* dsl: add `param()` references in actuator/sensor/controller options by James Harton
+
+### Improvements:
+
+* fix arm/disarm actions by James Harton
+
 ## [v0.7.0](https://github.com/beam-bots/bb/compare/v0.6.0...v0.7.0) (2025-12-20)
 
 
