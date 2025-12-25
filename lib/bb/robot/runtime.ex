@@ -602,7 +602,16 @@ defmodule BB.Robot.Runtime do
         publish_command_event(robot_module, path, :started, %{goal: goal})
 
         # Execute handler and parse result
-        raw_result = command.handler.handle_command(goal, context)
+        raw_result =
+          :telemetry.span(
+            [:bb, :command, :execute],
+            %{robot: robot_module, command: command.name, execution_id: execution_id},
+            fn ->
+              result = command.handler.handle_command(goal, context)
+              {result, %{}}
+            end
+          )
+
         {result, next_state} = parse_handler_result(raw_result)
 
         # Transition state synchronously BEFORE publishing completion event
