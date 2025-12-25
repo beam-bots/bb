@@ -13,6 +13,14 @@ defmodule BB.Error.Invalid.JointConfig do
     class: :invalid,
     fields: [:joint, :field, :value, :expected, :message]
 
+  @type t :: %__MODULE__{
+          joint: atom(),
+          field: atom() | nil,
+          value: term(),
+          expected: term(),
+          message: String.t() | nil
+        }
+
   defimpl BB.Error.Severity do
     def severity(_), do: :error
   end
