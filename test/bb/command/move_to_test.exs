@@ -7,6 +7,7 @@ defmodule BB.Command.MoveToTest do
 
   alias BB.Command.Context
   alias BB.Command.MoveTo
+  alias BB.Error.Kinematics.Unreachable
   alias BB.Robot.State, as: RobotState
   alias BB.Test.MockSolver
 
@@ -92,8 +93,7 @@ defmodule BB.Command.MoveToTest do
          %{
            iterations: 10,
            residual: 0.001,
-           reached: true,
-           reason: :converged
+           reached: true
          }}
       )
 
@@ -116,20 +116,14 @@ defmodule BB.Command.MoveToTest do
       assert meta.iterations == 10
     end
 
-    test "returns ik_failed error on solver failure" do
+    test "returns error on solver failure" do
       start_supervised!(MoveToTestRobot)
 
       robot = MoveToTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
 
       MockSolver.set_result(
-        {:error, :unreachable,
-         %{
-           iterations: 50,
-           residual: 0.5,
-           reached: false,
-           reason: :unreachable
-         }}
+        {:error, MockSolver.unreachable_error(:tip, iterations: 50, residual: 0.5)}
       )
 
       context = %Context{
@@ -145,9 +139,10 @@ defmodule BB.Command.MoveToTest do
         solver: MockSolver
       }
 
-      {:error, {:ik_failed, :unreachable, meta}} = MoveTo.handle_command(goal, context)
+      {:error, %Unreachable{} = error} = MoveTo.handle_command(goal, context)
 
-      assert meta.reached == false
+      assert error.iterations == 50
+      assert error.residual == 0.5
     end
 
     test "passes solver options through" do
@@ -156,9 +151,7 @@ defmodule BB.Command.MoveToTest do
       robot = MoveToTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
 
-      MockSolver.set_result(
-        {:ok, %{}, %{iterations: 1, residual: 0.0, reached: true, reason: :converged}}
-      )
+      MockSolver.set_result({:ok, %{}, %{iterations: 1, residual: 0.0, reached: true}})
 
       context = %Context{
         robot_module: MoveToTestRobot,
@@ -191,8 +184,7 @@ defmodule BB.Command.MoveToTest do
       {:ok, robot_state} = RobotState.new(robot)
 
       MockSolver.set_result(
-        {:ok, %{shoulder_joint: 0.5},
-         %{iterations: 10, residual: 0.001, reached: true, reason: :converged}}
+        {:ok, %{shoulder_joint: 0.5}, %{iterations: 10, residual: 0.001, reached: true}}
       )
 
       context = %Context{

@@ -6,6 +6,7 @@ defmodule BB.MotionTest do
   use ExUnit.Case, async: true
 
   alias BB.Command.Context
+  alias BB.Error.Kinematics.Unreachable
   alias BB.Motion
   alias BB.Robot.State, as: RobotState
   alias BB.Test.MockSolver
@@ -81,8 +82,7 @@ defmodule BB.MotionTest do
          %{
            iterations: 10,
            residual: 0.001,
-           reached: true,
-           reason: :converged
+           reached: true
          }}
       )
 
@@ -110,9 +110,7 @@ defmodule BB.MotionTest do
       robot = MotionTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
 
-      MockSolver.set_result(
-        {:ok, %{}, %{iterations: 1, residual: 0.0, reached: true, reason: :converged}}
-      )
+      MockSolver.set_result({:ok, %{}, %{iterations: 1, residual: 0.0, reached: true}})
 
       context = %Context{
         robot_module: MotionTestRobot,
@@ -139,13 +137,7 @@ defmodule BB.MotionTest do
       {:ok, robot_state} = RobotState.new(robot)
 
       MockSolver.set_result(
-        {:error, :unreachable,
-         %{
-           iterations: 50,
-           residual: 0.5,
-           reached: false,
-           reason: :unreachable
-         }}
+        {:error, MockSolver.unreachable_error(:tip, iterations: 50, residual: 0.5)}
       )
 
       context = %Context{
@@ -155,11 +147,11 @@ defmodule BB.MotionTest do
         execution_id: make_ref()
       }
 
-      {:error, :unreachable, meta} =
+      {:error, %Unreachable{} = error} =
         Motion.solve_only(context, :tip, {10.0, 0.0, 0.0}, solver: MockSolver)
 
-      assert meta.reached == false
-      assert meta.reason == :unreachable
+      assert error.iterations == 50
+      assert error.residual == 0.5
     end
   end
 
@@ -175,8 +167,7 @@ defmodule BB.MotionTest do
          %{
            iterations: 10,
            residual: 0.001,
-           reached: true,
-           reason: :converged
+           reached: true
          }}
       )
 
@@ -203,13 +194,7 @@ defmodule BB.MotionTest do
       RobotState.set_joint_position(robot_state, :elbow_joint, 1.0)
 
       MockSolver.set_result(
-        {:error, :unreachable,
-         %{
-           iterations: 50,
-           residual: 0.5,
-           reached: false,
-           reason: :unreachable
-         }}
+        {:error, MockSolver.unreachable_error(:tip, iterations: 50, residual: 0.5)}
       )
 
       context = %Context{
@@ -219,7 +204,7 @@ defmodule BB.MotionTest do
         execution_id: make_ref()
       }
 
-      {:error, :unreachable, _meta} =
+      {:error, %Unreachable{}} =
         Motion.move_to(context, :tip, {10.0, 0.0, 0.0}, solver: MockSolver)
 
       assert RobotState.get_joint_position(robot_state, :shoulder_joint) == 1.0
@@ -258,8 +243,7 @@ defmodule BB.MotionTest do
          %{
            iterations: 10,
            residual: 0.001,
-           reached: true,
-           reason: :converged
+           reached: true
          }}
       )
 
@@ -279,8 +263,7 @@ defmodule BB.MotionTest do
       {:ok, robot_state} = RobotState.new(robot)
 
       MockSolver.set_result(
-        {:ok, %{shoulder_joint: 0.5},
-         %{iterations: 10, residual: 0.001, reached: true, reason: :converged}}
+        {:ok, %{shoulder_joint: 0.5}, %{iterations: 10, residual: 0.001, reached: true}}
       )
 
       context = %Context{
@@ -315,21 +298,27 @@ defmodule BB.MotionTest do
       defmodule FailOnSecondSolver do
         @behaviour BB.IK.Solver
 
+        alias BB.Error.Kinematics.Unreachable
+
         def solve(_robot, _state, target_link, _target, _opts) do
           if target_link == :upper_arm do
-            {:error, :unreachable,
-             %{iterations: 50, residual: 0.5, reached: false, reason: :unreachable}}
+            {:error,
+             %Unreachable{
+               target_link: :upper_arm,
+               iterations: 50,
+               residual: 0.5,
+               reason: "Target beyond workspace"
+             }}
           else
-            {:ok, %{shoulder_joint: 0.5},
-             %{iterations: 10, residual: 0.001, reached: true, reason: :converged}}
+            {:ok, %{shoulder_joint: 0.5}, %{iterations: 10, residual: 0.001, reached: true}}
           end
         end
       end
 
-      {:error, :upper_arm, :unreachable, results} =
+      {:error, :upper_arm, %Unreachable{}, results} =
         Motion.solve_only_multi(context, targets, solver: FailOnSecondSolver)
 
-      assert {:error, :unreachable, _meta} = results[:upper_arm]
+      assert {:error, %Unreachable{}} = results[:upper_arm]
     end
   end
 
@@ -342,7 +331,7 @@ defmodule BB.MotionTest do
 
       MockSolver.set_result(
         {:ok, %{shoulder_joint: 0.5, elbow_joint: 0.3},
-         %{iterations: 10, residual: 0.001, reached: true, reason: :converged}}
+         %{iterations: 10, residual: 0.001, reached: true}}
       )
 
       context = %Context{

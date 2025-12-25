@@ -12,10 +12,12 @@ defmodule BB.Test.MockSolver do
   ## Examples
 
       BB.Test.MockSolver.set_result({:ok, %{joint1: 0.5}, %{iterations: 5, residual: 0.001, reached: true}})
-      BB.Test.MockSolver.set_result({:error, :unreachable, %{iterations: 50, residual: 0.5, reached: false}})
+      BB.Test.MockSolver.set_result({:error, %BB.Error.Kinematics.Unreachable{target_link: :tip, residual: 0.5}})
   """
 
   @behaviour BB.IK.Solver
+
+  alias BB.Error.Kinematics.Unreachable
 
   @doc """
   Set the result that solve/5 will return.
@@ -31,6 +33,20 @@ defmodule BB.Test.MockSolver do
     Process.get(:mock_solver_last_call)
   end
 
+  @doc """
+  Create an unreachable error for testing.
+  """
+  def unreachable_error(target_link, opts \\ []) do
+    %Unreachable{
+      target_link: target_link,
+      target_pose: Keyword.get(opts, :target_pose),
+      reason: Keyword.get(opts, :reason, "Target beyond workspace"),
+      iterations: Keyword.get(opts, :iterations, 50),
+      residual: Keyword.get(opts, :residual, 0.5),
+      positions: Keyword.get(opts, :positions)
+    }
+  end
+
   @impl BB.IK.Solver
   def solve(robot, state_or_positions, target_link, target, opts) do
     Process.put(:mock_solver_last_call, {robot, state_or_positions, target_link, target, opts})
@@ -38,7 +54,7 @@ defmodule BB.Test.MockSolver do
     case Process.get(:mock_solver_result) do
       nil ->
         positions = %{}
-        meta = %{iterations: 1, residual: 0.0, reached: true, reason: :converged}
+        meta = %{iterations: 1, residual: 0.0, reached: true}
         {:ok, positions, meta}
 
       result ->

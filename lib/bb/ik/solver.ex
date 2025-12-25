@@ -35,8 +35,21 @@ defmodule BB.IK.Solver do
   - `:tolerance` - Convergence tolerance in metres (default: 1.0e-4)
   - `:respect_limits` - Whether to clamp to joint limits (default: true)
   - `:initial_positions` - Starting joint positions (default: from state)
+
+  ## Error Types
+
+  Solvers return structured errors from `BB.Error.Kinematics`:
+
+  - `%BB.Error.Kinematics.UnknownLink{}` - Target link not found in robot topology
+  - `%BB.Error.Kinematics.NoDofs{}` - Chain has no movable joints
+  - `%BB.Error.Kinematics.Unreachable{}` - Target outside workspace
+  - `%BB.Error.Kinematics.NoSolution{}` - Solver failed to converge
   """
 
+  alias BB.Error.Kinematics.NoDofs
+  alias BB.Error.Kinematics.NoSolution
+  alias BB.Error.Kinematics.UnknownLink
+  alias BB.Error.Kinematics.Unreachable
   alias BB.Robot
 
   @type positions :: %{atom() => float()}
@@ -55,13 +68,15 @@ defmodule BB.IK.Solver do
   @type meta :: %{
           iterations: non_neg_integer(),
           residual: float(),
-          reached: boolean(),
-          reason: :converged | :unreachable | :max_iterations | nil
+          reached: boolean()
         }
+
+  @type kinematics_error ::
+          UnknownLink.t() | NoDofs.t() | Unreachable.t() | NoSolution.t()
 
   @type solve_result ::
           {:ok, positions(), meta()}
-          | {:error, :unknown_link | :no_dofs | :unreachable | :max_iterations, meta()}
+          | {:error, kinematics_error()}
 
   @doc """
   Solve inverse kinematics for a target link to reach a target position/pose.
@@ -77,9 +92,9 @@ defmodule BB.IK.Solver do
   ## Returns
 
   - `{:ok, positions, meta}` - Successfully solved; positions map and metadata
-  - `{:error, reason, meta}` - Failed to solve; reason and best-effort metadata
+  - `{:error, error}` - Failed to solve; error struct contains all metadata
 
-  Even on error, `meta` may contain `:positions` with best-effort joint values.
+  Error structs include `:positions` with best-effort joint values when applicable.
   """
   @callback solve(
               robot :: Robot.t(),
