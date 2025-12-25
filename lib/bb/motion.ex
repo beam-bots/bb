@@ -37,28 +37,28 @@ defmodule BB.Motion do
       # Single target
       case BB.Motion.move_to(MyRobot, :gripper, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK) do
         {:ok, meta} -> IO.puts("Reached target in \#{meta.iterations} iterations")
-        {:error, reason, _meta} -> IO.puts("Failed: \#{reason}")
+        {:error, %{class: :kinematics} = error} -> IO.puts("Failed: \#{BB.Error.message(error)}")
       end
 
       # Multiple targets (for gait, coordinated motion)
       targets = %{left_foot: {0.1, 0.0, 0.0}, right_foot: {-0.1, 0.0, 0.0}}
       case BB.Motion.move_to_multi(MyRobot, targets, solver: BB.IK.FABRIK) do
         {:ok, results} -> IO.puts("All targets reached")
-        {:error, failed_link, reason, results} -> IO.puts("Failed: \#{failed_link}")
+        {:error, failed_link, error, _results} -> IO.puts("Failed: \#{failed_link}")
       end
 
       # In a custom command handler
       def handle_command(%{target: target}, context) do
         case BB.Motion.move_to(context, :gripper, target, solver: BB.IK.FABRIK) do
           {:ok, meta} -> {:ok, %{residual: meta.residual}}
-          {:error, reason, _meta} -> {:error, reason}
+          {:error, error} -> {:error, error}
         end
       end
 
       # Just solve without moving (for validation)
       case BB.Motion.solve_only(MyRobot, :gripper, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK) do
         {:ok, positions, meta} -> IO.inspect(positions, label: "Would set")
-        {:error, reason, _meta} -> IO.puts("Cannot reach: \#{reason}")
+        {:error, %BB.Error.Kinematics.Unreachable{}} -> IO.puts("Cannot reach target")
       end
 
       # Send pre-computed positions
@@ -68,21 +68,26 @@ defmodule BB.Motion do
 
   alias BB.Actuator
   alias BB.Command.Context
+  alias BB.IK.Solver
   alias BB.Robot.Runtime
   alias BB.Robot.State, as: RobotState
 
-  @type target :: BB.IK.Solver.target()
-  @type positions :: BB.IK.Solver.positions()
-  @type meta :: BB.IK.Solver.meta()
+  @type target :: Solver.target()
+  @type positions :: Solver.positions()
+  @type meta :: Solver.meta()
+  @type kinematics_error :: Solver.kinematics_error()
   @type robot_or_context :: module() | Context.t()
   @type delivery :: :pubsub | :direct | :sync
   @type targets :: %{atom() => target()}
-  @type multi_results :: %{atom() => {:ok, positions(), meta()} | {:error, atom(), meta()}}
+  @type multi_results ::
+          %{atom() => {:ok, positions(), meta()} | {:error, kinematics_error()}}
 
-  @type motion_result :: {:ok, meta()} | {:error, atom(), meta()}
-  @type solve_result :: {:ok, positions(), meta()} | {:error, atom(), meta()}
-  @type multi_motion_result :: {:ok, multi_results()} | {:error, atom(), atom(), multi_results()}
-  @type multi_solve_result :: {:ok, multi_results()} | {:error, atom(), atom(), multi_results()}
+  @type motion_result :: {:ok, meta()} | {:error, kinematics_error()}
+  @type solve_result :: {:ok, positions(), meta()} | {:error, kinematics_error()}
+  @type multi_motion_result ::
+          {:ok, multi_results()} | {:error, atom(), kinematics_error(), multi_results()}
+  @type multi_solve_result ::
+          {:ok, multi_results()} | {:error, atom(), kinematics_error(), multi_results()}
 
   @doc """
   Move an end-effector to a target position.
@@ -104,7 +109,7 @@ defmodule BB.Motion do
   ## Returns
 
   - `{:ok, meta}` - Successfully moved; meta contains solver info (iterations, residual, etc.)
-  - `{:error, reason, meta}` - Failed; reason is `:ik_failed`, `:unreachable`, etc.
+  - `{:error, error}` - Failed; error is a struct from `BB.Error.Kinematics`
 
   ## Examples
 
@@ -131,8 +136,8 @@ defmodule BB.Motion do
         publish_joint_state(robot_module, positions)
         {:ok, meta}
 
-      {:error, reason, meta} ->
-        {:error, reason, meta}
+      {:error, error} ->
+        {:error, error}
     end
   end
 
@@ -151,14 +156,14 @@ defmodule BB.Motion do
   ## Returns
 
   - `{:ok, positions, meta}` - Successfully solved; positions is a joint name → value map
-  - `{:error, reason, meta}` - Failed to solve
+  - `{:error, error}` - Failed to solve; error is a struct from `BB.Error.Kinematics`
 
   ## Examples
 
       # Check if target is reachable
       case BB.Motion.solve_only(MyRobot, :gripper, target, solver: BB.IK.FABRIK) do
         {:ok, _positions, %{reached: true}} -> :reachable
-        _ -> :unreachable
+        {:error, _} -> :unreachable
       end
   """
   @spec solve_only(robot_or_context(), atom(), target(), keyword()) :: solve_result()
@@ -196,7 +201,7 @@ defmodule BB.Motion do
   ## Returns
 
   - `{:ok, results}` - All targets solved; results is a map of link → `{:ok, positions, meta}`
-  - `{:error, failed_link, reason, results}` - A target failed; results contains successful solves
+  - `{:error, failed_link, error, results}` - A target failed; error is from `BB.Error.Kinematics`
 
   ## Examples
 
@@ -209,8 +214,8 @@ defmodule BB.Motion do
         {:ok, results} ->
           IO.puts("All targets reached")
 
-        {:error, failed_link, reason, _results} ->
-          IO.puts("Failed to reach \#{failed_link}: \#{reason}")
+        {:error, failed_link, error, _results} ->
+          IO.puts("Failed to reach \#{failed_link}: \#{BB.Error.message(error)}")
       end
   """
   @spec move_to_multi(robot_or_context(), targets(), keyword()) :: multi_motion_result()
@@ -227,8 +232,8 @@ defmodule BB.Motion do
 
         {:ok, results}
 
-      {:error, failed_link, reason, results} ->
-        {:error, failed_link, reason, results}
+      {:error, failed_link, error, results} ->
+        {:error, failed_link, error, results}
     end
   end
 
@@ -245,7 +250,7 @@ defmodule BB.Motion do
   ## Returns
 
   - `{:ok, results}` - All targets solved; results is a map of link → `{:ok, positions, meta}`
-  - `{:error, failed_link, reason, results}` - A target failed; results contains successful solves
+  - `{:error, failed_link, error, results}` - A target failed; error is from `BB.Error.Kinematics`
 
   ## Examples
 
@@ -257,8 +262,8 @@ defmodule BB.Motion do
             IO.puts("\#{link}: residual=\#{meta.residual}")
           end)
 
-        {:error, failed_link, reason, _results} ->
-          IO.puts("\#{failed_link} is unreachable: \#{reason}")
+        {:error, failed_link, error, _results} ->
+          IO.puts("\#{failed_link} is unreachable: \#{BB.Error.message(error)}")
       end
   """
   @spec solve_only_multi(robot_or_context(), targets(), keyword()) :: multi_solve_result()
@@ -276,8 +281,8 @@ defmodule BB.Motion do
       {:ok, {link, {:ok, _, _} = result}}, {:ok, results} ->
         {:cont, {:ok, Map.put(results, link, result)}}
 
-      {:ok, {link, {:error, reason, _meta} = result}}, {:ok, results} ->
-        {:halt, {:error, link, reason, Map.put(results, link, result)}}
+      {:ok, {link, {:error, error} = result}}, {:ok, results} ->
+        {:halt, {:error, link, error, Map.put(results, link, result)}}
     end)
   end
 

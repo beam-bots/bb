@@ -109,8 +109,8 @@ defmodule BB.Command.MoveTo do
         {:ok, meta} ->
           {:ok, meta}
 
-        {:error, reason, meta} ->
-          {:error, {:ik_failed, reason, meta}}
+        {:error, error} ->
+          {:error, error}
       end
     end
   end
@@ -124,8 +124,8 @@ defmodule BB.Command.MoveTo do
         {:ok, results} ->
           {:ok, results}
 
-        {:error, failed_link, reason, results} ->
-          {:error, {:ik_failed, failed_link, reason, results}}
+        {:error, failed_link, error, results} ->
+          {:error, {:ik_failed, failed_link, error, results}}
       end
     end
   end

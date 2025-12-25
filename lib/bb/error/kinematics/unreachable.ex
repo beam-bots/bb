@@ -11,7 +11,16 @@ defmodule BB.Error.Kinematics.Unreachable do
   """
   use BB.Error,
     class: :kinematics,
-    fields: [:target_link, :target_pose, :reason]
+    fields: [:target_link, :target_pose, :reason, :iterations, :residual, :positions]
+
+  @type t :: %__MODULE__{
+          target_link: atom(),
+          target_pose: term(),
+          reason: String.t() | nil,
+          iterations: non_neg_integer() | nil,
+          residual: float() | nil,
+          positions: map() | nil
+        }
 
   defimpl BB.Error.Severity do
     def severity(_), do: :error
