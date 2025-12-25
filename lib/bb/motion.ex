@@ -129,16 +129,33 @@ defmodule BB.Motion do
 
     {robot_module, robot, robot_state} = extract_context(robot_or_context)
 
-    case solver.solve(robot, robot_state, target_link, target, solver_opts) do
-      {:ok, positions, meta} ->
-        RobotState.set_positions(robot_state, positions)
-        send_positions_to_actuators(robot_module, robot, positions, delivery)
-        publish_joint_state(robot_module, positions)
-        {:ok, meta}
+    :telemetry.span(
+      [:bb, :motion, :move_to],
+      %{robot: robot.name, target_link: target_link, solver: solver},
+      fn ->
+        case solver.solve(robot, robot_state, target_link, target, solver_opts) do
+          {:ok, positions, meta} ->
+            RobotState.set_positions(robot_state, positions)
+            send_positions_to_actuators(robot_module, robot, positions, delivery)
+            publish_joint_state(robot_module, positions)
 
-      {:error, error} ->
-        {:error, error}
-    end
+            result = {:ok, meta}
+
+            extra_meta = %{
+              iterations: meta.iterations,
+              residual: meta.residual,
+              reached: meta.reached
+            }
+
+            {result, extra_meta}
+
+          {:error, error} ->
+            result = {:error, error}
+            extra_meta = %{error: error.__struct__}
+            {result, extra_meta}
+        end
+      end
+    )
   end
 
   @doc """
@@ -173,7 +190,26 @@ defmodule BB.Motion do
 
     {_robot_module, robot, robot_state} = extract_context(robot_or_context)
 
-    solver.solve(robot, robot_state, target_link, target, solver_opts)
+    :telemetry.span(
+      [:bb, :motion, :solve],
+      %{robot: robot.name, target_link: target_link, solver: solver},
+      fn ->
+        case solver.solve(robot, robot_state, target_link, target, solver_opts) do
+          {:ok, _positions, meta} = result ->
+            extra_meta = %{
+              iterations: meta.iterations,
+              residual: meta.residual,
+              reached: meta.reached
+            }
+
+            {result, extra_meta}
+
+          {:error, error} = result ->
+            extra_meta = %{error: error.__struct__}
+            {result, extra_meta}
+        end
+      end
+    )
   end
 
   @doc """
@@ -322,9 +358,18 @@ defmodule BB.Motion do
 
     {robot_module, robot, robot_state} = extract_context(robot_or_context)
 
-    RobotState.set_positions(robot_state, positions)
-    send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
-    publish_joint_state(robot_module, positions)
+    :telemetry.span(
+      [:bb, :motion, :send_positions],
+      %{robot: robot.name, joint_count: map_size(positions), delivery: delivery},
+      fn ->
+        RobotState.set_positions(robot_state, positions)
+        send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
+        publish_joint_state(robot_module, positions)
+        {:ok, %{}}
+      end
+    )
+
+    :ok
   end
 
   defp extract_context(%Context{} = context) do
