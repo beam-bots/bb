@@ -11,6 +11,23 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.9.0](https://github.com/beam-bots/bb/compare/v0.8.0...v0.9.0) (2025-12-26)
+
+
+
+
+### Features:
+
+* add diagnostic and performance telemetry by James Harton
+
+* add structured error handling with `splode` by James Harton
+
+### Improvements:
+
+* add `@type t` to `BB.Error.Invalid.JointConfig` by James Harton
+
+* make `BB.Safety.disarm/2` timeout configurable by James Harton
+
 ## [v0.8.0](https://github.com/beam-bots/bb/compare/v0.7.0...v0.8.0) (2025-12-24)
 
 
