@@ -22,15 +22,29 @@ defmodule BB.BridgeSupervisor do
   end
 
   @impl true
-  def init({robot_module, _opts}) do
+  def init({robot_module, opts}) do
+    simulation_mode = Keyword.get(opts, :simulation)
+
     children =
       robot_module
       |> Info.parameters()
       |> Enum.filter(&is_struct(&1, Bridge))
-      |> Enum.map(fn bridge ->
-        BB.Process.bridge_child_spec(robot_module, bridge.name, bridge.child_spec, [])
+      |> Enum.flat_map(fn bridge ->
+        build_bridge_child(robot_module, bridge, simulation_mode)
       end)
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp build_bridge_child(robot_module, bridge, nil = _simulation_mode) do
+    [BB.Process.bridge_child_spec(robot_module, bridge.name, bridge.child_spec, [])]
+  end
+
+  defp build_bridge_child(robot_module, bridge, _simulation_mode) do
+    case bridge.simulation do
+      :omit -> []
+      :mock -> [BB.Process.bridge_child_spec(robot_module, bridge.name, BB.Sim.Bridge, [])]
+      :start -> [BB.Process.bridge_child_spec(robot_module, bridge.name, bridge.child_spec, [])]
+    end
   end
 end

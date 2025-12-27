@@ -22,20 +22,60 @@ defmodule BB.ControllerSupervisor do
   end
 
   @impl true
-  def init({robot_module, _opts}) do
+  def init({robot_module, opts}) do
+    simulation_mode = Keyword.get(opts, :simulation)
+
     children =
       robot_module
       |> Info.controllers()
-      |> Enum.map(fn controller ->
-        BB.Process.child_spec(
-          robot_module,
-          controller.name,
-          controller.child_spec,
-          [],
-          :controller
-        )
+      |> Enum.flat_map(fn controller ->
+        build_controller_child(robot_module, controller, simulation_mode, opts)
       end)
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp build_controller_child(robot_module, controller, nil = _simulation_mode, opts) do
+    [
+      BB.Process.child_spec(
+        robot_module,
+        controller.name,
+        controller.child_spec,
+        [],
+        :controller,
+        opts
+      )
+    ]
+  end
+
+  defp build_controller_child(robot_module, controller, _simulation_mode, opts) do
+    case controller.simulation do
+      :omit ->
+        []
+
+      :mock ->
+        [
+          BB.Process.child_spec(
+            robot_module,
+            controller.name,
+            BB.Sim.Controller,
+            [],
+            :controller,
+            opts
+          )
+        ]
+
+      :start ->
+        [
+          BB.Process.child_spec(
+            robot_module,
+            controller.name,
+            controller.child_spec,
+            [],
+            :controller,
+            opts
+          )
+        ]
+    end
   end
 end

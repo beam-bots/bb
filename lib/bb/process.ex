@@ -13,7 +13,7 @@ defmodule BB.Process do
   Build a child_spec that registers the process in the robot's registry.
 
   The resulting child spec uses the appropriate wrapper GenServer based on type:
-  - `:actuator` → `BB.Actuator.Server`
+  - `:actuator` → `BB.Actuator.Server` (or `BB.Sim.Actuator` in simulation mode)
   - `:sensor` → `BB.Sensor.Server`
   - `:controller` → `BB.Controller.Server`
 
@@ -23,9 +23,32 @@ defmodule BB.Process do
   The process is registered by its name (which must be globally unique across
   the robot). The full path is passed to the process in its init args for
   context, but is not used for registration.
+
+  ## Options
+
+  - `:simulation` - when set (e.g., `:kinematic`), actuators use `BB.Sim.Actuator`
+    instead of the real actuator module
   """
-  @spec child_spec(module, atom, module | {module, Keyword.t()}, [atom], process_type) :: map
-  def child_spec(robot_module, name, user_child_spec, path, type) do
+  @spec child_spec(
+          module,
+          atom,
+          module | {module, Keyword.t()},
+          [atom],
+          process_type,
+          Keyword.t()
+        ) ::
+          map
+  def child_spec(robot_module, name, user_child_spec, path, type, opts \\ []) do
+    simulation_mode = Keyword.get(opts, :simulation)
+
+    if simulation_mode && type == :actuator do
+      build_simulated_actuator_spec(robot_module, name, path)
+    else
+      build_real_child_spec(robot_module, name, user_child_spec, path, type)
+    end
+  end
+
+  defp build_real_child_spec(robot_module, name, user_child_spec, path, type) do
     {callback_module, user_args} = normalize_child_spec(user_child_spec)
     full_path = path ++ [name]
 
@@ -40,6 +63,25 @@ defmodule BB.Process do
       id: name,
       start:
         {wrapper_module, :start_link,
+         [
+           init_arg,
+           [name: via(robot_module, name)]
+         ]}
+    }
+  end
+
+  defp build_simulated_actuator_spec(robot_module, name, path) do
+    full_path = path ++ [name]
+
+    init_arg = [
+      bb: %{robot: robot_module, path: full_path},
+      __callback_module__: BB.Sim.Actuator
+    ]
+
+    %{
+      id: name,
+      start:
+        {BB.Actuator.Server, :start_link,
          [
            init_arg,
            [name: via(robot_module, name)]

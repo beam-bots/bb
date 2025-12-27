@@ -22,12 +22,12 @@ defmodule BB.SensorSupervisor do
   end
 
   @impl true
-  def init({robot_module, _opts}) do
+  def init({robot_module, opts}) do
     children =
       robot_module
       |> Info.sensors()
       |> Enum.map(fn sensor ->
-        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [], :sensor)
+        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [], :sensor, opts)
       end)
 
     Supervisor.init(children, strategy: :one_for_one)

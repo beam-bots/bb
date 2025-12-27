@@ -63,10 +63,12 @@ defmodule BB.Robot.Runtime do
     :current_command_name,
     :current_execution_id,
     :parameter_store,
-    :parameter_store_state
+    :parameter_store_state,
+    :simulation_mode
   ]
 
   @type robot_state :: :disarmed | :disarming | :idle | :executing | :error
+  @type simulation_mode :: nil | :kinematic | :external
   @type t :: %__MODULE__{
           robot_module: module(),
           robot: BB.Robot.t(),
@@ -78,7 +80,8 @@ defmodule BB.Robot.Runtime do
           current_command_name: atom() | nil,
           current_execution_id: reference() | nil,
           parameter_store: module() | nil,
-          parameter_store_state: term() | nil
+          parameter_store_state: term() | nil,
+          simulation_mode: simulation_mode()
         }
 
   @doc """
@@ -121,6 +124,17 @@ defmodule BB.Robot.Runtime do
       :error ->
         :error
     end
+  end
+
+  @doc """
+  Get the simulation mode for a robot.
+
+  Returns `nil` if running in hardware mode, or the simulation mode atom
+  (e.g., `:kinematic`, `:external`) if running in simulation.
+  """
+  @spec simulation_mode(module()) :: simulation_mode()
+  def simulation_mode(robot_module) do
+    GenServer.call(via(robot_module), :get_simulation_mode)
   end
 
   @doc """
@@ -302,6 +316,8 @@ defmodule BB.Robot.Runtime do
 
     # Internal state tracks :idle/:executing (not :disarmed)
     # The armed/disarmed state is owned by SafetyController
+    simulation_mode = Keyword.get(opts, :simulation)
+
     state = %__MODULE__{
       robot_module: robot_module,
       robot: robot,
@@ -313,7 +329,8 @@ defmodule BB.Robot.Runtime do
       current_command_name: nil,
       current_execution_id: nil,
       parameter_store: store_module,
-      parameter_store_state: store_state
+      parameter_store_state: store_state,
+      simulation_mode: simulation_mode
     }
 
     # Register DSL-defined parameters (applies defaults)
@@ -378,6 +395,10 @@ defmodule BB.Robot.Runtime do
 
   def handle_call(:get_robot, _from, state) do
     {:reply, state.robot, state}
+  end
+
+  def handle_call(:get_simulation_mode, _from, state) do
+    {:reply, state.simulation_mode, state}
   end
 
   def handle_call({:execute, command_name, goal, execution_id}, _from, state) do
