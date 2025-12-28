@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule BB.Vec3Test do
+defmodule BB.Math.Vec3Test do
   use ExUnit.Case, async: true
-  alias BB.Vec3
+  alias BB.Math.Vec3
 
   @tolerance 1.0e-6
 

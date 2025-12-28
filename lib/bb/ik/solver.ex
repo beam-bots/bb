@@ -58,9 +58,9 @@ defmodule BB.IK.Solver do
   alias BB.Error.Kinematics.NoSolution
   alias BB.Error.Kinematics.UnknownLink
   alias BB.Error.Kinematics.Unreachable
-  alias BB.Quaternion
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
   alias BB.Robot
-  alias BB.Vec3
 
   @type positions :: %{atom() => float()}
 

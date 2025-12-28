@@ -7,7 +7,7 @@ defmodule BB.Message.Option do
   Custom Spark.Options types for message primitives.
 
   Provides type functions for use in payload schemas to validate
-  tagged tuple primitives like `{:vec3, x, y, z}` and `{:quaternion, x, y, z, w}`.
+  `BB.Vec3.t()` and `BB.Quaternion.t()` types.
 
   ## Usage
 
@@ -19,8 +19,11 @@ defmodule BB.Message.Option do
       ])
   """
 
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
+
   @doc """
-  Returns a Spark.Options type for validating `{:vec3, x, y, z}` tuples.
+  Returns a Spark.Options type for validating `BB.Vec3.t()`.
 
   ## Examples
 
@@ -31,7 +34,7 @@ defmodule BB.Message.Option do
   def vec3_type, do: {:custom, __MODULE__, :validate_vec3, [[]]}
 
   @doc """
-  Returns a Spark.Options type for validating `{:quaternion, x, y, z, w}` tuples.
+  Returns a Spark.Options type for validating `BB.Quaternion.t()`.
 
   ## Examples
 
@@ -42,47 +45,38 @@ defmodule BB.Message.Option do
   def quaternion_type, do: {:custom, __MODULE__, :validate_quaternion, [[]]}
 
   @doc """
-  Validates a vec3 tagged tuple.
+  Validates a BB.Vec3 struct.
 
   ## Examples
 
-      iex> BB.Message.Option.validate_vec3({:vec3, 1.0, 2.0, 3.0}, [])
-      {:ok, {:vec3, 1.0, 2.0, 3.0}}
-
-      iex> BB.Message.Option.validate_vec3({:vec3, 1, 2, 3}, [])
-      {:error, "expected {:vec3, x, y, z} with float values, got: {:vec3, 1, 2, 3}"}
+      iex> BB.Message.Option.validate_vec3(BB.Vec3.new(1.0, 2.0, 3.0), [])
+      {:ok, %BB.Vec3{}}
 
       iex> BB.Message.Option.validate_vec3("not a vec3", [])
-      {:error, "expected {:vec3, x, y, z} with float values, got: \\"not a vec3\\""}
+      {:error, "expected BB.Vec3.t(), got: \\"not a vec3\\""}
   """
-  @spec validate_vec3(term(), keyword()) :: {:ok, tuple()} | {:error, String.t()}
-  def validate_vec3({:vec3, x, y, z}, _opts)
-      when is_float(x) and is_float(y) and is_float(z) do
-    {:ok, {:vec3, x, y, z}}
-  end
+  @spec validate_vec3(term(), keyword()) :: {:ok, Vec3.t()} | {:error, String.t()}
+  def validate_vec3(%Vec3{} = vec, _opts), do: {:ok, vec}
 
   def validate_vec3(value, _opts) do
-    {:error, "expected {:vec3, x, y, z} with float values, got: #{inspect(value)}"}
+    {:error, "expected BB.Vec3.t(), got: #{inspect(value)}"}
   end
 
   @doc """
-  Validates a quaternion tagged tuple.
+  Validates a BB.Quaternion struct.
 
   ## Examples
 
-      iex> BB.Message.Option.validate_quaternion({:quaternion, 0.0, 0.0, 0.0, 1.0}, [])
-      {:ok, {:quaternion, 0.0, 0.0, 0.0, 1.0}}
+      iex> BB.Message.Option.validate_quaternion(BB.Quaternion.identity(), [])
+      {:ok, %BB.Quaternion{}}
 
-      iex> BB.Message.Option.validate_quaternion({:quaternion, 0, 0, 0, 1}, [])
-      {:error, "expected {:quaternion, x, y, z, w} with float values, got: {:quaternion, 0, 0, 0, 1}"}
+      iex> BB.Message.Option.validate_quaternion("not a quaternion", [])
+      {:error, "expected BB.Quaternion.t(), got: \\"not a quaternion\\""}
   """
-  @spec validate_quaternion(term(), keyword()) :: {:ok, tuple()} | {:error, String.t()}
-  def validate_quaternion({:quaternion, x, y, z, w}, _opts)
-      when is_float(x) and is_float(y) and is_float(z) and is_float(w) do
-    {:ok, {:quaternion, x, y, z, w}}
-  end
+  @spec validate_quaternion(term(), keyword()) :: {:ok, Quaternion.t()} | {:error, String.t()}
+  def validate_quaternion(%Quaternion{} = quat, _opts), do: {:ok, quat}
 
   def validate_quaternion(value, _opts) do
-    {:error, "expected {:quaternion, x, y, z, w} with float values, got: #{inspect(value)}"}
+    {:error, "expected BB.Quaternion.t(), got: #{inspect(value)}"}
   end
 end

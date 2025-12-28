@@ -5,7 +5,9 @@
 defmodule BB.PubSubTest do
   use ExUnit.Case, async: false
 
-  alias BB.Message.{Geometry.Pose, Quaternion, Sensor.Imu, Vec3}
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
+  alias BB.Message.{Geometry.Pose, Sensor.Imu}
   alias BB.PubSub
 
   defmodule TestRobot do

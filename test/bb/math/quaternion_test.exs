@@ -2,10 +2,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule BB.QuaternionTest do
+defmodule BB.Math.QuaternionTest do
   use ExUnit.Case, async: true
-  alias BB.Quaternion
-  alias BB.Vec3
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
 
   @pi :math.pi()
   @tolerance 1.0e-6

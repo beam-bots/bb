@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule BB.Quaternion do
+defmodule BB.Math.Quaternion do
   @moduledoc """
   Unit quaternion for 3D rotations, backed by an Nx tensor.
 
@@ -14,18 +14,18 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.identity()
-      iex> BB.Quaternion.w(q)
+      iex> q = BB.Math.Quaternion.identity()
+      iex> BB.Math.Quaternion.w(q)
       1.0
 
-      iex> q1 = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> q2 = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> q3 = BB.Quaternion.multiply(q1, q2)
-      iex> BB.Quaternion.angular_distance(q3, BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi()))
+      iex> q1 = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> q2 = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> q3 = BB.Math.Quaternion.multiply(q1, q2)
+      iex> BB.Math.Quaternion.angular_distance(q3, BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi()))
       0.0
   """
 
-  alias BB.Vec3
+  alias BB.Math.Vec3
 
   defstruct [:tensor]
 
@@ -38,8 +38,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.new(1, 0, 0, 0)
-      iex> BB.Quaternion.w(q)
+      iex> q = BB.Math.Quaternion.new(1, 0, 0, 0)
+      iex> BB.Math.Quaternion.w(q)
       1.0
   """
   @spec new(number(), number(), number(), number()) :: t()
@@ -63,8 +63,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.identity()
-      iex> {BB.Quaternion.w(q), BB.Quaternion.x(q), BB.Quaternion.y(q), BB.Quaternion.z(q)}
+      iex> q = BB.Math.Quaternion.identity()
+      iex> {BB.Math.Quaternion.w(q), BB.Math.Quaternion.x(q), BB.Math.Quaternion.y(q), BB.Math.Quaternion.z(q)}
       {1.0, 0.0, 0.0, 0.0}
   """
   @spec identity() :: t()
@@ -105,13 +105,13 @@ defmodule BB.Quaternion do
   @doc """
   Creates a quaternion from an axis-angle representation.
 
-  The axis should be a `BB.Vec3` unit vector (it will be normalised if not).
+  The axis should be a `BB.Math.Vec3` unit vector (it will be normalised if not).
   The angle is in radians.
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> Float.round(BB.Quaternion.w(q), 6)
+      iex> q = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> Float.round(BB.Math.Quaternion.w(q), 6)
       0.707107
   """
   @spec from_axis_angle(Vec3.t(), number()) :: t()
@@ -149,13 +149,13 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_two_vectors(BB.Vec3.unit_x(), BB.Vec3.unit_y())
-      iex> rotated = BB.Quaternion.rotate_vector(q, BB.Vec3.unit_x())
-      iex> {Float.round(BB.Vec3.x(rotated), 6), Float.round(BB.Vec3.y(rotated), 6)}
+      iex> q = BB.Math.Quaternion.from_two_vectors(BB.Math.Vec3.unit_x(), BB.Math.Vec3.unit_y())
+      iex> rotated = BB.Math.Quaternion.rotate_vector(q, BB.Math.Vec3.unit_x())
+      iex> {Float.round(BB.Math.Vec3.x(rotated), 6), Float.round(BB.Math.Vec3.y(rotated), 6)}
       {0.0, 1.0}
 
-      iex> q = BB.Quaternion.from_two_vectors(BB.Vec3.unit_z(), BB.Vec3.unit_z())
-      iex> BB.Quaternion.w(q)
+      iex> q = BB.Math.Quaternion.from_two_vectors(BB.Math.Vec3.unit_z(), BB.Math.Vec3.unit_z())
+      iex> BB.Math.Quaternion.w(q)
       1.0
   """
   @spec from_two_vectors(Vec3.t(), Vec3.t()) :: t()
@@ -264,8 +264,8 @@ defmodule BB.Quaternion do
   ## Examples
 
       iex> m = Nx.tensor([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-      iex> q = BB.Quaternion.from_rotation_matrix(m)
-      iex> BB.Quaternion.w(q)
+      iex> q = BB.Math.Quaternion.from_rotation_matrix(m)
+      iex> BB.Math.Quaternion.w(q)
       1.0
   """
   @spec from_rotation_matrix(Nx.Tensor.t()) :: t()
@@ -378,8 +378,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_euler(0, 0, :math.pi() / 2, :xyz)
-      iex> Float.round(BB.Quaternion.z(q), 6)
+      iex> q = BB.Math.Quaternion.from_euler(0, 0, :math.pi() / 2, :xyz)
+      iex> Float.round(BB.Math.Quaternion.z(q), 6)
       0.707107
   """
   @spec from_euler(number(), number(), number(), atom()) :: t()
@@ -474,8 +474,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.identity()
-      iex> m = BB.Quaternion.to_rotation_matrix(q)
+      iex> q = BB.Math.Quaternion.identity()
+      iex> m = BB.Math.Quaternion.to_rotation_matrix(q)
       iex> Nx.to_number(m[0][0])
       1.0
   """
@@ -523,16 +523,16 @@ defmodule BB.Quaternion do
   @doc """
   Converts a quaternion to axis-angle representation.
 
-  Returns `{axis, angle}` where axis is a `BB.Vec3` unit vector
+  Returns `{axis, angle}` where axis is a `BB.Math.Vec3` unit vector
   and angle is in radians (0 to pi).
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> {axis, angle} = BB.Quaternion.to_axis_angle(q)
+      iex> q = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> {axis, angle} = BB.Math.Quaternion.to_axis_angle(q)
       iex> Float.round(angle, 6)
       1.570796
-      iex> Float.round(BB.Vec3.z(axis), 1)
+      iex> Float.round(BB.Math.Vec3.z(axis), 1)
       1.0
   """
   @spec to_axis_angle(t()) :: {Vec3.t(), float()}
@@ -569,8 +569,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_euler(0.1, 0.2, 0.3, :xyz)
-      iex> {roll, pitch, yaw} = BB.Quaternion.to_euler(q, :xyz)
+      iex> q = BB.Math.Quaternion.from_euler(0.1, 0.2, 0.3, :xyz)
+      iex> {roll, pitch, yaw} = BB.Math.Quaternion.to_euler(q, :xyz)
       iex> Float.round(roll, 6)
       0.1
   """
@@ -659,10 +659,10 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q1 = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> q2 = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> q3 = BB.Quaternion.multiply(q1, q2)
-      iex> {_axis, angle} = BB.Quaternion.to_axis_angle(q3)
+      iex> q1 = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> q2 = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> q3 = BB.Math.Quaternion.multiply(q1, q2)
+      iex> {_axis, angle} = BB.Math.Quaternion.to_axis_angle(q3)
       iex> Float.round(angle, 6)
       3.141593
   """
@@ -742,9 +742,9 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> qc = BB.Quaternion.conjugate(q)
-      iex> Float.round(BB.Quaternion.z(qc), 6)
+      iex> q = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> qc = BB.Math.Quaternion.conjugate(q)
+      iex> Float.round(BB.Math.Quaternion.z(qc), 6)
       -0.707107
   """
   @spec conjugate(t()) :: t()
@@ -762,9 +762,9 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = %BB.Quaternion{tensor: Nx.tensor([2.0, 0.0, 0.0, 0.0])}
-      iex> qn = BB.Quaternion.normalise(q)
-      iex> BB.Quaternion.w(qn)
+      iex> q = %BB.Math.Quaternion{tensor: Nx.tensor([2.0, 0.0, 0.0, 0.0])}
+      iex> qn = BB.Math.Quaternion.normalise(q)
+      iex> BB.Math.Quaternion.w(qn)
       1.0
   """
   @spec normalise(t()) :: t()
@@ -790,10 +790,10 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> qi = BB.Quaternion.inverse(q)
-      iex> qr = BB.Quaternion.multiply(q, qi)
-      iex> Float.round(BB.Quaternion.w(qr), 6)
+      iex> q = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> qi = BB.Math.Quaternion.inverse(q)
+      iex> qr = BB.Math.Quaternion.multiply(q, qi)
+      iex> Float.round(BB.Math.Quaternion.w(qr), 6)
       1.0
   """
   @spec inverse(t()) :: t()
@@ -806,10 +806,10 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> v = BB.Vec3.unit_x()
-      iex> rotated = BB.Quaternion.rotate_vector(q, v)
-      iex> {Float.round(BB.Vec3.x(rotated), 6), Float.round(BB.Vec3.y(rotated), 6)}
+      iex> q = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> v = BB.Math.Vec3.unit_x()
+      iex> rotated = BB.Math.Quaternion.rotate_vector(q, v)
+      iex> {Float.round(BB.Math.Vec3.x(rotated), 6), Float.round(BB.Math.Vec3.y(rotated), 6)}
       {0.0, 1.0}
   """
   @spec rotate_vector(t(), Vec3.t()) :: Vec3.t()
@@ -865,10 +865,10 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q1 = BB.Quaternion.identity()
-      iex> q2 = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi())
-      iex> q_mid = BB.Quaternion.slerp(q1, q2, 0.5)
-      iex> {_axis, angle} = BB.Quaternion.to_axis_angle(q_mid)
+      iex> q1 = BB.Math.Quaternion.identity()
+      iex> q2 = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi())
+      iex> q_mid = BB.Math.Quaternion.slerp(q1, q2, 0.5)
+      iex> {_axis, angle} = BB.Math.Quaternion.to_axis_angle(q_mid)
       iex> Float.round(angle, 6)
       1.570796
   """
@@ -914,9 +914,9 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q1 = BB.Quaternion.identity()
-      iex> q2 = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
-      iex> Float.round(BB.Quaternion.angular_distance(q1, q2), 6)
+      iex> q1 = BB.Math.Quaternion.identity()
+      iex> q2 = BB.Math.Quaternion.from_axis_angle(BB.Math.Vec3.unit_z(), :math.pi() / 2)
+      iex> Float.round(BB.Math.Quaternion.angular_distance(q1, q2), 6)
       1.570796
   """
   @spec angular_distance(t(), t()) :: float()
@@ -937,8 +937,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.identity()
-      iex> BB.Quaternion.to_xyzw_list(q)
+      iex> q = BB.Math.Quaternion.identity()
+      iex> BB.Math.Quaternion.to_xyzw_list(q)
       [0.0, 0.0, 0.0, 1.0]
   """
   @spec to_xyzw_list(t()) :: [float()]
@@ -951,8 +951,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_xyzw_list([0.0, 0.0, 0.0, 1.0])
-      iex> BB.Quaternion.w(q)
+      iex> q = BB.Math.Quaternion.from_xyzw_list([0.0, 0.0, 0.0, 1.0])
+      iex> BB.Math.Quaternion.w(q)
       1.0
   """
   @spec from_xyzw_list([number()]) :: t()
@@ -965,8 +965,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.identity()
-      iex> BB.Quaternion.to_list(q)
+      iex> q = BB.Math.Quaternion.identity()
+      iex> BB.Math.Quaternion.to_list(q)
       [1.0, 0.0, 0.0, 0.0]
   """
   @spec to_list(t()) :: [float()]
@@ -979,8 +979,8 @@ defmodule BB.Quaternion do
 
   ## Examples
 
-      iex> q = BB.Quaternion.from_list([1.0, 0.0, 0.0, 0.0])
-      iex> BB.Quaternion.w(q)
+      iex> q = BB.Math.Quaternion.from_list([1.0, 0.0, 0.0, 0.0])
+      iex> BB.Math.Quaternion.w(q)
       1.0
   """
   @spec from_list([number()]) :: t()

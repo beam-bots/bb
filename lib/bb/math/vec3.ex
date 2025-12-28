@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule BB.Vec3 do
+defmodule BB.Math.Vec3 do
   @moduledoc """
   3D vector backed by an Nx tensor.
 
@@ -11,14 +11,14 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> v = BB.Vec3.new(1, 2, 3)
-      iex> BB.Vec3.x(v)
+      iex> v = BB.Math.Vec3.new(1, 2, 3)
+      iex> BB.Math.Vec3.x(v)
       1.0
 
-      iex> a = BB.Vec3.new(1, 0, 0)
-      iex> b = BB.Vec3.new(0, 1, 0)
-      iex> c = BB.Vec3.cross(a, b)
-      iex> BB.Vec3.z(c)
+      iex> a = BB.Math.Vec3.new(1, 0, 0)
+      iex> b = BB.Math.Vec3.new(0, 1, 0)
+      iex> c = BB.Math.Vec3.cross(a, b)
+      iex> BB.Math.Vec3.z(c)
       1.0
   """
 
@@ -31,8 +31,8 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> v = BB.Vec3.new(1, 2, 3)
-      iex> {BB.Vec3.x(v), BB.Vec3.y(v), BB.Vec3.z(v)}
+      iex> v = BB.Math.Vec3.new(1, 2, 3)
+      iex> {BB.Math.Vec3.x(v), BB.Math.Vec3.y(v), BB.Math.Vec3.z(v)}
       {1.0, 2.0, 3.0}
   """
   @spec new(number(), number(), number()) :: t()
@@ -53,8 +53,8 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> v = BB.Vec3.zero()
-      iex> {BB.Vec3.x(v), BB.Vec3.y(v), BB.Vec3.z(v)}
+      iex> v = BB.Math.Vec3.zero()
+      iex> {BB.Math.Vec3.x(v), BB.Math.Vec3.y(v), BB.Math.Vec3.z(v)}
       {0.0, 0.0, 0.0}
   """
   @spec zero() :: t()
@@ -95,14 +95,26 @@ defmodule BB.Vec3 do
   def to_list(%__MODULE__{tensor: t}), do: Nx.to_flat_list(t)
 
   @doc """
+  Creates a vector from a list of three numbers.
+
+  ## Examples
+
+      iex> v = BB.Math.Vec3.from_list([1, 2, 3])
+      iex> BB.Math.Vec3.to_list(v)
+      [1.0, 2.0, 3.0]
+  """
+  @spec from_list([number()]) :: t()
+  def from_list([x, y, z]), do: new(x, y, z)
+
+  @doc """
   Adds two vectors.
 
   ## Examples
 
-      iex> a = BB.Vec3.new(1, 2, 3)
-      iex> b = BB.Vec3.new(4, 5, 6)
-      iex> c = BB.Vec3.add(a, b)
-      iex> BB.Vec3.to_list(c)
+      iex> a = BB.Math.Vec3.new(1, 2, 3)
+      iex> b = BB.Math.Vec3.new(4, 5, 6)
+      iex> c = BB.Math.Vec3.add(a, b)
+      iex> BB.Math.Vec3.to_list(c)
       [5.0, 7.0, 9.0]
   """
   @spec add(t(), t()) :: t()
@@ -115,10 +127,10 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> a = BB.Vec3.new(4, 5, 6)
-      iex> b = BB.Vec3.new(1, 2, 3)
-      iex> c = BB.Vec3.subtract(a, b)
-      iex> BB.Vec3.to_list(c)
+      iex> a = BB.Math.Vec3.new(4, 5, 6)
+      iex> b = BB.Math.Vec3.new(1, 2, 3)
+      iex> c = BB.Math.Vec3.subtract(a, b)
+      iex> BB.Math.Vec3.to_list(c)
       [3.0, 3.0, 3.0]
   """
   @spec subtract(t(), t()) :: t()
@@ -131,9 +143,9 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> v = BB.Vec3.new(1, -2, 3)
-      iex> n = BB.Vec3.negate(v)
-      iex> BB.Vec3.to_list(n)
+      iex> v = BB.Math.Vec3.new(1, -2, 3)
+      iex> n = BB.Math.Vec3.negate(v)
+      iex> BB.Math.Vec3.to_list(n)
       [-1.0, 2.0, -3.0]
   """
   @spec negate(t()) :: t()
@@ -146,9 +158,9 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> v = BB.Vec3.new(1, 2, 3)
-      iex> s = BB.Vec3.scale(v, 2)
-      iex> BB.Vec3.to_list(s)
+      iex> v = BB.Math.Vec3.new(1, 2, 3)
+      iex> s = BB.Math.Vec3.scale(v, 2)
+      iex> BB.Math.Vec3.to_list(s)
       [2.0, 4.0, 6.0]
   """
   @spec scale(t(), number()) :: t()
@@ -161,9 +173,9 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> a = BB.Vec3.new(1, 2, 3)
-      iex> b = BB.Vec3.new(4, 5, 6)
-      iex> BB.Vec3.dot(a, b)
+      iex> a = BB.Math.Vec3.new(1, 2, 3)
+      iex> b = BB.Math.Vec3.new(4, 5, 6)
+      iex> BB.Math.Vec3.dot(a, b)
       32.0
   """
   @spec dot(t(), t()) :: float()
@@ -176,10 +188,10 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> a = BB.Vec3.new(1, 0, 0)
-      iex> b = BB.Vec3.new(0, 1, 0)
-      iex> c = BB.Vec3.cross(a, b)
-      iex> BB.Vec3.to_list(c)
+      iex> a = BB.Math.Vec3.new(1, 0, 0)
+      iex> b = BB.Math.Vec3.new(0, 1, 0)
+      iex> c = BB.Math.Vec3.cross(a, b)
+      iex> BB.Math.Vec3.to_list(c)
       [0.0, 0.0, 1.0]
   """
   @spec cross(t(), t()) :: t()
@@ -207,8 +219,8 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> v = BB.Vec3.new(3, 4, 0)
-      iex> BB.Vec3.magnitude(v)
+      iex> v = BB.Math.Vec3.new(3, 4, 0)
+      iex> BB.Math.Vec3.magnitude(v)
       5.0
   """
   @spec magnitude(t()) :: float()
@@ -223,8 +235,8 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> v = BB.Vec3.new(3, 4, 0)
-      iex> BB.Vec3.magnitude_squared(v)
+      iex> v = BB.Math.Vec3.new(3, 4, 0)
+      iex> BB.Math.Vec3.magnitude_squared(v)
       25.0
   """
   @spec magnitude_squared(t()) :: float()
@@ -239,9 +251,9 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> v = BB.Vec3.new(3, 0, 0)
-      iex> n = BB.Vec3.normalise(v)
-      iex> BB.Vec3.to_list(n)
+      iex> v = BB.Math.Vec3.new(3, 0, 0)
+      iex> n = BB.Math.Vec3.normalise(v)
+      iex> BB.Math.Vec3.to_list(n)
       [1.0, 0.0, 0.0]
   """
   @spec normalise(t()) :: t()
@@ -264,9 +276,9 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> a = BB.Vec3.new(0, 0, 0)
-      iex> b = BB.Vec3.new(3, 4, 0)
-      iex> BB.Vec3.distance(a, b)
+      iex> a = BB.Math.Vec3.new(0, 0, 0)
+      iex> b = BB.Math.Vec3.new(3, 4, 0)
+      iex> BB.Math.Vec3.distance(a, b)
       5.0
   """
   @spec distance(t(), t()) :: float()
@@ -279,10 +291,10 @@ defmodule BB.Vec3 do
 
   ## Examples
 
-      iex> a = BB.Vec3.new(0, 0, 0)
-      iex> b = BB.Vec3.new(10, 10, 10)
-      iex> c = BB.Vec3.lerp(a, b, 0.5)
-      iex> BB.Vec3.to_list(c)
+      iex> a = BB.Math.Vec3.new(0, 0, 0)
+      iex> b = BB.Math.Vec3.new(10, 10, 10)
+      iex> c = BB.Math.Vec3.lerp(a, b, 0.5)
+      iex> BB.Math.Vec3.to_list(c)
       [5.0, 5.0, 5.0]
   """
   @spec lerp(t(), t(), number()) :: t()

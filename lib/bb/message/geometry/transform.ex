@@ -10,18 +10,21 @@ defmodule BB.Message.Geometry.Transform do
 
   ## Fields
 
-  - `translation` - Translation as `{:vec3, x, y, z}` in metres
-  - `rotation` - Rotation as `{:quaternion, x, y, z, w}`
+  - `translation` - Translation as `BB.Vec3.t()` in metres
+  - `rotation` - Rotation as `BB.Quaternion.t()`
 
   ## Examples
 
       alias BB.Message.Geometry.Transform
-      alias BB.Message.{Vec3, Quaternion}
+      alias BB.{Vec3, Quaternion}
 
       {:ok, msg} = Transform.new(:base_link, Vec3.new(0.0, 0.0, 1.0), Quaternion.identity())
   """
 
   import BB.Message.Option
+
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
 
   defstruct [:translation, :rotation]
 
@@ -32,8 +35,8 @@ defmodule BB.Message.Geometry.Transform do
     ]
 
   @type t :: %__MODULE__{
-          translation: BB.Message.Vec3.t(),
-          rotation: BB.Message.Quaternion.t()
+          translation: Vec3.t(),
+          rotation: Quaternion.t()
         }
 
   @doc """
@@ -43,13 +46,12 @@ defmodule BB.Message.Geometry.Transform do
 
   ## Examples
 
-      alias BB.Message.{Vec3, Quaternion}
+      alias BB.{Vec3, Quaternion}
 
       {:ok, msg} = Transform.new(:base_link, Vec3.new(0.0, 0.0, 1.0), Quaternion.identity())
   """
-  @spec new(atom(), BB.Message.Vec3.t(), BB.Message.Quaternion.t()) ::
-          {:ok, BB.Message.t()} | {:error, term()}
-  def new(frame_id, {:vec3, _, _, _} = translation, {:quaternion, _, _, _, _} = rotation) do
+  @spec new(atom(), Vec3.t(), Quaternion.t()) :: {:ok, BB.Message.t()} | {:error, term()}
+  def new(frame_id, %Vec3{} = translation, %Quaternion{} = rotation) do
     new(frame_id, translation: translation, rotation: rotation)
   end
 end

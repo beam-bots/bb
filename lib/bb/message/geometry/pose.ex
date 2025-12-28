@@ -8,18 +8,21 @@ defmodule BB.Message.Geometry.Pose do
 
   ## Fields
 
-  - `position` - Position as `{:vec3, x, y, z}` in metres
-  - `orientation` - Orientation as `{:quaternion, x, y, z, w}`
+  - `position` - Position as `BB.Vec3.t()` in metres
+  - `orientation` - Orientation as `BB.Quaternion.t()`
 
   ## Examples
 
       alias BB.Message.Geometry.Pose
-      alias BB.Message.{Vec3, Quaternion}
+      alias BB.{Vec3, Quaternion}
 
       {:ok, msg} = Pose.new(:end_effector, Vec3.new(1.0, 0.0, 0.5), Quaternion.identity())
   """
 
   import BB.Message.Option
+
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
 
   defstruct [:position, :orientation]
 
@@ -30,8 +33,8 @@ defmodule BB.Message.Geometry.Pose do
     ]
 
   @type t :: %__MODULE__{
-          position: BB.Message.Vec3.t(),
-          orientation: BB.Message.Quaternion.t()
+          position: Vec3.t(),
+          orientation: Quaternion.t()
         }
 
   @doc """
@@ -41,13 +44,12 @@ defmodule BB.Message.Geometry.Pose do
 
   ## Examples
 
-      alias BB.Message.{Vec3, Quaternion}
+      alias BB.{Vec3, Quaternion}
 
       {:ok, msg} = Pose.new(:base_link, Vec3.new(1.0, 2.0, 3.0), Quaternion.identity())
   """
-  @spec new(atom(), BB.Message.Vec3.t(), BB.Message.Quaternion.t()) ::
-          {:ok, BB.Message.t()} | {:error, term()}
-  def new(frame_id, {:vec3, _, _, _} = position, {:quaternion, _, _, _, _} = orientation) do
+  @spec new(atom(), Vec3.t(), Quaternion.t()) :: {:ok, BB.Message.t()} | {:error, term()}
+  def new(frame_id, %Vec3{} = position, %Quaternion{} = orientation) do
     new(frame_id, position: position, orientation: orientation)
   end
 end

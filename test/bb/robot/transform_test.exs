@@ -4,9 +4,9 @@
 
 defmodule BB.Robot.TransformTest do
   use ExUnit.Case, async: true
-  alias BB.Quaternion
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
   alias BB.Robot.Transform
-  alias BB.Vec3
 
   @tolerance 1.0e-6
 

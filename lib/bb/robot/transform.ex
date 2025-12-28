@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule BB.Robot.Transform do
-  alias BB.Quaternion
-  alias BB.Vec3
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
 
   @moduledoc """
   Homogeneous transformation matrices for robot kinematics.
