@@ -189,9 +189,11 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
 
       has_schema? ->
         schema = module.options_schema()
+        param_ref_keys = get_param_ref_keys(opts)
+        schema_for_validation = mark_keys_as_optional(schema, param_ref_keys)
         opts_without_param_refs = filter_param_refs(opts)
 
-        case Spark.Options.validate(opts_without_param_refs, schema) do
+        case Spark.Options.validate(opts_without_param_refs, schema_for_validation) do
           {:ok, _validated} ->
             :ok
 
@@ -218,6 +220,26 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
 
   defp filter_param_refs(opts) do
     Enum.reject(opts, fn {_key, value} -> is_struct(value, ParamRef) end)
+  end
+
+  defp get_param_ref_keys(opts) do
+    opts
+    |> Enum.filter(fn {_key, value} -> is_struct(value, ParamRef) end)
+    |> Keyword.keys()
+  end
+
+  defp mark_keys_as_optional(%Spark.Options{schema: schema} = spark_opts, keys) do
+    %{spark_opts | schema: mark_keys_as_optional(schema, keys)}
+  end
+
+  defp mark_keys_as_optional(schema, keys) when is_list(schema) do
+    Enum.map(schema, fn {key, opts} ->
+      if key in keys do
+        {key, Keyword.put(opts, :required, false)}
+      else
+        {key, opts}
+      end
+    end)
   end
 
   defp format_schema(%Spark.Options{schema: schema}) do

@@ -24,6 +24,8 @@ See `documentation/tutorials/` for guided tutorials:
 6. `06-urdf-export.md` - exporting to URDF for ROS tools
 7. `07-parameters.md` - runtime-adjustable configuration
 8. `08-parameter-bridges.md` - bidirectional parameter access with remote systems
+9. `09-inverse-kinematics.md` - solving inverse kinematics
+10. `10-simulation.md` - running robots in simulation mode
 
 The DSL reference is in `documentation/dsls/DSL-BB.md`.
 
@@ -99,6 +101,26 @@ Transformers run in sequence to process DSL at compile-time:
 **Commands**: Defined in the DSL `commands` section with handlers implementing `BB.Command` behaviour. Built-in commands include `BB.Command.Arm` and `BB.Command.Disarm`.
 
 **URDF Export** (`lib/bb/urdf/exporter.ex`): Converts robot definitions to URDF XML format for use with ROS tools like RViz and Gazebo. Available via `mix bb.to_urdf`.
+
+### Simulation Mode
+
+Robots can run in simulation mode without hardware:
+
+```elixir
+# Start in kinematic simulation
+MyRobot.start_link(simulation: :kinematic)
+
+# Check simulation mode
+BB.Robot.Runtime.simulation_mode(MyRobot)  # => :kinematic or nil
+```
+
+In simulation mode:
+- Actuators are replaced with `BB.Sim.Actuator` which publishes `BeginMotion` messages with timing based on joint velocity limits
+- Controllers are omitted by default (configurable per-controller with `simulation: :omit | :mock | :start`)
+- Safety system still requires arming before commands work
+- `OpenLoopPositionEstimator` works unchanged for position feedback
+
+See `documentation/tutorials/10-simulation.md` for details.
 
 ### Safety System (CRITICAL)
 

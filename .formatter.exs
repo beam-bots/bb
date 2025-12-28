@@ -80,6 +80,7 @@ spark_locals_without_parens = [
   scale: 1,
   sensor: 2,
   sensor: 3,
+  simulation: 1,
   sphere: 0,
   sphere: 1,
   supervisor_module: 1,
