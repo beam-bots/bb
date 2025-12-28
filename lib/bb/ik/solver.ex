@@ -24,15 +24,23 @@ defmodule BB.IK.Solver do
 
   ## Target Types
 
-  Solvers should accept targets as either:
-  - A position tuple `{x, y, z}` in metres
-  - A 4x4 homogeneous transform (Nx tensor) for full pose
+  Solvers accept targets as:
+  - `Vec3.t()` - Position only
+  - `{Vec3.t(), orientation}` - Position with orientation constraint
+  - `Nx.Tensor.t()` - 4x4 homogeneous transform (extracts position and quaternion)
+
+  Orientation can be specified as:
+  - `:none` - Position only (default)
+  - `{:axis, Vec3.t()}` - Tool pointing direction (end-effector Z-axis alignment)
+  - `{:quaternion, Quaternion.t()}` - Full 6-DOF orientation
 
   ## Options
 
   Common options that solvers should support:
   - `:max_iterations` - Maximum solver iterations (default: 50)
-  - `:tolerance` - Convergence tolerance in metres (default: 1.0e-4)
+  - `:tolerance` - Position convergence tolerance in metres (default: 1.0e-4)
+  - `:orientation_tolerance` - Angular convergence tolerance in radians (default: 0.01)
+  - `:strict_orientation` - If true, error when orientation unsatisfiable; if false, best-effort (default: false)
   - `:respect_limits` - Whether to clamp to joint limits (default: true)
   - `:initial_positions` - Starting joint positions (default: from state)
 
@@ -50,17 +58,41 @@ defmodule BB.IK.Solver do
   alias BB.Error.Kinematics.NoSolution
   alias BB.Error.Kinematics.UnknownLink
   alias BB.Error.Kinematics.Unreachable
+  alias BB.Quaternion
   alias BB.Robot
+  alias BB.Vec3
 
   @type positions :: %{atom() => float()}
 
+  @typedoc """
+  Orientation target for IK solving.
+
+  - `:none` - Position only (default)
+  - `{:axis, Vec3.t()}` - Tool pointing direction (end-effector Z-axis)
+  - `{:quaternion, Quaternion.t()}` - Full 6-DOF orientation
+  """
+  @type orientation_target ::
+          :none
+          | {:axis, Vec3.t()}
+          | {:quaternion, Quaternion.t()}
+
+  @typedoc """
+  Target for IK solving.
+
+  - `Vec3.t()` - Position only
+  - `{Vec3.t(), orientation_target()}` - Position with orientation constraint
+  - `Nx.Tensor.t()` - 4x4 transform (extracts position and quaternion)
+  """
   @type target ::
-          {float(), float(), float()}
+          Vec3.t()
+          | {Vec3.t(), orientation_target()}
           | Nx.Tensor.t()
 
   @type opts :: [
           {:max_iterations, pos_integer()}
           | {:tolerance, float()}
+          | {:orientation_tolerance, float()}
+          | {:strict_orientation, boolean()}
           | {:respect_limits, boolean()}
           | {:initial_positions, positions() | nil}
         ]
@@ -68,6 +100,7 @@ defmodule BB.IK.Solver do
   @type meta :: %{
           iterations: non_neg_integer(),
           residual: float(),
+          orientation_residual: float() | nil,
           reached: boolean()
         }
 

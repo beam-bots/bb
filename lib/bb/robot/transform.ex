@@ -213,6 +213,17 @@ defmodule BB.Robot.Transform do
   end
 
   @doc """
+  Get the translation component of a transform as a Vec3.
+
+  More efficient than `get_translation/1` when you need a Vec3 or tensor,
+  as it avoids round-tripping through floats.
+  """
+  @spec get_translation_vec3(Nx.Tensor.t()) :: Vec3.t()
+  def get_translation_vec3(transform) do
+    Vec3.from_tensor(Nx.slice(transform, [0, 3], [3, 1]) |> Nx.reshape({3}))
+  end
+
+  @doc """
   Get the rotation matrix (3x3) from a transform.
   """
   @spec get_rotation(Nx.Tensor.t()) :: Nx.Tensor.t()
