@@ -138,6 +138,125 @@ defmodule BB.Quaternion do
   end
 
   @doc """
+  Creates a quaternion representing the shortest rotation from one vector to another.
+
+  Both vectors should be unit vectors (they will be normalised if not).
+  Returns the quaternion that rotates `from` to align with `to`.
+
+  Handles edge cases:
+  - Parallel vectors (from ≈ to): returns identity quaternion
+  - Anti-parallel vectors (from ≈ -to): returns 180° rotation around a perpendicular axis
+
+  ## Examples
+
+      iex> q = BB.Quaternion.from_two_vectors(BB.Vec3.unit_x(), BB.Vec3.unit_y())
+      iex> rotated = BB.Quaternion.rotate_vector(q, BB.Vec3.unit_x())
+      iex> {Float.round(BB.Vec3.x(rotated), 6), Float.round(BB.Vec3.y(rotated), 6)}
+      {0.0, 1.0}
+
+      iex> q = BB.Quaternion.from_two_vectors(BB.Vec3.unit_z(), BB.Vec3.unit_z())
+      iex> BB.Quaternion.w(q)
+      1.0
+  """
+  @spec from_two_vectors(Vec3.t(), Vec3.t()) :: t()
+  def from_two_vectors(%Vec3{tensor: from_tensor}, %Vec3{tensor: to_tensor}) do
+    # Normalise both vectors
+    from_norm = Nx.LinAlg.norm(from_tensor)
+    to_norm = Nx.LinAlg.norm(to_tensor)
+
+    from_unit =
+      Nx.select(
+        Nx.greater(from_norm, 1.0e-10),
+        Nx.divide(from_tensor, from_norm),
+        Nx.tensor([1.0, 0.0, 0.0], type: :f64)
+      )
+
+    to_unit =
+      Nx.select(
+        Nx.greater(to_norm, 1.0e-10),
+        Nx.divide(to_tensor, to_norm),
+        Nx.tensor([1.0, 0.0, 0.0], type: :f64)
+      )
+
+    # Dot product
+    dot = Nx.dot(from_unit, to_unit)
+
+    # Cross product: from × to
+    f1 = from_unit[0]
+    f2 = from_unit[1]
+    f3 = from_unit[2]
+    t1 = to_unit[0]
+    t2 = to_unit[1]
+    t3 = to_unit[2]
+
+    cross =
+      Nx.stack([
+        Nx.subtract(Nx.multiply(f2, t3), Nx.multiply(f3, t2)),
+        Nx.subtract(Nx.multiply(f3, t1), Nx.multiply(f1, t3)),
+        Nx.subtract(Nx.multiply(f1, t2), Nx.multiply(f2, t1))
+      ])
+
+    # Normal case: q = [1 + dot, cross] then normalise
+    # This works because (1 + dot) = 2*cos²(θ/2) and |cross| = sin(θ)
+    w_normal = Nx.add(1.0, dot)
+    q_normal = Nx.concatenate([Nx.reshape(w_normal, {1}), cross])
+
+    # Anti-parallel case (dot ≈ -1): need to find perpendicular axis
+    # Use the axis with smallest component of from_unit to find perpendicular
+    abs_from = Nx.abs(from_unit)
+
+    # Find perpendicular by crossing with least-aligned basis vector
+    perp_x =
+      Nx.stack([
+        Nx.tensor(0.0, type: :f64),
+        Nx.negate(f3),
+        f2
+      ])
+
+    perp_y =
+      Nx.stack([
+        f3,
+        Nx.tensor(0.0, type: :f64),
+        Nx.negate(f1)
+      ])
+
+    perp_z =
+      Nx.stack([
+        Nx.negate(f2),
+        f1,
+        Nx.tensor(0.0, type: :f64)
+      ])
+
+    # Choose perpendicular with largest magnitude (most perpendicular to from)
+    perp =
+      Nx.select(
+        Nx.less(abs_from[0], abs_from[1]),
+        Nx.select(Nx.less(abs_from[0], abs_from[2]), perp_x, perp_z),
+        Nx.select(Nx.less(abs_from[1], abs_from[2]), perp_y, perp_z)
+      )
+
+    perp_norm = Nx.LinAlg.norm(perp)
+
+    perp_unit =
+      Nx.select(
+        Nx.greater(perp_norm, 1.0e-10),
+        Nx.divide(perp, perp_norm),
+        Nx.tensor([0.0, 1.0, 0.0], type: :f64)
+      )
+
+    # 180° rotation: w=0, xyz=perpendicular axis
+    q_antiparallel = Nx.concatenate([Nx.tensor([0.0], type: :f64), perp_unit])
+
+    # Select based on dot product
+    # Anti-parallel: dot < -0.9999
+    # Parallel: dot > 0.9999 (will normalise to identity)
+    is_antiparallel = Nx.less(dot, -0.9999)
+    result = Nx.select(is_antiparallel, q_antiparallel, q_normal)
+
+    %__MODULE__{tensor: normalise_tensor(result)}
+  end
+
+  @doc """
   Creates a quaternion from a 3x3 rotation matrix.
 
   Uses the Shepperd method for numerical stability.

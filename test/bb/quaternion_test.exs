@@ -173,6 +173,83 @@ defmodule BB.QuaternionTest do
     end
   end
 
+  describe "from_two_vectors/2" do
+    test "X to Y gives 90 degree rotation around Z" do
+      q = Quaternion.from_two_vectors(Vec3.unit_x(), Vec3.unit_y())
+      rotated = Quaternion.rotate_vector(q, Vec3.unit_x())
+
+      assert_in_delta Vec3.x(rotated), 0.0, @tolerance
+      assert_in_delta Vec3.y(rotated), 1.0, @tolerance
+      assert_in_delta Vec3.z(rotated), 0.0, @tolerance
+    end
+
+    test "Y to Z gives 90 degree rotation around X" do
+      q = Quaternion.from_two_vectors(Vec3.unit_y(), Vec3.unit_z())
+      rotated = Quaternion.rotate_vector(q, Vec3.unit_y())
+
+      assert_in_delta Vec3.x(rotated), 0.0, @tolerance
+      assert_in_delta Vec3.y(rotated), 0.0, @tolerance
+      assert_in_delta Vec3.z(rotated), 1.0, @tolerance
+    end
+
+    test "Z to X gives 90 degree rotation around Y" do
+      q = Quaternion.from_two_vectors(Vec3.unit_z(), Vec3.unit_x())
+      rotated = Quaternion.rotate_vector(q, Vec3.unit_z())
+
+      assert_in_delta Vec3.x(rotated), 1.0, @tolerance
+      assert_in_delta Vec3.y(rotated), 0.0, @tolerance
+      assert_in_delta Vec3.z(rotated), 0.0, @tolerance
+    end
+
+    test "parallel vectors give identity" do
+      q = Quaternion.from_two_vectors(Vec3.unit_z(), Vec3.unit_z())
+
+      assert_in_delta Quaternion.w(q), 1.0, @tolerance
+      assert_in_delta Quaternion.x(q), 0.0, @tolerance
+      assert_in_delta Quaternion.y(q), 0.0, @tolerance
+      assert_in_delta Quaternion.z(q), 0.0, @tolerance
+    end
+
+    test "anti-parallel vectors give 180 degree rotation" do
+      q = Quaternion.from_two_vectors(Vec3.unit_z(), Vec3.new(0, 0, -1))
+      rotated = Quaternion.rotate_vector(q, Vec3.unit_z())
+
+      assert_in_delta Vec3.x(rotated), 0.0, @tolerance
+      assert_in_delta Vec3.y(rotated), 0.0, @tolerance
+      assert_in_delta Vec3.z(rotated), -1.0, @tolerance
+    end
+
+    test "anti-parallel X vectors" do
+      q = Quaternion.from_two_vectors(Vec3.unit_x(), Vec3.new(-1, 0, 0))
+      rotated = Quaternion.rotate_vector(q, Vec3.unit_x())
+
+      assert_in_delta Vec3.x(rotated), -1.0, @tolerance
+      assert_in_delta Vec3.y(rotated), 0.0, @tolerance
+      assert_in_delta Vec3.z(rotated), 0.0, @tolerance
+    end
+
+    test "arbitrary vectors" do
+      from = Vec3.new(1, 0, 1)
+      to = Vec3.new(0, 1, 0)
+
+      q = Quaternion.from_two_vectors(from, to)
+      rotated = Quaternion.rotate_vector(q, Vec3.normalise(from))
+
+      # Should align with normalised `to`
+      assert_in_delta Vec3.x(rotated), 0.0, @tolerance
+      assert_in_delta Vec3.y(rotated), 1.0, @tolerance
+      assert_in_delta Vec3.z(rotated), 0.0, @tolerance
+    end
+
+    test "normalises input vectors" do
+      # Non-unit vectors should work the same as unit vectors
+      q1 = Quaternion.from_two_vectors(Vec3.unit_x(), Vec3.unit_y())
+      q2 = Quaternion.from_two_vectors(Vec3.new(10, 0, 0), Vec3.new(0, 5, 0))
+
+      assert_in_delta Quaternion.angular_distance(q1, q2), 0.0, @tolerance
+    end
+  end
+
   describe "to_rotation_matrix/1" do
     test "identity quaternion gives identity matrix" do
       q = Quaternion.identity()
