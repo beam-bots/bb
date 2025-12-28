@@ -287,8 +287,11 @@ defmodule BB.Quaternion do
 
     # Compute all 4 cases and select the best one
     # Use Nx.max to clamp values to 0 before sqrt to handle floating point errors
+    # Add epsilon to prevent division by zero in unused cases
+    eps = 1.0e-10
+
     # Case 0: trace > 0
-    s0 = Nx.multiply(Nx.sqrt(Nx.max(Nx.add(trace, 1.0), 0.0)), 2.0)
+    s0 = Nx.add(Nx.multiply(Nx.sqrt(Nx.max(Nx.add(trace, 1.0), 0.0)), 2.0), eps)
     w0 = Nx.divide(s0, 4.0)
     x0 = Nx.divide(Nx.subtract(m21, m12), s0)
     y0 = Nx.divide(Nx.subtract(m02, m20), s0)
@@ -297,7 +300,13 @@ defmodule BB.Quaternion do
 
     # Case 1: m00 is largest diagonal
     s1 =
-      Nx.multiply(Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m11), m22), m00), 0.0)), 2.0)
+      Nx.add(
+        Nx.multiply(
+          Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m11), m22), m00), 0.0)),
+          2.0
+        ),
+        eps
+      )
 
     w1 = Nx.divide(Nx.subtract(m21, m12), s1)
     x1 = Nx.divide(s1, 4.0)
@@ -307,7 +316,13 @@ defmodule BB.Quaternion do
 
     # Case 2: m11 is largest diagonal
     s2 =
-      Nx.multiply(Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m00), m22), m11), 0.0)), 2.0)
+      Nx.add(
+        Nx.multiply(
+          Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m00), m22), m11), 0.0)),
+          2.0
+        ),
+        eps
+      )
 
     w2 = Nx.divide(Nx.subtract(m02, m20), s2)
     x2 = Nx.divide(Nx.add(m01, m10), s2)
@@ -317,7 +332,13 @@ defmodule BB.Quaternion do
 
     # Case 3: m22 is largest diagonal
     s3 =
-      Nx.multiply(Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m00), m11), m22), 0.0)), 2.0)
+      Nx.add(
+        Nx.multiply(
+          Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m00), m11), m22), 0.0)),
+          2.0
+        ),
+        eps
+      )
 
     w3 = Nx.divide(Nx.subtract(m10, m01), s3)
     x3 = Nx.divide(Nx.add(m02, m20), s3)
