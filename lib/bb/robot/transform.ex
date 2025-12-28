@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule BB.Robot.Transform do
+  alias BB.Quaternion
+  alias BB.Vec3
+
   @moduledoc """
   Homogeneous transformation matrices for robot kinematics.
 
@@ -333,5 +336,155 @@ defmodule BB.Robot.Transform do
   @spec prismatic_transform({float(), float(), float()}, float()) :: Nx.Tensor.t()
   def prismatic_transform({ax, ay, az}, distance) do
     translation(ax * distance, ay * distance, az * distance)
+  end
+
+  @doc """
+  Create a 4x4 transformation matrix from a quaternion (rotation only).
+
+  The resulting matrix has the quaternion's rotation in the upper-left 3x3
+  and zero translation.
+
+  ## Examples
+
+      iex> q = BB.Quaternion.from_axis_angle(BB.Vec3.unit_z(), :math.pi() / 2)
+      iex> t = BB.Robot.Transform.from_quaternion(q)
+      iex> {x, y, _z} = BB.Robot.Transform.apply_to_point(t, {1.0, 0.0, 0.0})
+      iex> {Float.round(x, 6), Float.round(y, 6)}
+      {0.0, 1.0}
+  """
+  @spec from_quaternion(Quaternion.t()) :: Nx.Tensor.t()
+  def from_quaternion(%Quaternion{} = q) do
+    rot_3x3 = Quaternion.to_rotation_matrix(q)
+
+    row0 = Nx.concatenate([rot_3x3[0], Nx.tensor([0.0], type: :f64)])
+    row1 = Nx.concatenate([rot_3x3[1], Nx.tensor([0.0], type: :f64)])
+    row2 = Nx.concatenate([rot_3x3[2], Nx.tensor([0.0], type: :f64)])
+    row3 = Nx.tensor([0.0, 0.0, 0.0, 1.0], type: :f64)
+
+    Nx.stack([row0, row1, row2, row3])
+  end
+
+  @doc """
+  Extract a quaternion from a 4x4 transformation matrix.
+
+  Extracts the 3x3 rotation portion and converts it to a unit quaternion.
+
+  ## Examples
+
+      iex> t = BB.Robot.Transform.rotation_z(:math.pi() / 2)
+      iex> q = BB.Robot.Transform.get_quaternion(t)
+      iex> {_axis, angle} = BB.Quaternion.to_axis_angle(q)
+      iex> Float.round(angle, 6)
+      1.570796
+  """
+  @spec get_quaternion(Nx.Tensor.t()) :: Quaternion.t()
+  def get_quaternion(transform) do
+    rot_3x3 = get_rotation(transform)
+    Quaternion.from_rotation_matrix(rot_3x3)
+  end
+
+  @doc """
+  Create a 4x4 transformation matrix from position and quaternion orientation.
+
+  ## Examples
+
+      iex> pos = BB.Vec3.new(1.0, 2.0, 3.0)
+      iex> q = BB.Quaternion.identity()
+      iex> t = BB.Robot.Transform.from_position_quaternion(pos, q)
+      iex> BB.Robot.Transform.get_translation(t)
+      {1.0, 2.0, 3.0}
+  """
+  @spec from_position_quaternion(Vec3.t(), Quaternion.t()) :: Nx.Tensor.t()
+  def from_position_quaternion(%Vec3{} = pos, %Quaternion{} = q) do
+    rot_3x3 = Quaternion.to_rotation_matrix(q)
+    pos_tensor = Vec3.tensor(pos)
+
+    row0 = Nx.concatenate([rot_3x3[0], Nx.reshape(pos_tensor[0], {1})])
+    row1 = Nx.concatenate([rot_3x3[1], Nx.reshape(pos_tensor[1], {1})])
+    row2 = Nx.concatenate([rot_3x3[2], Nx.reshape(pos_tensor[2], {1})])
+    row3 = Nx.tensor([0.0, 0.0, 0.0, 1.0], type: :f64)
+
+    Nx.stack([row0, row1, row2, row3])
+  end
+
+  @doc """
+  Get the forward vector (Z-axis) from a transformation matrix.
+
+  The forward vector is the third column of the rotation matrix,
+  representing the direction the local Z-axis points in world coordinates.
+
+  ## Examples
+
+      iex> t = BB.Robot.Transform.identity()
+      iex> fwd = BB.Robot.Transform.get_forward_vector(t)
+      iex> BB.Vec3.to_list(fwd)
+      [0.0, 0.0, 1.0]
+  """
+  @spec get_forward_vector(Nx.Tensor.t()) :: Vec3.t()
+  def get_forward_vector(transform) do
+    Vec3.from_tensor(
+      Nx.tensor(
+        [
+          Nx.to_number(transform[0][2]),
+          Nx.to_number(transform[1][2]),
+          Nx.to_number(transform[2][2])
+        ],
+        type: :f64
+      )
+    )
+  end
+
+  @doc """
+  Get the up vector (Y-axis) from a transformation matrix.
+
+  The up vector is the second column of the rotation matrix,
+  representing the direction the local Y-axis points in world coordinates.
+
+  ## Examples
+
+      iex> t = BB.Robot.Transform.identity()
+      iex> up = BB.Robot.Transform.get_up_vector(t)
+      iex> BB.Vec3.to_list(up)
+      [0.0, 1.0, 0.0]
+  """
+  @spec get_up_vector(Nx.Tensor.t()) :: Vec3.t()
+  def get_up_vector(transform) do
+    Vec3.from_tensor(
+      Nx.tensor(
+        [
+          Nx.to_number(transform[0][1]),
+          Nx.to_number(transform[1][1]),
+          Nx.to_number(transform[2][1])
+        ],
+        type: :f64
+      )
+    )
+  end
+
+  @doc """
+  Get the right vector (X-axis) from a transformation matrix.
+
+  The right vector is the first column of the rotation matrix,
+  representing the direction the local X-axis points in world coordinates.
+
+  ## Examples
+
+      iex> t = BB.Robot.Transform.identity()
+      iex> right = BB.Robot.Transform.get_right_vector(t)
+      iex> BB.Vec3.to_list(right)
+      [1.0, 0.0, 0.0]
+  """
+  @spec get_right_vector(Nx.Tensor.t()) :: Vec3.t()
+  def get_right_vector(transform) do
+    Vec3.from_tensor(
+      Nx.tensor(
+        [
+          Nx.to_number(transform[0][0]),
+          Nx.to_number(transform[1][0]),
+          Nx.to_number(transform[2][0])
+        ],
+        type: :f64
+      )
+    )
   end
 end
