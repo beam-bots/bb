@@ -29,10 +29,13 @@ BB creates a supervision tree that reflects your robot's topology:
 
 ```
 BB.Supervisor (MyRobot)
-├── Registry           - Process name registry
-├── PubSub Registry    - Message routing
-├── Task.Supervisor    - Command execution
-├── Runtime            - State machine & robot state
+├── Registry              - Process name registry
+├── PubSub Registry       - Message routing
+├── Task.Supervisor       - Command execution
+├── Runtime               - State machine & robot state
+├── SensorSupervisor      - Robot-level sensors
+├── ControllerSupervisor  - Robot-level controllers
+├── BridgeSupervisor      - Parameter bridges
 └── LinkSupervisor (:base)
     └── JointSupervisor (:pan_joint)
         └── LinkSupervisor (:pan_link)
@@ -108,7 +111,7 @@ defmodule MyApp.Application do
   def start(_type, _args) do
     children = [
       # Start the robot supervisor
-      {BB.Supervisor, MyRobot}
+      MyRobot
     ]
 
     opts = [strategy: :one_for_one, name: MyApp.Supervisor]
@@ -125,9 +128,9 @@ You can run multiple robots in the same application:
 
 ```elixir
 children = [
-  {BB.Supervisor, LeftArm},
-  {BB.Supervisor, RightArm},
-  {BB.Supervisor, MobileBase}
+  LeftArm,
+  RightArm,
+  MobileBase
 ]
 ```
 
@@ -138,7 +141,7 @@ Each robot has its own isolated supervision tree.
 The `Runtime` process manages your robot's operational state. When the robot starts, it's in the `:disarmed` state - a safe mode where actuators won't respond to commands.
 
 ```elixir
-iex> BB.Robot.Runtime.get_state(MyRobot)
+iex> BB.Robot.Runtime.state(MyRobot)
 :disarmed
 ```
 
