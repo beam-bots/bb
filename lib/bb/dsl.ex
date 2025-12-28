@@ -662,6 +662,12 @@ defmodule BB.Dsl do
         required: true,
         doc:
           "The child specification for the controller process. Either a module or `{module, keyword_list}`"
+      ],
+      simulation: [
+        type: {:in, [:omit, :mock, :start]},
+        default: :omit,
+        doc:
+          "Behaviour in simulation mode: :omit (don't start), :mock (start no-op mock), :start (start real controller)"
       ]
     ]
   }
@@ -669,7 +675,8 @@ defmodule BB.Dsl do
   @controllers %Section{
     name: :controllers,
     describe: "Robot-level controllers",
-    entities: [@controller]
+    entities: [@controller],
+    imports: [BB.Dsl.ParamRef]
   }
 
   @command_argument %Entity{
@@ -816,6 +823,12 @@ defmodule BB.Dsl do
         required: true,
         doc:
           "The child specification for the bridge process. Either a module or `{module, keyword_list}`"
+      ],
+      simulation: [
+        type: {:in, [:omit, :mock, :start]},
+        default: :omit,
+        doc:
+          "Behaviour in simulation mode: :omit (don't start), :mock (start no-op mock), :start (start real bridge)"
       ]
     ]
   }

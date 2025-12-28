@@ -918,7 +918,11 @@ A controller process at the robot level.
 |------|------|---------|------|
 | [`name`](#controllers-controller-name){: #controllers-controller-name .spark-required} | `atom` |  | A unique name for the controller |
 | [`child_spec`](#controllers-controller-child_spec){: #controllers-controller-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the controller process. Either a module or `{module, keyword_list}` |
+### Options
 
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`simulation`](#controllers-controller-simulation){: #controllers-controller-simulation } | `:omit \| :mock \| :start` | `:omit` | Behaviour in simulation mode: :omit (don't start), :mock (start no-op mock), :start (start real controller) |
 
 
 
@@ -1182,7 +1186,11 @@ end
 |------|------|---------|------|
 | [`name`](#parameters-bridge-name){: #parameters-bridge-name .spark-required} | `atom` |  | A unique name for the bridge |
 | [`child_spec`](#parameters-bridge-child_spec){: #parameters-bridge-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the bridge process. Either a module or `{module, keyword_list}` |
+### Options
 
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`simulation`](#parameters-bridge-simulation){: #parameters-bridge-simulation } | `:omit \| :mock \| :start` | `:omit` | Behaviour in simulation mode: :omit (don't start), :mock (start no-op mock), :start (start real bridge) |
 
 
 
