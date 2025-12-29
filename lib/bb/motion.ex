@@ -384,7 +384,7 @@ defmodule BB.Motion do
 
   defp extract_solver_opts(opts) do
     opts
-    |> Keyword.take([:max_iterations, :tolerance, :respect_limits, :initial_positions])
+    |> Keyword.drop([:solver, :delivery, :velocity, :duration, :command_id])
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end
 
