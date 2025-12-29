@@ -7,7 +7,7 @@ defmodule BB.Message.Option do
   Custom Spark.Options types for message primitives.
 
   Provides type functions for use in payload schemas to validate
-  `BB.Vec3.t()` and `BB.Quaternion.t()` types.
+  `BB.Math.Vec3.t()`, `BB.Math.Quaternion.t()`, and `BB.Math.Transform.t()` types.
 
   ## Usage
 
@@ -15,11 +15,13 @@ defmodule BB.Message.Option do
 
       @schema Spark.Options.new!([
         position: [type: vec3_type(), required: true],
-        orientation: [type: quaternion_type(), required: true]
+        orientation: [type: quaternion_type(), required: true],
+        pose: [type: transform_type(), required: true]
       ])
   """
 
   alias BB.Math.Quaternion
+  alias BB.Math.Transform
   alias BB.Math.Vec3
 
   @doc """
@@ -78,5 +80,34 @@ defmodule BB.Message.Option do
 
   def validate_quaternion(value, _opts) do
     {:error, "expected BB.Quaternion.t(), got: #{inspect(value)}"}
+  end
+
+  @doc """
+  Returns a Spark.Options type for validating `BB.Math.Transform.t()`.
+
+  ## Examples
+
+      iex> BB.Message.Option.transform_type()
+      {:custom, BB.Message.Option, :validate_transform, [[]]}
+  """
+  @spec transform_type() :: {:custom, module(), atom(), list()}
+  def transform_type, do: {:custom, __MODULE__, :validate_transform, [[]]}
+
+  @doc """
+  Validates a BB.Math.Transform struct.
+
+  ## Examples
+
+      iex> BB.Message.Option.validate_transform(BB.Math.Transform.identity(), [])
+      {:ok, %BB.Math.Transform{}}
+
+      iex> BB.Message.Option.validate_transform("not a transform", [])
+      {:error, "expected BB.Math.Transform.t(), got: \\"not a transform\\""}
+  """
+  @spec validate_transform(term(), keyword()) :: {:ok, Transform.t()} | {:error, String.t()}
+  def validate_transform(%Transform{} = transform, _opts), do: {:ok, transform}
+
+  def validate_transform(value, _opts) do
+    {:error, "expected BB.Math.Transform.t(), got: #{inspect(value)}"}
   end
 end

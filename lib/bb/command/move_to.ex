@@ -83,6 +83,7 @@ defmodule BB.Command.MoveTo do
   @behaviour BB.Command
 
   alias BB.Math.Vec3
+  alias BB.Message.Geometry.Point3D
   alias BB.Motion
 
   @impl true
@@ -146,5 +147,5 @@ defmodule BB.Command.MoveTo do
   end
 
   defp normalize_target(%Vec3{} = target), do: target
-  defp normalize_target(%BB.Message.Geometry.Point3D{x: x, y: y, z: z}), do: Vec3.new(x, y, z)
+  defp normalize_target(%Point3D{} = point), do: Point3D.to_vec3(point)
 end
