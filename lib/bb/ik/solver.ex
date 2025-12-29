@@ -27,7 +27,7 @@ defmodule BB.IK.Solver do
   Solvers accept targets as:
   - `Vec3.t()` - Position only
   - `{Vec3.t(), orientation}` - Position with orientation constraint
-  - `Nx.Tensor.t()` - 4x4 homogeneous transform (extracts position and quaternion)
+  - `Transform.t()` - 4x4 homogeneous transform (extracts position and quaternion)
 
   Orientation can be specified as:
   - `:none` - Position only (default)
@@ -59,6 +59,7 @@ defmodule BB.IK.Solver do
   alias BB.Error.Kinematics.UnknownLink
   alias BB.Error.Kinematics.Unreachable
   alias BB.Math.Quaternion
+  alias BB.Math.Transform
   alias BB.Math.Vec3
   alias BB.Robot
 
@@ -81,12 +82,12 @@ defmodule BB.IK.Solver do
 
   - `Vec3.t()` - Position only
   - `{Vec3.t(), orientation_target()}` - Position with orientation constraint
-  - `Nx.Tensor.t()` - 4x4 transform (extracts position and quaternion)
+  - `Transform.t()` - 4x4 homogeneous transform (extracts position and quaternion)
   """
   @type target ::
           Vec3.t()
           | {Vec3.t(), orientation_target()}
-          | Nx.Tensor.t()
+          | Transform.t()
 
   @type opts :: [
           {:max_iterations, pos_integer()}
