@@ -11,6 +11,17 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.10.0](https://github.com/beam-bots/bb/compare/v0.9.0...v0.10.0) (2025-12-29)
+
+
+
+
+### Features:
+
+* add simulation mode for running robots without hardware (#21) by James Harton
+
+* add Vec3 and Quaternion modules with Transform integration (#22) by James Harton
+
 ## [v0.9.0](https://github.com/beam-bots/bb/compare/v0.8.0...v0.9.0) (2025-12-26)
 
 
