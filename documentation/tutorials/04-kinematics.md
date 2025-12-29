@@ -77,7 +77,7 @@ iex> transform = Kinematics.forward_kinematics(robot, positions, :camera_link)
 Extract components:
 
 ```elixir
-iex> alias BB.Robot.Transform
+iex> alias BB.Math.Transform
 
 # Get position
 iex> {x, y, z} = Transform.get_translation(transform)
@@ -107,7 +107,7 @@ This is more efficient than calling `forward_kinematics/3` multiple times.
 Transforms are 4x4 homogeneous matrices. Here are common operations:
 
 ```elixir
-alias BB.Robot.Transform
+alias BB.Math.Transform
 
 # Identity transform (no translation, no rotation)
 identity = Transform.identity()

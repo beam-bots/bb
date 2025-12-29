@@ -142,7 +142,7 @@ Key points:
 ## Key Patterns
 
 - Units: Use `Cldr.Unit` throughout DSL, converted to floats (SI) in Robot struct
-- Transforms: 4x4 matrices in `BB.Robot.Transform`, angles in radians
+- Transforms: 4x4 matrices in `BB.Math.Transform`, angles in radians
 - Process registration: Uses Registry with `:via` tuples, names must be globally unique per robot
 - DSL entities are structs in `lib/bb/dsl/` matching entity names
 - Commands: Return `{:ok, result}` or `{:ok, result, next_state: state}` for state transitions

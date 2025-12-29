@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule BB.Robot.TransformTest do
+defmodule BB.Math.TransformTest do
   use ExUnit.Case, async: true
   alias BB.Math.Quaternion
+  alias BB.Math.Transform
   alias BB.Math.Vec3
-  alias BB.Robot.Transform
 
   @tolerance 1.0e-6
 
@@ -14,58 +14,59 @@ defmodule BB.Robot.TransformTest do
     test "identity quaternion produces identity rotation" do
       q = Quaternion.identity()
       t = Transform.from_quaternion(q)
+      tensor = Transform.tensor(t)
 
-      assert_in_delta Nx.to_number(t[0][0]), 1.0, @tolerance
-      assert_in_delta Nx.to_number(t[1][1]), 1.0, @tolerance
-      assert_in_delta Nx.to_number(t[2][2]), 1.0, @tolerance
-      assert_in_delta Nx.to_number(t[3][3]), 1.0, @tolerance
+      assert_in_delta Nx.to_number(tensor[0][0]), 1.0, @tolerance
+      assert_in_delta Nx.to_number(tensor[1][1]), 1.0, @tolerance
+      assert_in_delta Nx.to_number(tensor[2][2]), 1.0, @tolerance
+      assert_in_delta Nx.to_number(tensor[3][3]), 1.0, @tolerance
 
-      assert_in_delta Nx.to_number(t[0][3]), 0.0, @tolerance
-      assert_in_delta Nx.to_number(t[1][3]), 0.0, @tolerance
-      assert_in_delta Nx.to_number(t[2][3]), 0.0, @tolerance
+      assert_in_delta Nx.to_number(tensor[0][3]), 0.0, @tolerance
+      assert_in_delta Nx.to_number(tensor[1][3]), 0.0, @tolerance
+      assert_in_delta Nx.to_number(tensor[2][3]), 0.0, @tolerance
     end
 
     test "90 degree rotation around Z axis" do
       q = Quaternion.from_axis_angle(Vec3.unit_z(), :math.pi() / 2)
       t = Transform.from_quaternion(q)
 
-      {x, y, z} = Transform.apply_to_point(t, {1.0, 0.0, 0.0})
+      result = Transform.apply_to_point(t, Vec3.new(1.0, 0.0, 0.0))
 
-      assert_in_delta x, 0.0, @tolerance
-      assert_in_delta y, 1.0, @tolerance
-      assert_in_delta z, 0.0, @tolerance
+      assert_in_delta Vec3.x(result), 0.0, @tolerance
+      assert_in_delta Vec3.y(result), 1.0, @tolerance
+      assert_in_delta Vec3.z(result), 0.0, @tolerance
     end
 
     test "90 degree rotation around X axis" do
       q = Quaternion.from_axis_angle(Vec3.unit_x(), :math.pi() / 2)
       t = Transform.from_quaternion(q)
 
-      {x, y, z} = Transform.apply_to_point(t, {0.0, 1.0, 0.0})
+      result = Transform.apply_to_point(t, Vec3.new(0.0, 1.0, 0.0))
 
-      assert_in_delta x, 0.0, @tolerance
-      assert_in_delta y, 0.0, @tolerance
-      assert_in_delta z, 1.0, @tolerance
+      assert_in_delta Vec3.x(result), 0.0, @tolerance
+      assert_in_delta Vec3.y(result), 0.0, @tolerance
+      assert_in_delta Vec3.z(result), 1.0, @tolerance
     end
 
     test "90 degree rotation around Y axis" do
       q = Quaternion.from_axis_angle(Vec3.unit_y(), :math.pi() / 2)
       t = Transform.from_quaternion(q)
 
-      {x, y, z} = Transform.apply_to_point(t, {1.0, 0.0, 0.0})
+      result = Transform.apply_to_point(t, Vec3.new(1.0, 0.0, 0.0))
 
-      assert_in_delta x, 0.0, @tolerance
-      assert_in_delta y, 0.0, @tolerance
-      assert_in_delta z, -1.0, @tolerance
+      assert_in_delta Vec3.x(result), 0.0, @tolerance
+      assert_in_delta Vec3.y(result), 0.0, @tolerance
+      assert_in_delta Vec3.z(result), -1.0, @tolerance
     end
 
     test "translation component is zero" do
       q = Quaternion.from_axis_angle(Vec3.new(1, 1, 1), 0.5)
       t = Transform.from_quaternion(q)
-      {tx, ty, tz} = Transform.get_translation(t)
+      pos = Transform.get_translation(t)
 
-      assert_in_delta tx, 0.0, @tolerance
-      assert_in_delta ty, 0.0, @tolerance
-      assert_in_delta tz, 0.0, @tolerance
+      assert_in_delta Vec3.x(pos), 0.0, @tolerance
+      assert_in_delta Vec3.y(pos), 0.0, @tolerance
+      assert_in_delta Vec3.z(pos), 0.0, @tolerance
     end
   end
 
@@ -126,10 +127,10 @@ defmodule BB.Robot.TransformTest do
       q = Quaternion.identity()
       t = Transform.from_position_quaternion(pos, q)
 
-      {tx, ty, tz} = Transform.get_translation(t)
-      assert_in_delta tx, 1.0, @tolerance
-      assert_in_delta ty, 2.0, @tolerance
-      assert_in_delta tz, 3.0, @tolerance
+      result = Transform.get_translation(t)
+      assert_in_delta Vec3.x(result), 1.0, @tolerance
+      assert_in_delta Vec3.y(result), 2.0, @tolerance
+      assert_in_delta Vec3.z(result), 3.0, @tolerance
     end
 
     test "with rotation applies both position and orientation" do
@@ -137,10 +138,10 @@ defmodule BB.Robot.TransformTest do
       q = Quaternion.from_axis_angle(Vec3.unit_z(), :math.pi() / 2)
       t = Transform.from_position_quaternion(pos, q)
 
-      {x, y, z} = Transform.apply_to_point(t, {1.0, 0.0, 0.0})
-      assert_in_delta x, 5.0, @tolerance
-      assert_in_delta y, 1.0, @tolerance
-      assert_in_delta z, 0.0, @tolerance
+      result = Transform.apply_to_point(t, Vec3.new(1.0, 0.0, 0.0))
+      assert_in_delta Vec3.x(result), 5.0, @tolerance
+      assert_in_delta Vec3.y(result), 1.0, @tolerance
+      assert_in_delta Vec3.z(result), 0.0, @tolerance
     end
 
     test "position and orientation are independent" do
@@ -148,10 +149,10 @@ defmodule BB.Robot.TransformTest do
       q = Quaternion.from_axis_angle(Vec3.unit_x(), :math.pi() / 4)
       t = Transform.from_position_quaternion(pos, q)
 
-      {tx, ty, tz} = Transform.get_translation(t)
-      assert_in_delta tx, 10.0, @tolerance
-      assert_in_delta ty, 20.0, @tolerance
-      assert_in_delta tz, 30.0, @tolerance
+      result = Transform.get_translation(t)
+      assert_in_delta Vec3.x(result), 10.0, @tolerance
+      assert_in_delta Vec3.y(result), 20.0, @tolerance
+      assert_in_delta Vec3.z(result), 30.0, @tolerance
 
       recovered_q = Transform.get_quaternion(t)
       dist = Quaternion.angular_distance(q, recovered_q)
@@ -296,34 +297,34 @@ defmodule BB.Robot.TransformTest do
       q = Quaternion.from_axis_angle(Vec3.unit_z(), angle)
       t2 = Transform.from_quaternion(q)
 
-      point = {1.0, 2.0, 3.0}
-      {x1, y1, z1} = Transform.apply_to_point(t1, point)
-      {x2, y2, z2} = Transform.apply_to_point(t2, point)
+      point = Vec3.new(1.0, 2.0, 3.0)
+      p1 = Transform.apply_to_point(t1, point)
+      p2 = Transform.apply_to_point(t2, point)
 
-      assert_in_delta x1, x2, @tolerance
-      assert_in_delta y1, y2, @tolerance
-      assert_in_delta z1, z2, @tolerance
+      assert_in_delta Vec3.x(p1), Vec3.x(p2), @tolerance
+      assert_in_delta Vec3.y(p1), Vec3.y(p2), @tolerance
+      assert_in_delta Vec3.z(p1), Vec3.z(p2), @tolerance
     end
 
     test "compose with from_quaternion" do
       rot = Transform.from_quaternion(Quaternion.from_axis_angle(Vec3.unit_z(), :math.pi() / 2))
-      pos = Transform.translation(1.0, 0.0, 0.0)
+      pos = Transform.translation(Vec3.new(1.0, 0.0, 0.0))
 
       # compose(rot, pos) = rot * pos, so when applied to point p:
       # (rot * pos) * p = rot * (pos * p) - translation applied first, then rotation
       t = Transform.compose(rot, pos)
-      {x, y, z} = Transform.apply_to_point(t, {0.0, 0.0, 0.0})
+      result = Transform.apply_to_point(t, Vec3.zero())
 
       # Point at origin: first translated to (1, 0, 0), then rotated 90° around Z to (0, 1, 0)
-      assert_in_delta x, 0.0, @tolerance
-      assert_in_delta y, 1.0, @tolerance
-      assert_in_delta z, 0.0, @tolerance
+      assert_in_delta Vec3.x(result), 0.0, @tolerance
+      assert_in_delta Vec3.y(result), 1.0, @tolerance
+      assert_in_delta Vec3.z(result), 0.0, @tolerance
 
       # A point at (1, 0, 0): first translated to (2, 0, 0), then rotated to (0, 2, 0)
-      {x2, y2, z2} = Transform.apply_to_point(t, {1.0, 0.0, 0.0})
-      assert_in_delta x2, 0.0, @tolerance
-      assert_in_delta y2, 2.0, @tolerance
-      assert_in_delta z2, 0.0, @tolerance
+      result2 = Transform.apply_to_point(t, Vec3.new(1.0, 0.0, 0.0))
+      assert_in_delta Vec3.x(result2), 0.0, @tolerance
+      assert_in_delta Vec3.y(result2), 2.0, @tolerance
+      assert_in_delta Vec3.z(result2), 0.0, @tolerance
     end
   end
 end
