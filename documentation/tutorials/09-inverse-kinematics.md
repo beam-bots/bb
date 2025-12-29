@@ -173,7 +173,7 @@ target = {0.3, 0.2, 0.1}
 target = Nx.tensor([0.3, 0.2, 0.1])
 
 # 4x4 homogeneous transform (position extracted)
-target = BB.Robot.Transform.translation(0.3, 0.2, 0.1)
+target = BB.Math.Transform.translation(0.3, 0.2, 0.1)
 ```
 
 > **Note:** FABRIK currently solves for position only. Orientation in transforms is ignored.

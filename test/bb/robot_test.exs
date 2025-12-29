@@ -6,8 +6,10 @@ defmodule BB.RobotTest do
   use ExUnit.Case, async: true
   import BB.Unit
 
+  alias BB.Math.Transform
+  alias BB.Math.Vec3
   alias BB.Robot
-  alias BB.Robot.{Joint, Kinematics, Link, State, Topology, Transform}
+  alias BB.Robot.{Joint, Kinematics, Link, State, Topology}
 
   defmodule SimpleArm do
     use BB
@@ -275,87 +277,99 @@ defmodule BB.RobotTest do
   describe "Transform" do
     test "identity/0 returns 4x4 identity matrix" do
       t = Transform.identity()
-      assert Nx.shape(t) == {4, 4}
+      assert Nx.shape(Transform.tensor(t)) == {4, 4}
 
       expected = Nx.eye(4, type: :f64)
-      assert Nx.to_list(t) == Nx.to_list(expected)
+      assert Nx.to_list(Transform.tensor(t)) == Nx.to_list(expected)
     end
 
-    test "translation/3 creates translation matrix" do
-      t = Transform.translation(1.0, 2.0, 3.0)
-      assert Transform.get_translation(t) == {1.0, 2.0, 3.0}
+    test "translation/1 creates translation matrix" do
+      t = Transform.translation(Vec3.new(1.0, 2.0, 3.0))
+      pos = Transform.get_translation(t)
+      assert Vec3.x(pos) == 1.0
+      assert Vec3.y(pos) == 2.0
+      assert Vec3.z(pos) == 3.0
     end
 
     test "rotation_x/1 rotates around X axis" do
       t = Transform.rotation_x(:math.pi() / 2)
-      {x, y, z} = Transform.apply_to_point(t, {0.0, 1.0, 0.0})
+      result = Transform.apply_to_point(t, Vec3.new(0.0, 1.0, 0.0))
 
-      assert_in_delta x, 0.0, 0.0001
-      assert_in_delta y, 0.0, 0.0001
-      assert_in_delta z, 1.0, 0.0001
+      assert_in_delta Vec3.x(result), 0.0, 0.0001
+      assert_in_delta Vec3.y(result), 0.0, 0.0001
+      assert_in_delta Vec3.z(result), 1.0, 0.0001
     end
 
     test "rotation_y/1 rotates around Y axis" do
       t = Transform.rotation_y(:math.pi() / 2)
-      {x, y, z} = Transform.apply_to_point(t, {1.0, 0.0, 0.0})
+      result = Transform.apply_to_point(t, Vec3.new(1.0, 0.0, 0.0))
 
-      assert_in_delta x, 0.0, 0.0001
-      assert_in_delta y, 0.0, 0.0001
-      assert_in_delta z, -1.0, 0.0001
+      assert_in_delta Vec3.x(result), 0.0, 0.0001
+      assert_in_delta Vec3.y(result), 0.0, 0.0001
+      assert_in_delta Vec3.z(result), -1.0, 0.0001
     end
 
     test "rotation_z/1 rotates around Z axis" do
       t = Transform.rotation_z(:math.pi() / 2)
-      {x, y, z} = Transform.apply_to_point(t, {1.0, 0.0, 0.0})
+      result = Transform.apply_to_point(t, Vec3.new(1.0, 0.0, 0.0))
 
-      assert_in_delta x, 0.0, 0.0001
-      assert_in_delta y, 1.0, 0.0001
-      assert_in_delta z, 0.0, 0.0001
+      assert_in_delta Vec3.x(result), 0.0, 0.0001
+      assert_in_delta Vec3.y(result), 1.0, 0.0001
+      assert_in_delta Vec3.z(result), 0.0, 0.0001
     end
 
     test "compose/2 multiplies transforms" do
-      t1 = Transform.translation(1.0, 0.0, 0.0)
-      t2 = Transform.translation(0.0, 2.0, 0.0)
+      t1 = Transform.translation(Vec3.new(1.0, 0.0, 0.0))
+      t2 = Transform.translation(Vec3.new(0.0, 2.0, 0.0))
       t = Transform.compose(t1, t2)
 
-      assert Transform.get_translation(t) == {1.0, 2.0, 0.0}
+      pos = Transform.get_translation(t)
+      assert Vec3.x(pos) == 1.0
+      assert Vec3.y(pos) == 2.0
+      assert Vec3.z(pos) == 0.0
     end
 
     test "compose_all/1 composes multiple transforms" do
       transforms = [
-        Transform.translation(1.0, 0.0, 0.0),
-        Transform.translation(0.0, 1.0, 0.0),
-        Transform.translation(0.0, 0.0, 1.0)
+        Transform.translation(Vec3.new(1.0, 0.0, 0.0)),
+        Transform.translation(Vec3.new(0.0, 1.0, 0.0)),
+        Transform.translation(Vec3.new(0.0, 0.0, 1.0))
       ]
 
       t = Transform.compose_all(transforms)
-      assert Transform.get_translation(t) == {1.0, 1.0, 1.0}
+      pos = Transform.get_translation(t)
+      assert Vec3.x(pos) == 1.0
+      assert Vec3.y(pos) == 1.0
+      assert Vec3.z(pos) == 1.0
     end
 
     test "inverse/1 computes inverse transform" do
-      t = Transform.translation(1.0, 2.0, 3.0)
+      t = Transform.translation(Vec3.new(1.0, 2.0, 3.0))
       t_inv = Transform.inverse(t)
 
-      {x, y, z} = Transform.get_translation(t_inv)
-      assert_in_delta x, -1.0, 0.0001
-      assert_in_delta y, -2.0, 0.0001
-      assert_in_delta z, -3.0, 0.0001
+      pos = Transform.get_translation(t_inv)
+      assert_in_delta Vec3.x(pos), -1.0, 0.0001
+      assert_in_delta Vec3.y(pos), -2.0, 0.0001
+      assert_in_delta Vec3.z(pos), -3.0, 0.0001
     end
 
-    test "revolute_transform/2 rotates around arbitrary axis" do
-      axis = {0.0, 0.0, 1.0}
-      t = Transform.revolute_transform(axis, :math.pi() / 2)
-      {x, y, _z} = Transform.apply_to_point(t, {1.0, 0.0, 0.0})
+    test "from_axis_angle/2 rotates around arbitrary axis" do
+      axis = Vec3.new(0.0, 0.0, 1.0)
+      t = Transform.from_axis_angle(axis, :math.pi() / 2)
+      result = Transform.apply_to_point(t, Vec3.new(1.0, 0.0, 0.0))
 
-      assert_in_delta x, 0.0, 0.0001
-      assert_in_delta y, 1.0, 0.0001
+      assert_in_delta Vec3.x(result), 0.0, 0.0001
+      assert_in_delta Vec3.y(result), 1.0, 0.0001
     end
 
-    test "prismatic_transform/2 translates along axis" do
-      axis = {1.0, 0.0, 0.0}
-      t = Transform.prismatic_transform(axis, 2.5)
+    test "translation_along/2 translates along axis" do
+      axis = Vec3.new(1.0, 0.0, 0.0)
+      t = Transform.translation_along(axis, 2.5)
 
-      assert Transform.get_translation(t) == {2.5, 0.0, 0.0}
+      pos = Transform.get_translation(t)
+      assert Vec3.x(pos) == 2.5
+      assert Vec3.y(pos) == 0.0
+      assert Vec3.z(pos) == 0.0
     end
 
     test "from_origin/1 creates transform from position and orientation" do
@@ -365,7 +379,10 @@ defmodule BB.RobotTest do
       }
 
       t = Transform.from_origin(origin)
-      assert Transform.get_translation(t) == {1.0, 2.0, 3.0}
+      pos = Transform.get_translation(t)
+      assert Vec3.x(pos) == 1.0
+      assert Vec3.y(pos) == 2.0
+      assert Vec3.z(pos) == 3.0
     end
   end
 
@@ -465,11 +482,11 @@ defmodule BB.RobotTest do
       {:ok, state} = State.new(robot)
 
       transform = Kinematics.forward_kinematics(robot, state, :end_effector)
-      {x, y, z} = Transform.get_translation(transform)
+      pos = Transform.get_translation(transform)
 
-      assert_in_delta x, 0.0, 0.0001
-      assert_in_delta y, 0.0, 0.0001
-      assert_in_delta z, 1.0, 0.0001
+      assert_in_delta Vec3.x(pos), 0.0, 0.0001
+      assert_in_delta Vec3.y(pos), 0.0, 0.0001
+      assert_in_delta Vec3.z(pos), 1.0, 0.0001
 
       State.delete(state)
     end
@@ -481,11 +498,11 @@ defmodule BB.RobotTest do
       State.set_joint_position(state, :shoulder, :math.pi() / 2)
 
       transform = Kinematics.forward_kinematics(robot, state, :upper_arm)
-      {x, y, z} = Transform.get_translation(transform)
+      pos = Transform.get_translation(transform)
 
-      assert_in_delta x, 0.0, 0.0001
-      assert_in_delta y, 0.0, 0.0001
-      assert_in_delta z, 0.1, 0.0001
+      assert_in_delta Vec3.x(pos), 0.0, 0.0001
+      assert_in_delta Vec3.y(pos), 0.0, 0.0001
+      assert_in_delta Vec3.z(pos), 0.1, 0.0001
 
       State.delete(state)
     end
@@ -495,9 +512,9 @@ defmodule BB.RobotTest do
       positions = %{shoulder: 0.0, elbow: 0.0, wrist: 0.0}
 
       transform = Kinematics.forward_kinematics(robot, positions, :end_effector)
-      {_x, _y, z} = Transform.get_translation(transform)
+      pos = Transform.get_translation(transform)
 
-      assert_in_delta z, 1.0, 0.0001
+      assert_in_delta Vec3.z(pos), 1.0, 0.0001
     end
 
     test "all_link_transforms/2 returns transforms for all links" do
@@ -512,8 +529,8 @@ defmodule BB.RobotTest do
       assert Map.has_key?(transforms, :end_effector)
 
       base_transform = transforms[:base]
-      {x, y, z} = Transform.get_translation(base_transform)
-      assert {x, y, z} == {0.0, 0.0, 0.0}
+      pos = Transform.get_translation(base_transform)
+      assert {Vec3.x(pos), Vec3.y(pos), Vec3.z(pos)} == {0.0, 0.0, 0.0}
 
       State.delete(state)
     end

@@ -8,14 +8,14 @@ defmodule BB.Message.Sensor.Imu do
 
   ## Fields
 
-  - `orientation` - Orientation as `{:quaternion, x, y, z, w}`
-  - `angular_velocity` - Angular velocity as `{:vec3, x, y, z}` in rad/s
-  - `linear_acceleration` - Linear acceleration as `{:vec3, x, y, z}` in m/s²
+  - `orientation` - Orientation as `BB.Quaternion.t()`
+  - `angular_velocity` - Angular velocity as `BB.Vec3.t()` in rad/s
+  - `linear_acceleration` - Linear acceleration as `BB.Vec3.t()` in m/s²
 
   ## Examples
 
       alias BB.Message.Sensor.Imu
-      alias BB.Message.{Vec3, Quaternion}
+      alias BB.{Vec3, Quaternion}
 
       {:ok, msg} = Imu.new(:imu_link,
         orientation: Quaternion.identity(),
@@ -25,6 +25,9 @@ defmodule BB.Message.Sensor.Imu do
   """
 
   import BB.Message.Option
+
+  alias BB.Math.Quaternion
+  alias BB.Math.Vec3
 
   defstruct [:orientation, :angular_velocity, :linear_acceleration]
 
@@ -40,8 +43,8 @@ defmodule BB.Message.Sensor.Imu do
     ]
 
   @type t :: %__MODULE__{
-          orientation: BB.Message.Quaternion.t(),
-          angular_velocity: BB.Message.Vec3.t(),
-          linear_acceleration: BB.Message.Vec3.t()
+          orientation: Quaternion.t(),
+          angular_velocity: Vec3.t(),
+          linear_acceleration: Vec3.t()
         }
 end

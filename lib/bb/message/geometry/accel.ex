@@ -8,18 +8,20 @@ defmodule BB.Message.Geometry.Accel do
 
   ## Fields
 
-  - `linear` - Linear acceleration as `{:vec3, x, y, z}` in m/s²
-  - `angular` - Angular acceleration as `{:vec3, x, y, z}` in rad/s²
+  - `linear` - Linear acceleration as `BB.Vec3.t()` in m/s²
+  - `angular` - Angular acceleration as `BB.Vec3.t()` in rad/s²
 
   ## Examples
 
       alias BB.Message.Geometry.Accel
-      alias BB.Message.Vec3
+      alias BB.Math.Vec3
 
       {:ok, msg} = Accel.new(:base_link, Vec3.new(0.0, 0.0, 9.81), Vec3.zero())
   """
 
   import BB.Message.Option
+
+  alias BB.Math.Vec3
 
   defstruct [:linear, :angular]
 
@@ -30,8 +32,8 @@ defmodule BB.Message.Geometry.Accel do
     ]
 
   @type t :: %__MODULE__{
-          linear: BB.Message.Vec3.t(),
-          angular: BB.Message.Vec3.t()
+          linear: Vec3.t(),
+          angular: Vec3.t()
         }
 
   @doc """
@@ -41,13 +43,12 @@ defmodule BB.Message.Geometry.Accel do
 
   ## Examples
 
-      alias BB.Message.Vec3
+      alias BB.Math.Vec3
 
       {:ok, msg} = Accel.new(:base_link, Vec3.new(0.0, 0.0, 9.81), Vec3.zero())
   """
-  @spec new(atom(), BB.Message.Vec3.t(), BB.Message.Vec3.t()) ::
-          {:ok, BB.Message.t()} | {:error, term()}
-  def new(frame_id, {:vec3, _, _, _} = linear, {:vec3, _, _, _} = angular) do
+  @spec new(atom(), Vec3.t(), Vec3.t()) :: {:ok, BB.Message.t()} | {:error, term()}
+  def new(frame_id, %Vec3{} = linear, %Vec3{} = angular) do
     new(frame_id, linear: linear, angular: angular)
   end
 end

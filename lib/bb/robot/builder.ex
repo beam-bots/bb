@@ -12,8 +12,10 @@ defmodule BB.Robot.Builder do
 
   alias BB.Dsl
   alias BB.Dsl.ParamRef
+  alias BB.Math.Transform
+  alias BB.Math.Vec3
   alias BB.Robot
-  alias BB.Robot.{Joint, Link, Topology, Transform, Units}
+  alias BB.Robot.{Joint, Link, Topology, Units}
 
   @doc """
   Build a Robot struct from a robot module that uses the BB DSL.
@@ -231,8 +233,9 @@ defmodule BB.Robot.Builder do
         |> Transform.compose(Transform.rotation_y(pitch))
         |> Transform.compose(Transform.rotation_z(yaw))
 
-      axis_vector = Transform.apply_to_point(rotation, {0.0, 0.0, 1.0})
-      {axis_vector, []}
+      axis_vec3 = Transform.apply_to_point(rotation, Vec3.unit_z())
+      axis_tuple = {Vec3.x(axis_vec3), Vec3.y(axis_vec3), Vec3.z(axis_vec3)}
+      {axis_tuple, []}
     end
   end
 

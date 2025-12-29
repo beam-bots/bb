@@ -215,10 +215,11 @@ And geometry types for transforms and motion:
 
 | Module | Description |
 |--------|-------------|
-| `BB.Message.Geometry.Pose` | Position + orientation |
+| `BB.Message.Geometry.Point3D` | 3D point (wraps `BB.Math.Vec3`) |
+| `BB.Message.Geometry.Pose` | Position + orientation (wraps `BB.Math.Transform`) |
 | `BB.Message.Geometry.Twist` | Linear + angular velocity |
 | `BB.Message.Geometry.Wrench` | Force + torque |
-| `BB.Message.Geometry.Transform` | Coordinate transform |
+| `BB.Message.Geometry.Accel` | Linear + angular acceleration |
 
 ## Creating Custom Payload Types
 

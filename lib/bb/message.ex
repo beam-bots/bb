@@ -71,11 +71,10 @@ defmodule BB.Message do
   ## Examples
 
       alias BB.Message.Geometry.Pose
-      alias BB.Message.{Vec3, Quaternion}
+      alias BB.Math.Transform
 
       {:ok, msg} = BB.Message.new(Pose, :end_effector, [
-        position: Vec3.new(1.0, 0.0, 0.5),
-        orientation: Quaternion.identity()
+        transform: Transform.identity()
       ])
   """
   @spec new(module(), atom(), keyword()) :: {:ok, t()} | {:error, term()}
@@ -101,8 +100,7 @@ defmodule BB.Message do
   ## Examples
 
       msg = BB.Message.new!(Pose, :end_effector, [
-        position: Vec3.new(1.0, 0.0, 0.5),
-        orientation: Quaternion.identity()
+        transform: Transform.identity()
       ])
   """
   @spec new!(module(), atom(), keyword()) :: t()

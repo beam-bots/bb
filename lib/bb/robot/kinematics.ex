@@ -22,7 +22,8 @@ defmodule BB.Robot.Kinematics do
       )
 
       # Extract position
-      {x, y, z} = BB.Robot.Transform.get_translation(transform)
+      pos = BB.Math.Transform.get_translation(transform)
+      {BB.Math.Vec3.x(pos), BB.Math.Vec3.y(pos), BB.Math.Vec3.z(pos)}
 
   ## Conventions
 
@@ -32,8 +33,10 @@ defmodule BB.Robot.Kinematics do
   - The base link is at the identity transform
   """
 
+  alias BB.Math.Transform
+  alias BB.Math.Vec3
   alias BB.Robot
-  alias BB.Robot.{State, Transform}
+  alias BB.Robot.State
 
   @doc """
   Compute the forward kinematics transform from base to a target link.
@@ -54,9 +57,9 @@ defmodule BB.Robot.Kinematics do
       BB.Robot.State.set_joint_position(state, :shoulder, :math.pi() / 4)
 
       transform = BB.Robot.Kinematics.forward_kinematics(robot, state, :forearm)
-      {x, y, z} = BB.Robot.Transform.get_translation(transform)
+      pos = BB.Math.Transform.get_translation(transform)
   """
-  @spec forward_kinematics(Robot.t(), State.t() | %{atom() => float()}, atom()) :: Nx.Tensor.t()
+  @spec forward_kinematics(Robot.t(), State.t() | %{atom() => float()}, atom()) :: Transform.t()
   def forward_kinematics(%Robot{} = robot, %State{} = state, target_link) do
     positions = State.get_all_positions(state)
     forward_kinematics(robot, positions, target_link)
@@ -83,7 +86,7 @@ defmodule BB.Robot.Kinematics do
       end_effector_transform = transforms[:end_effector]
   """
   @spec all_link_transforms(Robot.t(), State.t() | %{atom() => float()}) ::
-          %{atom() => Nx.Tensor.t()}
+          %{atom() => Transform.t()}
   def all_link_transforms(%Robot{} = robot, %State{} = state) do
     positions = State.get_all_positions(state)
     all_link_transforms(robot, positions)
@@ -122,7 +125,8 @@ defmodule BB.Robot.Kinematics do
           {float(), float(), float()}
   def link_position(%Robot{} = robot, state_or_positions, target_link) do
     transform = forward_kinematics(robot, state_or_positions, target_link)
-    Transform.get_translation(transform)
+    pos = Transform.get_translation(transform)
+    {Vec3.x(pos), Vec3.y(pos), Vec3.z(pos)}
   end
 
   @doc """
@@ -131,7 +135,7 @@ defmodule BB.Robot.Kinematics do
   This combines the joint's fixed origin transform with the variable
   transform due to joint motion.
   """
-  @spec compute_joint_transform(Robot.t(), %{atom() => float()}, atom()) :: Nx.Tensor.t()
+  @spec compute_joint_transform(Robot.t(), %{atom() => float()}, atom()) :: Transform.t()
   def compute_joint_transform(%Robot{} = robot, positions, joint_name) do
     joint = Robot.get_joint(robot, joint_name)
     position = Map.get(positions, joint_name, 0.0)
@@ -141,12 +145,12 @@ defmodule BB.Robot.Kinematics do
     motion_transform =
       case joint.type do
         type when type in [:revolute, :continuous] ->
-          axis = joint.axis || {0.0, 0.0, 1.0}
-          Transform.revolute_transform(axis, position)
+          axis = tuple_to_vec3(joint.axis || {0.0, 0.0, 1.0})
+          Transform.from_axis_angle(axis, position)
 
         :prismatic ->
-          axis = joint.axis || {0.0, 0.0, 1.0}
-          Transform.prismatic_transform(axis, position)
+          axis = tuple_to_vec3(joint.axis || {0.0, 0.0, 1.0})
+          Transform.translation_along(axis, position)
 
         :fixed ->
           Transform.identity()
@@ -160,6 +164,8 @@ defmodule BB.Robot.Kinematics do
 
     Transform.compose(origin_transform, motion_transform)
   end
+
+  defp tuple_to_vec3({x, y, z}), do: Vec3.new(x, y, z)
 
   defp compute_chain_transform(%Robot{} = robot, positions, path) do
     path

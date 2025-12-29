@@ -6,7 +6,9 @@ defmodule BB.Robot.KinematicsTest do
   use ExUnit.Case, async: true
   import BB.Unit
 
-  alias BB.Robot.{Kinematics, State, Transform}
+  alias BB.Math.Transform
+  alias BB.Math.Vec3
+  alias BB.Robot.{Kinematics, State}
 
   defmodule PlanarArm do
     @moduledoc """
@@ -395,12 +397,12 @@ defmodule BB.Robot.KinematicsTest do
         fk_transform = Kinematics.forward_kinematics(robot, state, link_name)
         all_transform = all_transforms[link_name]
 
-        {fk_x, fk_y, fk_z} = Transform.get_translation(fk_transform)
-        {all_x, all_y, all_z} = Transform.get_translation(all_transform)
+        fk_pos = Transform.get_translation(fk_transform)
+        all_pos = Transform.get_translation(all_transform)
 
-        assert_in_delta fk_x, all_x, 0.0001, "x mismatch for #{link_name}"
-        assert_in_delta fk_y, all_y, 0.0001, "y mismatch for #{link_name}"
-        assert_in_delta fk_z, all_z, 0.0001, "z mismatch for #{link_name}"
+        assert_in_delta Vec3.x(fk_pos), Vec3.x(all_pos), 0.0001, "x mismatch for #{link_name}"
+        assert_in_delta Vec3.y(fk_pos), Vec3.y(all_pos), 0.0001, "y mismatch for #{link_name}"
+        assert_in_delta Vec3.z(fk_pos), Vec3.z(all_pos), 0.0001, "z mismatch for #{link_name}"
       end
 
       State.delete(state)
@@ -416,11 +418,12 @@ defmodule BB.Robot.KinematicsTest do
       inverse = Transform.inverse(transform)
       composed = Transform.compose(transform, inverse)
 
-      identity = Transform.identity()
+      identity_tensor = Transform.tensor(Transform.identity())
+      composed_tensor = Transform.tensor(composed)
 
       for i <- 0..3, j <- 0..3 do
-        expected = Nx.to_number(identity[i][j])
-        actual = Nx.to_number(composed[i][j])
+        expected = Nx.to_number(identity_tensor[i][j])
+        actual = Nx.to_number(composed_tensor[i][j])
         assert_in_delta actual, expected, 0.0001, "mismatch at [#{i}][#{j}]"
       end
     end

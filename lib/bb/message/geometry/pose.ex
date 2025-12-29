@@ -6,48 +6,84 @@ defmodule BB.Message.Geometry.Pose do
   @moduledoc """
   A position and orientation in 3D space.
 
+  Wraps a `BB.Math.Transform` for use as a message payload.
+
   ## Fields
 
-  - `position` - Position as `{:vec3, x, y, z}` in metres
-  - `orientation` - Orientation as `{:quaternion, x, y, z, w}`
+  - `transform` - The pose as `BB.Math.Transform.t()`
 
   ## Examples
 
       alias BB.Message.Geometry.Pose
-      alias BB.Message.{Vec3, Quaternion}
+      alias BB.Math.{Vec3, Quaternion, Transform}
 
+      # Create from Transform
+      transform = Transform.from_position_quaternion(Vec3.new(1.0, 0.0, 0.5), Quaternion.identity())
+      {:ok, msg} = Pose.new(:end_effector, transform)
+
+      # Or from position and orientation
       {:ok, msg} = Pose.new(:end_effector, Vec3.new(1.0, 0.0, 0.5), Quaternion.identity())
+
+      # Access components
+      pose = msg.payload
+      Pose.position(pose)     # => %Vec3{}
+      Pose.orientation(pose)  # => %Quaternion{}
+      Pose.to_transform(pose) # => %Transform{}
   """
 
   import BB.Message.Option
 
-  defstruct [:position, :orientation]
+  alias BB.Math.Quaternion
+  alias BB.Math.Transform
+  alias BB.Math.Vec3
+
+  defstruct [:transform]
 
   use BB.Message,
     schema: [
-      position: [type: vec3_type(), required: true, doc: "Position in metres"],
-      orientation: [type: quaternion_type(), required: true, doc: "Orientation as quaternion"]
+      transform: [type: transform_type(), required: true, doc: "Pose as Transform"]
     ]
 
-  @type t :: %__MODULE__{
-          position: BB.Message.Vec3.t(),
-          orientation: BB.Message.Quaternion.t()
-        }
+  @type t :: %__MODULE__{transform: Transform.t()}
 
   @doc """
-  Create a new Pose message.
-
-  Returns `{:ok, %BB.Message{}}` with the pose as payload.
+  Create a new Pose message from a Transform.
 
   ## Examples
 
-      alias BB.Message.{Vec3, Quaternion}
+      alias BB.Math.Transform
+
+      {:ok, msg} = Pose.new(:base_link, Transform.identity())
+  """
+  @spec new(atom(), Transform.t()) :: {:ok, BB.Message.t()} | {:error, term()}
+  def new(frame_id, %Transform{} = transform) do
+    new(frame_id, transform: transform)
+  end
+
+  @doc """
+  Create a new Pose message from position and orientation.
+
+  ## Examples
+
+      alias BB.Math.{Vec3, Quaternion}
 
       {:ok, msg} = Pose.new(:base_link, Vec3.new(1.0, 2.0, 3.0), Quaternion.identity())
   """
-  @spec new(atom(), BB.Message.Vec3.t(), BB.Message.Quaternion.t()) ::
-          {:ok, BB.Message.t()} | {:error, term()}
-  def new(frame_id, {:vec3, _, _, _} = position, {:quaternion, _, _, _, _} = orientation) do
-    new(frame_id, position: position, orientation: orientation)
+  @spec new(atom(), Vec3.t(), Quaternion.t()) :: {:ok, BB.Message.t()} | {:error, term()}
+  def new(frame_id, %Vec3{} = position, %Quaternion{} = orientation) do
+    transform = Transform.from_position_quaternion(position, orientation)
+    new(frame_id, transform: transform)
   end
+
+  @doc "Get the position component as Vec3."
+  @spec position(t()) :: Vec3.t()
+  def position(%__MODULE__{transform: transform}), do: Transform.get_translation(transform)
+
+  @doc "Get the orientation component as Quaternion."
+  @spec orientation(t()) :: Quaternion.t()
+  def orientation(%__MODULE__{transform: transform}), do: Transform.get_quaternion(transform)
+
+  @doc "Get the underlying Transform."
+  @spec to_transform(t()) :: Transform.t()
+  def to_transform(%__MODULE__{transform: transform}), do: transform
 end

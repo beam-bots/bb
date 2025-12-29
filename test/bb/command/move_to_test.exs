@@ -8,6 +8,7 @@ defmodule BB.Command.MoveToTest do
   alias BB.Command.Context
   alias BB.Command.MoveTo
   alias BB.Error.Kinematics.Unreachable
+  alias BB.Math.Vec3
   alias BB.Robot.State, as: RobotState
   alias BB.Test.MockSolver
 
@@ -77,7 +78,7 @@ defmodule BB.Command.MoveToTest do
         execution_id: make_ref()
       }
 
-      goal = %{target: {0.3, 0.0, 0.0}, target_link: :tip}
+      goal = %{target: Vec3.new(0.3, 0.0, 0.0), target_link: :tip}
 
       assert {:error, {:missing_parameter, :solver}} = MoveTo.handle_command(goal, context)
     end
@@ -105,7 +106,7 @@ defmodule BB.Command.MoveToTest do
       }
 
       goal = %{
-        target: {0.3, 0.0, 0.0},
+        target: Vec3.new(0.3, 0.0, 0.0),
         target_link: :tip,
         solver: MockSolver
       }
@@ -134,7 +135,7 @@ defmodule BB.Command.MoveToTest do
       }
 
       goal = %{
-        target: {10.0, 0.0, 0.0},
+        target: Vec3.new(10.0, 0.0, 0.0),
         target_link: :tip,
         solver: MockSolver
       }
@@ -161,7 +162,7 @@ defmodule BB.Command.MoveToTest do
       }
 
       goal = %{
-        target: {0.3, 0.0, 0.0},
+        target: Vec3.new(0.3, 0.0, 0.0),
         target_link: :tip,
         solver: MockSolver,
         max_iterations: 100,

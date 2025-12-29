@@ -16,14 +16,14 @@ defmodule BB.Command.MoveTo do
   ### Single Target Mode
 
   Required:
-  - `target` - Target position as `{x, y, z}` or `{:vec3, x, y, z}` in metres
+  - `target` - Target position as `BB.Vec3.t()` in metres
   - `target_link` - Name of the link to move (end-effector)
   - `solver` - Module implementing `BB.IK.Solver` behaviour
 
   ### Multi-Target Mode
 
   Required:
-  - `targets` - Map of link names to target positions: `%{link: {x, y, z}}`
+  - `targets` - Map of link names to target positions: `%{link: BB.Vec3.t()}`
   - `solver` - Module implementing `BB.IK.Solver` behaviour
 
   ### Optional (both modes)
@@ -37,7 +37,7 @@ defmodule BB.Command.MoveTo do
 
   ### Single Target
 
-      alias BB.Message.Vec3
+      alias BB.Vec3
 
       {:ok, task} = MyRobot.move_to(%{
         target: Vec3.new(0.3, 0.2, 0.1),
@@ -50,8 +50,8 @@ defmodule BB.Command.MoveTo do
 
       {:ok, task} = MyRobot.move_to(%{
         targets: %{
-          left_foot: {0.1, 0.0, 0.0},
-          right_foot: {-0.1, 0.0, 0.0}
+          left_foot: Vec3.new(0.1, 0.0, 0.0),
+          right_foot: Vec3.new(-0.1, 0.0, 0.0)
         },
         solver: BB.IK.FABRIK
       })
@@ -82,21 +82,19 @@ defmodule BB.Command.MoveTo do
   """
   @behaviour BB.Command
 
+  alias BB.Math.Vec3
+  alias BB.Message.Geometry.Point3D
   alias BB.Motion
 
   @impl true
-  def handle_command(goal, context) do
-    cond do
-      Map.has_key?(goal, :targets) ->
-        handle_multi_target(goal, context)
 
-      Map.has_key?(goal, :target) ->
-        handle_single_target(goal, context)
+  def handle_command(goal, context) when is_map_key(goal, :targets),
+    do: handle_multi_target(goal, context)
 
-      true ->
-        {:error, {:missing_parameter, :target_or_targets}}
-    end
-  end
+  def handle_command(goal, context) when is_map_key(goal, :target),
+    do: handle_single_target(goal, context)
+
+  def handle_command(_goal, _context), do: {:error, {:missing_parameter, :target_or_targets}}
 
   defp handle_single_target(goal, context) do
     with {:ok, target} <- fetch_required(goal, :target),
@@ -148,7 +146,6 @@ defmodule BB.Command.MoveTo do
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end
 
-  defp normalize_target({:vec3, x, y, z}), do: {x, y, z}
-  defp normalize_target(%BB.Message.Geometry.Point3D{x: x, y: y, z: z}), do: {x, y, z}
-  defp normalize_target({_x, _y, _z} = target), do: target
+  defp normalize_target(%Vec3{} = target), do: target
+  defp normalize_target(%Point3D{} = point), do: Point3D.to_vec3(point)
 end
