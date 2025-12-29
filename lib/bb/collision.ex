@@ -41,10 +41,10 @@ defmodule BB.Collision do
   For a typical 6-DOF robot, self-collision checks complete in under 1ms.
   """
 
+  alias BB.Collision.{BroadPhase, Mesh, Primitives}
+  alias BB.Math.{Quaternion, Transform, Vec3}
   alias BB.Robot
   alias BB.Robot.Kinematics
-  alias BB.Collision.{BroadPhase, Primitives}
-  alias BB.Math.{Transform, Vec3, Quaternion}
 
   @type positions :: %{atom() => float()}
 
@@ -414,8 +414,7 @@ defmodule BB.Collision do
   end
 
   defp geometry_to_primitive({:mesh, %{filename: filename, scale: scale}}, transform) do
-    # Use bounding sphere for mesh collision
-    case BB.Collision.Mesh.load_bounds(filename) do
+    case Mesh.load_bounds(filename) do
       {:ok, bounds} ->
         {local_centre, radius} = bounds.bounding_sphere
         centre = Transform.get_translation(transform)

@@ -18,6 +18,7 @@ Robot topology
      * box
      * cylinder
      * sphere
+     * capsule
      * mesh
      * material
        * color
@@ -28,6 +29,7 @@ Robot topology
      * box
      * cylinder
      * sphere
+     * capsule
      * mesh
    * sensor
  * [joint](#topology-joint)
@@ -59,6 +61,7 @@ A kinematic link (ie solid body).
    * box
    * cylinder
    * sphere
+   * capsule
    * mesh
    * material
      * color
@@ -69,6 +72,7 @@ A kinematic link (ie solid body).
    * box
    * cylinder
    * sphere
+   * capsule
    * mesh
  * [sensor](#topology-link-sensor)
 
@@ -180,6 +184,7 @@ Visual attributes for a link.
  * [box](#topology-link-visual-box)
  * [cylinder](#topology-link-visual-cylinder)
  * [sphere](#topology-link-visual-sphere)
+ * [capsule](#topology-link-visual-capsule)
  * [mesh](#topology-link-visual-mesh)
  * [material](#topology-link-visual-material)
    * color
@@ -271,6 +276,36 @@ The origin of the sphere is its center.
 ### Introspection
 
 Target: `BB.Dsl.Sphere`
+
+### topology.link.visual.capsule
+
+
+A capsule geometry (cylinder with hemispherical caps).
+
+The origin of the capsule is the centre of the cylindrical portion.
+The height is the distance between the centres of the hemispherical caps.
+Total extent is height + 2 * radius.
+
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`radius`](#topology-link-visual-capsule-radius){: #topology-link-visual-capsule-radius .spark-required} | `any` |  | The radius of the capsule (cylinder and hemispherical caps) |
+| [`height`](#topology-link-visual-capsule-height){: #topology-link-visual-capsule-height .spark-required} | `any` |  | The height of the cylindrical portion (between cap centres) |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Capsule`
 
 ### topology.link.visual.mesh
 
@@ -426,6 +461,7 @@ The collision properties of a link.
  * [box](#topology-link-collision-box)
  * [cylinder](#topology-link-collision-cylinder)
  * [sphere](#topology-link-collision-sphere)
+ * [capsule](#topology-link-collision-capsule)
  * [mesh](#topology-link-collision-mesh)
 
 
@@ -548,6 +584,36 @@ The origin of the sphere is its center.
 ### Introspection
 
 Target: `BB.Dsl.Sphere`
+
+### topology.link.collision.capsule
+
+
+A capsule geometry (cylinder with hemispherical caps).
+
+The origin of the capsule is the centre of the cylindrical portion.
+The height is the distance between the centres of the hemispherical caps.
+Total extent is height + 2 * radius.
+
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`radius`](#topology-link-collision-capsule-radius){: #topology-link-collision-capsule-radius .spark-required} | `any` |  | The radius of the capsule (cylinder and hemispherical caps) |
+| [`height`](#topology-link-collision-capsule-height){: #topology-link-collision-capsule-height .spark-required} | `any` |  | The height of the cylindrical portion (between cap centres) |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Capsule`
 
 ### topology.link.collision.mesh
 

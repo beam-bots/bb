@@ -466,7 +466,7 @@ defmodule BB.Robot.Builder do
     {:capsule,
      %{
        radius: Units.to_meters(capsule.radius),
-       length: Units.to_meters(capsule.length)
+       length: Units.to_meters(capsule.height)
      }}
   end
 

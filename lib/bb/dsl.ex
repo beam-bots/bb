@@ -361,8 +361,8 @@ defmodule BB.Dsl do
     A capsule geometry (cylinder with hemispherical caps).
 
     The origin of the capsule is the centre of the cylindrical portion.
-    The length is the distance between the centres of the hemispherical caps.
-    Total height is length + 2 * radius.
+    The height is the distance between the centres of the hemispherical caps.
+    Total extent is height + 2 * radius.
     """,
     target: BB.Dsl.Capsule,
     identifier: {:auto, :unique_integer},
@@ -373,9 +373,9 @@ defmodule BB.Dsl do
         doc: "The radius of the capsule (cylinder and hemispherical caps)",
         required: true
       ],
-      length: [
+      height: [
         type: unit_type(compatible: :meter),
-        doc: "The length of the cylindrical portion (between cap centres)",
+        doc: "The height of the cylindrical portion (between cap centres)",
         required: true
       ]
     ]

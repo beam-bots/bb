@@ -6,7 +6,7 @@ defmodule BB.Collision.BroadPhaseTest do
   use ExUnit.Case, async: true
 
   alias BB.Collision.BroadPhase
-  alias BB.Math.{Transform, Vec3, Quaternion}
+  alias BB.Math.{Quaternion, Transform, Vec3}
 
   describe "overlap?/2" do
     test "detects overlapping AABBs" do
@@ -70,7 +70,9 @@ defmodule BB.Collision.BroadPhaseTest do
 
     test "sphere with translation" do
       geometry = {:sphere, %{radius: 0.5}}
-      transform = Transform.from_position_quaternion(Vec3.new(1.0, 2.0, 3.0), Quaternion.identity())
+
+      transform =
+        Transform.from_position_quaternion(Vec3.new(1.0, 2.0, 3.0), Quaternion.identity())
 
       {min_pt, max_pt} = BroadPhase.compute_aabb(geometry, transform)
 
@@ -132,7 +134,9 @@ defmodule BB.Collision.BroadPhaseTest do
 
     test "capsule with translation" do
       geometry = {:capsule, %{radius: 0.5, length: 2.0}}
-      transform = Transform.from_position_quaternion(Vec3.new(5.0, 0.0, 0.0), Quaternion.identity())
+
+      transform =
+        Transform.from_position_quaternion(Vec3.new(5.0, 0.0, 0.0), Quaternion.identity())
 
       {min_pt, max_pt} = BroadPhase.compute_aabb(geometry, transform)
 
@@ -197,7 +201,9 @@ defmodule BB.Collision.BroadPhaseTest do
 
     test "box with translation" do
       geometry = {:box, %{x: 0.5, y: 0.5, z: 0.5}}
-      transform = Transform.from_position_quaternion(Vec3.new(10.0, 20.0, 30.0), Quaternion.identity())
+
+      transform =
+        Transform.from_position_quaternion(Vec3.new(10.0, 20.0, 30.0), Quaternion.identity())
 
       {min_pt, max_pt} = BroadPhase.compute_aabb(geometry, transform)
 
@@ -248,7 +254,9 @@ defmodule BB.Collision.BroadPhaseTest do
     test "mesh with translation" do
       path = Path.join(@fixtures_dir, "cube.stl")
       geometry = {:mesh, %{filename: path, scale: 1.0}}
-      transform = Transform.from_position_quaternion(Vec3.new(5.0, 0.0, 0.0), Quaternion.identity())
+
+      transform =
+        Transform.from_position_quaternion(Vec3.new(5.0, 0.0, 0.0), Quaternion.identity())
 
       {min_pt, max_pt} = BroadPhase.compute_aabb(geometry, transform)
 
@@ -258,7 +266,9 @@ defmodule BB.Collision.BroadPhaseTest do
 
     test "mesh with non-existent file returns placeholder AABB" do
       geometry = {:mesh, %{filename: "/nonexistent/model.stl", scale: 1.0}}
-      transform = Transform.from_position_quaternion(Vec3.new(5.0, 0.0, 0.0), Quaternion.identity())
+
+      transform =
+        Transform.from_position_quaternion(Vec3.new(5.0, 0.0, 0.0), Quaternion.identity())
 
       {min_pt, max_pt} = BroadPhase.compute_aabb(geometry, transform)
 
@@ -269,7 +279,9 @@ defmodule BB.Collision.BroadPhaseTest do
 
     test "mesh without filename returns placeholder AABB" do
       geometry = {:mesh, %{other_data: "something"}}
-      transform = Transform.from_position_quaternion(Vec3.new(5.0, 0.0, 0.0), Quaternion.identity())
+
+      transform =
+        Transform.from_position_quaternion(Vec3.new(5.0, 0.0, 0.0), Quaternion.identity())
 
       {min_pt, max_pt} = BroadPhase.compute_aabb(geometry, transform)
 

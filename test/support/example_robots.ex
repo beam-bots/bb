@@ -20,7 +20,6 @@ defmodule BB.ExampleRobots do
     """
     use BB
     import BB.Unit
-    import Kernel, except: [length: 1]
 
     settings do
       name(:collision_test_arm)
@@ -61,7 +60,7 @@ defmodule BB.ExampleRobots do
 
               capsule do
                 radius(~u(0.03 meter))
-                length(~u(0.3 meter))
+                height(~u(0.3 meter))
               end
             end
 
@@ -91,7 +90,7 @@ defmodule BB.ExampleRobots do
 
                   capsule do
                     radius(~u(0.025 meter))
-                    length(~u(0.2 meter))
+                    height(~u(0.2 meter))
                   end
                 end
               end

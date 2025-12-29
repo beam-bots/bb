@@ -189,7 +189,9 @@ defmodule BB.Collision.MeshTest do
       binary_stl = header <> num_triangles <> normal <> v1 <> v2 <> v3 <> attr
 
       # Write to temp file
-      path = Path.join(System.tmp_dir!(), "test_binary_#{:erlang.unique_integer([:positive])}.stl")
+      path =
+        Path.join(System.tmp_dir!(), "test_binary_#{:erlang.unique_integer([:positive])}.stl")
+
       File.write!(path, binary_stl)
 
       try do

@@ -25,7 +25,9 @@ defmodule BB.Collision.Primitives do
 
   @type sphere :: {:sphere, centre :: Vec3.t(), radius :: float()}
   @type capsule :: {:capsule, point_a :: Vec3.t(), point_b :: Vec3.t(), radius :: float()}
-  @type box :: {:box, centre :: Vec3.t(), half_extents :: Vec3.t(), axes :: {Vec3.t(), Vec3.t(), Vec3.t()}}
+  @type box ::
+          {:box, centre :: Vec3.t(), half_extents :: Vec3.t(),
+           axes :: {Vec3.t(), Vec3.t(), Vec3.t()}}
   @type geometry :: sphere() | capsule() | box()
 
   @type collision_result :: {:collision, penetration_depth :: float()} | :no_collision
@@ -241,22 +243,8 @@ defmodule BB.Collision.Primitives do
 
     # Find minimum penetration across all axes
     min_penetration =
-      axes
-      |> Enum.reduce_while(:infinity, fn axis, min_pen ->
-        # Skip degenerate axes (from parallel edges)
-        if Vec3.magnitude_squared(axis) < 1.0e-10 do
-          {:cont, min_pen}
-        else
-          axis_normalized = Vec3.normalise(axis)
-
-          case test_axis(axis_normalized, t, box1_axes, box1_half, box2_axes, box2_half) do
-            :separated ->
-              {:halt, :separated}
-
-            {:overlap, pen} ->
-              {:cont, min(min_pen, pen)}
-          end
-        end
+      Enum.reduce_while(axes, :infinity, fn axis, min_pen ->
+        check_box_axis(axis, t, box1_axes, box1_half, box2_axes, box2_half, min_pen)
       end)
 
     case min_penetration do
@@ -329,38 +317,37 @@ defmodule BB.Collision.Primitives do
         {closest, a2, dist}
 
       true ->
-        # General case
-        c = Vec3.dot(d1, r)
-        b = Vec3.dot(d1, d2)
-        denom = a * e - b * b
+        closest_points_general_case(a1, d1, a2, d2, r, a, e, f)
+    end
+  end
 
-        # Compute s (parameter on first segment)
-        s =
-          if abs(denom) < 1.0e-10 do
-            0.0
-          else
-            clamp((b * f - c * e) / denom, 0.0, 1.0)
-          end
+  defp closest_points_general_case(a1, d1, a2, d2, r, a, e, f) do
+    c = Vec3.dot(d1, r)
+    b = Vec3.dot(d1, d2)
+    denom = a * e - b * b
 
-        # Compute t (parameter on second segment)
-        t = (b * s + f) / e
+    s = compute_initial_s(denom, b, f, c, e)
+    t = (b * s + f) / e
+    {s, t} = clamp_segment_params(s, t, a, b, c)
 
-        # Clamp t and recompute s if needed
-        {s, t} =
-          cond do
-            t < 0.0 ->
-              {clamp(-c / a, 0.0, 1.0), 0.0}
+    closest1 = Vec3.add(a1, Vec3.scale(d1, s))
+    closest2 = Vec3.add(a2, Vec3.scale(d2, t))
+    {closest1, closest2, Vec3.distance(closest1, closest2)}
+  end
 
-            t > 1.0 ->
-              {clamp((b - c) / a, 0.0, 1.0), 1.0}
+  defp compute_initial_s(denom, b, f, c, e) do
+    if abs(denom) < 1.0e-10 do
+      0.0
+    else
+      clamp((b * f - c * e) / denom, 0.0, 1.0)
+    end
+  end
 
-            true ->
-              {s, t}
-          end
-
-        closest1 = Vec3.add(a1, Vec3.scale(d1, s))
-        closest2 = Vec3.add(a2, Vec3.scale(d2, t))
-        {closest1, closest2, Vec3.distance(closest1, closest2)}
+  defp clamp_segment_params(s, t, a, b, c) do
+    cond do
+      t < 0.0 -> {clamp(-c / a, 0.0, 1.0), 0.0}
+      t > 1.0 -> {clamp((b - c) / a, 0.0, 1.0), 1.0}
+      true -> {s, t}
     end
   end
 
@@ -420,7 +407,31 @@ defmodule BB.Collision.Primitives do
   # Helper Functions - SAT (Separating Axis Theorem)
   # ============================================================================
 
-  # Test a single axis for the SAT algorithm
+  defp check_box_axis(axis, t, box1_axes, box1_half, box2_axes, box2_half, current_min) do
+    if Vec3.magnitude_squared(axis) < 1.0e-10 do
+      {:cont, current_min}
+    else
+      axis_normalized = Vec3.normalise(axis)
+
+      update_min_penetration(
+        axis_normalized,
+        t,
+        box1_axes,
+        box1_half,
+        box2_axes,
+        box2_half,
+        current_min
+      )
+    end
+  end
+
+  defp update_min_penetration(axis, t, box1_axes, box1_half, box2_axes, box2_half, current_min) do
+    case test_axis(axis, t, box1_axes, box1_half, box2_axes, box2_half) do
+      :separated -> {:halt, :separated}
+      {:overlap, pen} -> {:cont, min(current_min, pen)}
+    end
+  end
+
   defp test_axis(axis, t, {a1x, a1y, a1z}, {h1x, h1y, h1z}, {a2x, a2y, a2z}, {h2x, h2y, h2z}) do
     # Project the translation vector onto the axis
     t_proj = abs(Vec3.dot(t, axis))

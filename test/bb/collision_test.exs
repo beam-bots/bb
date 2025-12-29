@@ -7,7 +7,7 @@ defmodule BB.CollisionTest do
 
   alias BB.Collision
   alias BB.ExampleRobots.CollisionTestArm
-  alias BB.Math.{Vec3, Quaternion}
+  alias BB.Math.{Quaternion, Vec3}
 
   describe "build_adjacency_set/1" do
     test "builds adjacency set from robot topology" do
@@ -76,9 +76,7 @@ defmodule BB.CollisionTest do
 
       collisions = Collision.detect_self_collisions(robot, positions, margin: 0.5)
 
-      assert length(collisions) >= 1
-
-      collision = hd(collisions)
+      assert [collision | _] = collisions
       assert is_atom(collision.link_a)
       assert is_atom(collision.link_b)
       assert is_float(collision.penetration_depth)
@@ -201,9 +199,7 @@ defmodule BB.CollisionTest do
 
       collisions = Collision.detect_collisions(robot, positions, obstacles)
 
-      assert length(collisions) >= 1
-
-      collision = hd(collisions)
+      assert [collision | _] = collisions
       assert collision.link_b == :environment
       assert is_float(collision.penetration_depth)
     end
@@ -236,7 +232,7 @@ defmodule BB.CollisionTest do
 
       # With margin, should detect near-collision
       collisions = Collision.detect_collisions(robot, positions, obstacles, margin: 0.03)
-      assert length(collisions) >= 1
+      assert [_ | _] = collisions
     end
   end
 end

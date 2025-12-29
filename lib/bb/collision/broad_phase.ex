@@ -15,7 +15,8 @@ defmodule BB.Collision.BroadPhase do
   so a positive broad phase result only indicates *potential* collision.
   """
 
-  alias BB.Math.{Transform, Vec3, Quaternion}
+  alias BB.Collision.Mesh
+  alias BB.Math.{Quaternion, Transform, Vec3}
 
   @type aabb :: {min :: Vec3.t(), max :: Vec3.t()}
 
@@ -135,7 +136,7 @@ defmodule BB.Collision.BroadPhase do
   end
 
   def compute_aabb({:mesh, %{filename: filename, scale: scale}}, transform) do
-    case BB.Collision.Mesh.load_bounds(filename) do
+    case Mesh.load_bounds(filename) do
       {:ok, bounds} ->
         # Transform the mesh AABB to world space
         transform_mesh_aabb(bounds.aabb, scale, transform)

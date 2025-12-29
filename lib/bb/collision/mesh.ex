@@ -131,7 +131,9 @@ defmodule BB.Collision.Mesh do
     {:error, :invalid_stl}
   end
 
-  defp parse_binary_stl(<<_header::binary-size(80), num_triangles::little-unsigned-32, rest::binary>>) do
+  defp parse_binary_stl(
+         <<_header::binary-size(80), num_triangles::little-unsigned-32, rest::binary>>
+       ) do
     expected_size = num_triangles * 50
 
     if byte_size(rest) >= expected_size do
@@ -145,10 +147,9 @@ defmodule BB.Collision.Mesh do
   defp parse_binary_triangles(_data, 0, acc), do: Enum.uniq(acc)
 
   defp parse_binary_triangles(
-         <<_nx::little-float-32, _ny::little-float-32, _nz::little-float-32,
-           v1x::little-float-32, v1y::little-float-32, v1z::little-float-32,
-           v2x::little-float-32, v2y::little-float-32, v2z::little-float-32,
-           v3x::little-float-32, v3y::little-float-32, v3z::little-float-32,
+         <<_nx::little-float-32, _ny::little-float-32, _nz::little-float-32, v1x::little-float-32,
+           v1y::little-float-32, v1z::little-float-32, v2x::little-float-32, v2y::little-float-32,
+           v2z::little-float-32, v3x::little-float-32, v3y::little-float-32, v3z::little-float-32,
            _attr::binary-size(2), rest::binary>>,
          remaining,
          acc
