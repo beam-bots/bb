@@ -138,6 +138,16 @@ defmodule BB.Urdf.Exporter do
     ])
   end
 
+  # Capsules are exported as cylinders (URDF doesn't have native capsule support)
+  # Total height = length + 2 * radius
+  defp build_geometry_element({:capsule, %{radius: r, length: l}}) do
+    total_height = l + 2 * r
+
+    Xml.element(:geometry, [], [
+      Xml.element(:cylinder, radius: Xml.format_float(r), length: Xml.format_float(total_height))
+    ])
+  end
+
   defp build_geometry_element({:mesh, %{filename: filename, scale: scale}}) do
     scale_str = Xml.format_xyz({scale, scale, scale})
 

@@ -462,6 +462,14 @@ defmodule BB.Robot.Builder do
     {:sphere, %{radius: Units.to_meters(sphere.radius)}}
   end
 
+  defp convert_geometry(%Dsl.Capsule{} = capsule) do
+    {:capsule,
+     %{
+       radius: Units.to_meters(capsule.radius),
+       length: Units.to_meters(capsule.length)
+     }}
+  end
+
   defp convert_geometry(%Dsl.Mesh{} = mesh) do
     {:mesh, %{filename: mesh.filename, scale: mesh.scale}}
   end

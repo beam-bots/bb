@@ -69,6 +69,7 @@ defmodule BB.Robot.Link do
           {:box, %{x: float(), y: float(), z: float()}}
           | {:cylinder, %{radius: float(), height: float()}}
           | {:sphere, %{radius: float()}}
+          | {:capsule, %{radius: float(), length: float()}}
           | {:mesh, %{filename: String.t(), scale: float()}}
 
   @typedoc "Material specification"
