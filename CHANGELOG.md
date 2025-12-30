@@ -11,6 +11,25 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.11.0](https://github.com/beam-bots/bb/compare/v0.10.0...v0.11.0) (2025-12-30)
+
+
+
+
+### Features:
+
+* add collision detection system (#25) by James Harton
+
+* add collision detection module by James Harton
+
+### Bug Fixes:
+
+* pass all solver options through `BB.Motion` by James Harton
+
+### Improvements:
+
+* address credo issues and refine collision detection by James Harton
+
 ## [v0.10.0](https://github.com/beam-bots/bb/compare/v0.9.0...v0.10.0) (2025-12-29)
 
 
