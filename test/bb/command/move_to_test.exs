@@ -7,6 +7,7 @@ defmodule BB.Command.MoveToTest do
 
   alias BB.Command.Context
   alias BB.Command.MoveTo
+  alias BB.Error.Invalid.Command, as: InvalidCommand
   alias BB.Error.Kinematics.Unreachable
   alias BB.Math.Vec3
   alias BB.Robot.State, as: RobotState
@@ -64,7 +65,8 @@ defmodule BB.Command.MoveToTest do
 
       goal = %{target: {0.3, 0.0, 0.0}, solver: MockSolver}
 
-      assert {:error, {:missing_parameter, :target_link}} = MoveTo.handle_command(goal, context)
+      assert {:error, %InvalidCommand{argument: :target_link, reason: "required"}} =
+               MoveTo.handle_command(goal, context)
     end
 
     test "returns error when solver is missing in single-target mode" do
@@ -80,7 +82,8 @@ defmodule BB.Command.MoveToTest do
 
       goal = %{target: Vec3.new(0.3, 0.0, 0.0), target_link: :tip}
 
-      assert {:error, {:missing_parameter, :solver}} = MoveTo.handle_command(goal, context)
+      assert {:error, %InvalidCommand{argument: :solver, reason: "required"}} =
+               MoveTo.handle_command(goal, context)
     end
 
     test "returns ok with metadata on success" do
@@ -219,7 +222,8 @@ defmodule BB.Command.MoveToTest do
 
       goal = %{targets: %{tip: {0.3, 0.0, 0.0}}}
 
-      assert {:error, {:missing_parameter, :solver}} = MoveTo.handle_command(goal, context)
+      assert {:error, %InvalidCommand{argument: :solver, reason: "required"}} =
+               MoveTo.handle_command(goal, context)
     end
 
     test "returns error when neither target nor targets provided" do
@@ -235,7 +239,11 @@ defmodule BB.Command.MoveToTest do
 
       goal = %{solver: MockSolver}
 
-      assert {:error, {:missing_parameter, :target_or_targets}} =
+      assert {:error,
+              %InvalidCommand{
+                argument: :target_or_targets,
+                reason: "required: must specify either :target or :targets"
+              }} =
                MoveTo.handle_command(goal, context)
     end
   end

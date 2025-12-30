@@ -82,6 +82,8 @@ defmodule BB.Command.MoveTo do
   """
   @behaviour BB.Command
 
+  alias BB.Error.Invalid.Command, as: InvalidCommand
+  alias BB.Error.Kinematics.MultiFailed
   alias BB.Math.Vec3
   alias BB.Message.Geometry.Point3D
   alias BB.Motion
@@ -94,7 +96,14 @@ defmodule BB.Command.MoveTo do
   def handle_command(goal, context) when is_map_key(goal, :target),
     do: handle_single_target(goal, context)
 
-  def handle_command(_goal, _context), do: {:error, {:missing_parameter, :target_or_targets}}
+  def handle_command(_goal, _context) do
+    {:error,
+     %InvalidCommand{
+       command: __MODULE__,
+       argument: :target_or_targets,
+       reason: "required: must specify either :target or :targets"
+     }}
+  end
 
   defp handle_single_target(goal, context) do
     with {:ok, target} <- fetch_required(goal, :target),
@@ -123,15 +132,23 @@ defmodule BB.Command.MoveTo do
           {:ok, results}
 
         {:error, failed_link, error, results} ->
-          {:error, {:ik_failed, failed_link, error, results}}
+          {:error,
+           %MultiFailed{
+             failed_link: failed_link,
+             error: error,
+             partial_results: results
+           }}
       end
     end
   end
 
   defp fetch_required(goal, key) do
     case Map.fetch(goal, key) do
-      {:ok, value} -> {:ok, value}
-      :error -> {:error, {:missing_parameter, key}}
+      {:ok, value} ->
+        {:ok, value}
+
+      :error ->
+        {:error, %InvalidCommand{command: __MODULE__, argument: key, reason: "required"}}
     end
   end
 
