@@ -355,6 +355,32 @@ defmodule BB.Dsl do
     ]
   }
 
+  @capsule %Entity{
+    name: :capsule,
+    describe: """
+    A capsule geometry (cylinder with hemispherical caps).
+
+    The origin of the capsule is the centre of the cylindrical portion.
+    The height is the distance between the centres of the hemispherical caps.
+    Total extent is height + 2 * radius.
+    """,
+    target: BB.Dsl.Capsule,
+    identifier: {:auto, :unique_integer},
+    imports: [BB.Unit],
+    schema: [
+      radius: [
+        type: unit_type(compatible: :meter),
+        doc: "The radius of the capsule (cylinder and hemispherical caps)",
+        required: true
+      ],
+      height: [
+        type: unit_type(compatible: :meter),
+        doc: "The height of the cylindrical portion (between cap centres)",
+        required: true
+      ]
+    ]
+  }
+
   @mesh %Entity{
     name: :mesh,
     describe: """
@@ -453,7 +479,7 @@ defmodule BB.Dsl do
     identifier: {:auto, :unique_integer},
     imports: [BB.Unit],
     entities: [
-      geometry: [@box, @cylinder, @sphere, @mesh],
+      geometry: [@box, @cylinder, @sphere, @capsule, @mesh],
       material: [@material],
       origin: [
         %{
@@ -551,7 +577,7 @@ defmodule BB.Dsl do
               "The refrence frame of the collision element, relative to the reference frame of the link"
         }
       ],
-      geometry: [@box, @cylinder, @sphere, @mesh]
+      geometry: [@box, @cylinder, @sphere, @capsule, @mesh]
     ],
     singleton_entity_keys: [:origin, :geometry],
     schema: [

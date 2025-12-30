@@ -7,6 +7,100 @@ defmodule BB.ExampleRobots do
   Example robot topologies for testing and documentation.
   """
 
+  defmodule CollisionTestArm do
+    @moduledoc """
+    A simple 2-DOF arm with collision geometry for testing self-collision detection.
+
+    Structure:
+    - base (box)
+      - shoulder (revolute, Z-axis)
+        - upper_arm (capsule)
+          - elbow (revolute, Y-axis)
+            - forearm (capsule)
+    """
+    use BB
+    import BB.Unit
+
+    settings do
+      name(:collision_test_arm)
+    end
+
+    topology do
+      link :base do
+        collision do
+          box do
+            x(~u(0.1 meter))
+            y(~u(0.1 meter))
+            z(~u(0.05 meter))
+          end
+        end
+
+        joint :shoulder do
+          type(:revolute)
+
+          origin do
+            z(~u(0.1 meter))
+          end
+
+          axis do
+          end
+
+          limit do
+            lower(~u(-180 degree))
+            upper(~u(180 degree))
+            effort(~u(10 newton_meter))
+            velocity(~u(180 degree_per_second))
+          end
+
+          link :upper_arm do
+            collision do
+              origin do
+                x(~u(0.15 meter))
+              end
+
+              capsule do
+                radius(~u(0.03 meter))
+                height(~u(0.3 meter))
+              end
+            end
+
+            joint :elbow do
+              type(:revolute)
+
+              origin do
+                x(~u(0.3 meter))
+              end
+
+              axis do
+                roll(~u(-90 degree))
+              end
+
+              limit do
+                lower(~u(-150 degree))
+                upper(~u(150 degree))
+                effort(~u(10 newton_meter))
+                velocity(~u(180 degree_per_second))
+              end
+
+              link :forearm do
+                collision do
+                  origin do
+                    x(~u(0.1 meter))
+                  end
+
+                  capsule do
+                    radius(~u(0.025 meter))
+                    height(~u(0.2 meter))
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
   defmodule DifferentialDriveRobot do
     @moduledoc """
     A simple two-wheeled differential drive robot with a caster.
