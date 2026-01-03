@@ -8,7 +8,10 @@ defmodule BB.Application do
 
   @impl Application
   def start(_type, _args) do
-    [BB.Safety.Controller]
+    [
+      BB.Safety.Controller,
+      BB.Command.ResultCache
+    ]
     |> Supervisor.start_link(strategy: :one_for_one, name: BB.Supervisor.Application)
   end
 end

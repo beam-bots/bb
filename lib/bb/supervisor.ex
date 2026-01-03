@@ -15,7 +15,8 @@ defmodule BB.Supervisor do
   BB.Supervisor (root, :one_for_one)
   ├── Registry (named {MyRobot, :registry})
   ├── PubSub Registry (named {MyRobot, :pubsub})
-  ├── Task.Supervisor (for command execution tasks)
+  ├── Task.Supervisor (for general async tasks)
+  ├── DynamicSupervisor (for command GenServers, temporary restart)
   ├── Runtime (robot state, state machine, command execution)
   ├── BB.SensorSupervisor (:one_for_one)
   │   └── RobotSensor1, RobotSensor2...
@@ -71,9 +72,14 @@ defmodule BB.Supervisor do
          name: BB.PubSub.registry_name(robot_module)
        )}
 
-    # Task supervisor for command execution
+    # Task supervisor for general async tasks
     task_supervisor_child =
       {Task.Supervisor, name: BB.Process.via(robot_module, BB.TaskSupervisor)}
+
+    # DynamicSupervisor for command GenServers (temporary, not restarted on crash)
+    command_supervisor_child =
+      {DynamicSupervisor,
+       name: BB.Process.via(robot_module, BB.CommandSupervisor), strategy: :one_for_one}
 
     # Runtime manages robot state, state machine, and command execution
     runtime_child = {BB.Robot.Runtime, {robot_module, opts}}
@@ -96,6 +102,7 @@ defmodule BB.Supervisor do
       registry_child,
       pubsub_child,
       task_supervisor_child,
+      command_supervisor_child,
       runtime_child,
       sensor_supervisor_child,
       controller_supervisor_child,

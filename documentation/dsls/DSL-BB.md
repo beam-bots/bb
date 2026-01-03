@@ -1039,7 +1039,7 @@ the robot's state machine to control when they can run.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`handler`](#commands-command-handler){: #commands-command-handler .spark-required} | `module` |  | The handler module implementing the `BB.Command` behaviour |
+| [`handler`](#commands-command-handler){: #commands-command-handler .spark-required} | `module \| {module, keyword}` |  | The handler module implementing the `BB.Command` behaviour. Either a module or `{module, keyword_list}` for parameterised options |
 | [`timeout`](#commands-command-timeout){: #commands-command-timeout } | `pos_integer \| :infinity` | `:infinity` | Timeout for command execution in milliseconds |
 | [`allowed_states`](#commands-command-allowed_states){: #commands-command-allowed_states } | `list(atom)` | `[:idle]` | Robot states in which this command can run. If `:executing` is included, the command can preempt running commands. |
 

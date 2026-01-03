@@ -23,15 +23,15 @@ defmodule BB.Dsl.CommandTransformer do
 
   This transformer generates:
 
-      @spec navigate_to_pose(keyword()) :: {:ok, Task.t()} | {:error, term()}
+      @spec navigate_to_pose(keyword()) :: {:ok, pid()} | {:error, term()}
       def navigate_to_pose(goal \\\\ []) do
         BB.Robot.Runtime.execute(__MODULE__, :navigate_to_pose, Map.new(goal))
       end
 
-  The caller can then await the task to get the result:
+  The caller can then await the command to get the result:
 
-      {:ok, task} = MyRobot.navigate_to_pose(target_pose: pose)
-      {:ok, result} = Task.await(task)
+      {:ok, cmd} = MyRobot.navigate_to_pose(target_pose: pose)
+      {:ok, result} = BB.Command.await(cmd)
   """
   use Spark.Dsl.Transformer
   alias BB.Dsl.Info
@@ -83,16 +83,16 @@ defmodule BB.Dsl.CommandTransformer do
       #{unquote(args_doc)}
       ## Returns
 
-      - `{:ok, Task.t()}` - Command started, await the task for the result
+      - `{:ok, pid()}` - Command started, use `BB.Command.await/2` for the result
       - `{:error, term()}` - Command could not be started
 
       ## Example
 
-          {:ok, task} = #{unquote(name)}(goal_args)
-          {:ok, result} = Task.await(task)
+          {:ok, cmd} = #{unquote(name)}(goal_args)
+          {:ok, result} = BB.Command.await(cmd)
 
       """
-      @spec unquote(name)(keyword()) :: {:ok, Task.t()} | {:error, term()}
+      @spec unquote(name)(keyword()) :: {:ok, pid()} | {:error, term()}
       def unquote(name)(goal \\ []) do
         unquote(Runtime).execute(__MODULE__, unquote(name), Map.new(goal))
       end

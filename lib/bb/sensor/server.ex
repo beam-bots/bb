@@ -18,11 +18,8 @@ defmodule BB.Sensor.Server do
 
   use GenServer
 
-  alias BB.Dsl.ParamRef
   alias BB.Parameter.Changed, as: ParameterChanged
-  alias BB.PubSub
-  alias BB.Robot.Runtime
-  alias BB.Robot.State, as: RobotState
+  alias BB.Server.ParamResolution
 
   defstruct [
     :callback_module,
@@ -58,11 +55,8 @@ defmodule BB.Sensor.Server do
     raw_opts = Keyword.delete(init_arg, :__callback_module__)
     bb = Keyword.fetch!(raw_opts, :bb)
 
-    {param_subscriptions, resolved_opts} = resolve_param_refs(raw_opts, bb.robot)
-
-    for param_path <- Map.keys(param_subscriptions) do
-      PubSub.subscribe(bb.robot, [:param | param_path])
-    end
+    {param_subscriptions, resolved_opts} =
+      ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
 
     case callback_module.init(resolved_opts) do
       {:ok, user_state} ->
@@ -97,18 +91,23 @@ defmodule BB.Sensor.Server do
 
   @impl GenServer
   def handle_info({:bb, [:param | param_path], %{payload: %ParameterChanged{}}}, state) do
-    if Map.has_key?(state.param_subscriptions, param_path) do
-      {_subs, new_resolved} = resolve_param_refs(state.raw_opts, state.bb.robot)
+    case ParamResolution.handle_change(
+           param_path,
+           state.param_subscriptions,
+           state.raw_opts,
+           state.bb.robot
+         ) do
+      {:changed, new_resolved} ->
+        case state.callback_module.handle_options(new_resolved, state.user_state) do
+          {:ok, new_user_state} ->
+            {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
 
-      case state.callback_module.handle_options(new_resolved, state.user_state) do
-        {:ok, new_user_state} ->
-          {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+          {:stop, reason} ->
+            {:stop, reason, state}
+        end
 
-        {:stop, reason} ->
-          {:stop, reason, state}
-      end
-    else
-      {:noreply, state}
+      :ignored ->
+        {:noreply, state}
     end
   end
 
@@ -179,23 +178,5 @@ defmodule BB.Sensor.Server do
   @impl GenServer
   def terminate(reason, state) do
     state.callback_module.terminate(reason, state.user_state)
-  end
-
-  defp resolve_param_refs(opts, robot_module) do
-    robot_state = Runtime.get_robot_state(robot_module)
-
-    {subscriptions, resolved} =
-      Enum.reduce(opts, {%{}, []}, fn {key, value}, {subs, resolved} ->
-        case value do
-          %ParamRef{path: path} ->
-            {:ok, resolved_value} = RobotState.get_parameter(robot_state, path)
-            {Map.put(subs, path, key), [{key, resolved_value} | resolved]}
-
-          _ ->
-            {subs, [{key, value} | resolved]}
-        end
-      end)
-
-    {subscriptions, Enum.reverse(resolved)}
   end
 end

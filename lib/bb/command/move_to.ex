@@ -39,23 +39,23 @@ defmodule BB.Command.MoveTo do
 
       alias BB.Vec3
 
-      {:ok, task} = MyRobot.move_to(%{
+      {:ok, cmd} = MyRobot.move_to(%{
         target: Vec3.new(0.3, 0.2, 0.1),
         target_link: :gripper,
         solver: BB.IK.FABRIK
       })
-      {:ok, meta} = Task.await(task)
+      {:ok, meta} = BB.Command.await(cmd)
 
   ### Multiple Targets (for gait, coordinated motion)
 
-      {:ok, task} = MyRobot.move_to(%{
+      {:ok, cmd} = MyRobot.move_to(%{
         targets: %{
           left_foot: Vec3.new(0.1, 0.0, 0.0),
           right_foot: Vec3.new(-0.1, 0.0, 0.0)
         },
         solver: BB.IK.FABRIK
       })
-      {:ok, results} = Task.await(task)
+      {:ok, results} = BB.Command.await(cmd)
 
   ## Return Value
 
@@ -80,7 +80,7 @@ defmodule BB.Command.MoveTo do
       }
 
   """
-  @behaviour BB.Command
+  use BB.Command
 
   alias BB.Error.Invalid.Command, as: InvalidCommand
   alias BB.Error.Kinematics.MultiFailed
@@ -88,22 +88,30 @@ defmodule BB.Command.MoveTo do
   alias BB.Message.Geometry.Point3D
   alias BB.Motion
 
-  @impl true
-
-  def handle_command(goal, context) when is_map_key(goal, :targets),
-    do: handle_multi_target(goal, context)
-
-  def handle_command(goal, context) when is_map_key(goal, :target),
-    do: handle_single_target(goal, context)
-
-  def handle_command(_goal, _context) do
-    {:error,
-     %InvalidCommand{
-       command: __MODULE__,
-       argument: :target_or_targets,
-       reason: "required: must specify either :target or :targets"
-     }}
+  @impl BB.Command
+  def handle_command(goal, context, state) when is_map_key(goal, :targets) do
+    result = handle_multi_target(goal, context)
+    {:stop, :normal, %{state | result: result}}
   end
+
+  def handle_command(goal, context, state) when is_map_key(goal, :target) do
+    result = handle_single_target(goal, context)
+    {:stop, :normal, %{state | result: result}}
+  end
+
+  def handle_command(_goal, _context, state) do
+    error =
+      InvalidCommand.exception(
+        command: __MODULE__,
+        argument: :target_or_targets,
+        reason: "required: must specify either :target or :targets"
+      )
+
+    {:stop, :normal, %{state | result: {:error, error}}}
+  end
+
+  @impl BB.Command
+  def result(%{result: result}), do: result
 
   defp handle_single_target(goal, context) do
     with {:ok, target} <- fetch_required(goal, :target),
@@ -133,11 +141,11 @@ defmodule BB.Command.MoveTo do
 
         {:error, failed_link, error, results} ->
           {:error,
-           %MultiFailed{
+           MultiFailed.exception(
              failed_link: failed_link,
              error: error,
              partial_results: results
-           }}
+           )}
       end
     end
   end
@@ -148,7 +156,7 @@ defmodule BB.Command.MoveTo do
         {:ok, value}
 
       :error ->
-        {:error, %InvalidCommand{command: __MODULE__, argument: key, reason: "required"}}
+        {:error, InvalidCommand.exception(command: __MODULE__, argument: key, reason: "required")}
     end
   end
 
