@@ -760,6 +760,7 @@ defmodule BB.Dsl do
     target: BB.Dsl.Command,
     identifier: :name,
     args: [:name],
+    imports: [BB.Dsl.ParamRef],
     entities: [arguments: [@command_argument]],
     schema: [
       name: [
@@ -768,9 +769,11 @@ defmodule BB.Dsl do
         doc: "A unique name for the command"
       ],
       handler: [
-        type: :module,
+        type:
+          {:or, [{:behaviour, BB.Command}, {:tuple, [{:behaviour, BB.Command}, :keyword_list]}]},
         required: true,
-        doc: "The handler module implementing the `BB.Command` behaviour"
+        doc:
+          "The handler module implementing the `BB.Command` behaviour. Either a module or `{module, keyword_list}` for parameterised options"
       ],
       timeout: [
         type: {:or, [:pos_integer, {:in, [:infinity]}]},

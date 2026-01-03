@@ -217,7 +217,7 @@ defmodule BB.Command.Server do
 
   def handle_info({:bb, [:param | param_path], %{payload: %ParameterChanged{}}}, state) do
     if Map.has_key?(state.param_subscriptions, param_path) do
-      {_subs, new_resolved} = resolve_param_refs(state.raw_opts, state.context.robot_module)
+      {_subs, new_resolved} = resolve_param_refs(state.raw_opts, state.context.robot_state)
 
       case wrap_callback(state, state.callback_module, :handle_options, [
              new_resolved,
