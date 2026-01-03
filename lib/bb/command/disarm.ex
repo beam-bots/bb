@@ -23,17 +23,27 @@ defmodule BB.Command.Disarm do
 
   Then execute:
 
-      {:ok, task} = MyRobot.disarm()
-      {:ok, :disarmed} = Task.await(task)
+      {:ok, cmd} = MyRobot.disarm()
+      {:ok, :disarmed} = BB.Command.await(cmd)
 
   """
-  @behaviour BB.Command
+  use BB.Command
 
-  @impl true
-  def handle_command(_goal, context) do
+  @impl BB.Command
+  def handle_command(_goal, context, state) do
     case BB.Safety.disarm(context.robot_module) do
-      :ok -> {:ok, :disarmed, next_state: :disarmed}
-      {:error, reason} -> {:error, reason}
+      :ok ->
+        {:stop, :normal, %{state | result: {:ok, :disarmed}, next_state: :disarmed}}
+
+      {:error, reason} ->
+        {:stop, :normal, %{state | result: {:error, reason}}}
     end
   end
+
+  @impl BB.Command
+  def result(%{result: {:ok, value}, next_state: next_state}) do
+    {:ok, value, next_state: next_state}
+  end
+
+  def result(%{result: result}), do: result
 end

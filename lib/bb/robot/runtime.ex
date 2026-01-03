@@ -32,9 +32,10 @@ defmodule BB.Robot.Runtime do
 
   ## Command Execution
 
-  Commands execute in supervised tasks. The caller receives a `Task.t()` and
-  can use `Task.await/2` or `Task.yield/2` to get the result. The Runtime
-  monitors the task and transitions back to `:idle` when it completes.
+  Commands execute as supervised GenServers. The caller receives the command
+  pid and can use `BB.Command.await/2` or `BB.Command.yield/2` to get the
+  result. The Runtime monitors the command server and transitions back to
+  `:idle` when it completes.
   """
 
   use GenServer
@@ -58,8 +59,8 @@ defmodule BB.Robot.Runtime do
     :robot_state,
     :state,
     :commands,
-    :current_task,
-    :current_task_ref,
+    :current_command_pid,
+    :current_command_ref,
     :current_command_name,
     :current_execution_id,
     :parameter_store,
@@ -75,8 +76,8 @@ defmodule BB.Robot.Runtime do
           robot_state: RobotState.t(),
           state: robot_state(),
           commands: %{atom() => BB.Dsl.Command.t()},
-          current_task: Task.t() | nil,
-          current_task_ref: reference() | nil,
+          current_command_pid: pid() | nil,
+          current_command_ref: reference() | nil,
           current_command_name: atom() | nil,
           current_execution_id: reference() | nil,
           parameter_store: module() | nil,
@@ -224,71 +225,45 @@ defmodule BB.Robot.Runtime do
   @doc """
   Execute a command with the given goal.
 
-  Returns `{:ok, task}` where `task` can be awaited for the result.
-  The task handles subscription to command events internally.
+  Returns `{:ok, pid}` where `pid` is the command server process.
+  Use `BB.Command.await/2` or `BB.Command.yield/2` to get the result.
 
   ## Examples
 
-      {:ok, task} = Runtime.execute(MyRobot, :navigate, %{target: pose})
-      {:ok, result} = Task.await(task)
+      {:ok, cmd} = Runtime.execute(MyRobot, :navigate, %{target: pose})
+      {:ok, result} = BB.Command.await(cmd)
 
       # Or with timeout
-      case Task.yield(task, 5000) || Task.shutdown(task) do
+      case BB.Command.yield(cmd, 5000) do
+        nil -> still_running()
         {:ok, result} -> handle_result(result)
-        nil -> handle_timeout()
+        {:error, reason} -> handle_error(reason)
       end
 
   ## Errors
 
-  Errors are returned through the awaited task result:
   - `{:error, %StateError{}}` - Robot not in allowed state
   - `{:error, {:unknown_command, name}}` - Command not found
-  - `{:error, reason}` - Command handler returned an error
+  - Other errors are returned through `BB.Command.await/2`
   """
-  @spec execute(module(), atom(), map()) :: {:ok, Task.t()}
+  @spec execute(module(), atom(), map()) :: {:ok, pid()} | {:error, term()}
   def execute(robot_module, command_name, goal) do
     execution_id = make_ref()
 
-    # Spawn task owned by the caller so they can await it
-    task =
-      Task.async(fn ->
-        path = [:command, command_name, execution_id]
-        PubSub.subscribe(robot_module, path)
+    case GenServer.call(via(robot_module), {:execute, command_name, goal, execution_id}) do
+      {:ok, pid} ->
+        {:ok, pid}
 
-        try do
-          case GenServer.call(via(robot_module), {:execute, command_name, goal, execution_id}) do
-            :ok ->
-              wait_for_completion(path)
-
-            {:error, _} = error ->
-              error
-          end
-        after
-          PubSub.unsubscribe(robot_module, path)
-        end
-      end)
-
-    {:ok, task}
-  end
-
-  defp wait_for_completion(path) do
-    receive do
-      {:bb, ^path, %Message{payload: %Event{status: :succeeded, data: %{result: result}}}} ->
-        {:ok, result}
-
-      {:bb, ^path, %Message{payload: %Event{status: :failed, data: %{reason: reason}}}} ->
-        {:error, reason}
-
-      {:bb, ^path, %Message{payload: %Event{status: :cancelled}}} ->
-        {:error, :cancelled}
+      {:error, _} = error ->
+        error
     end
   end
 
   @doc """
   Cancel the currently executing command.
 
-  Terminates the command task immediately. The caller will receive an exit
-  when awaiting the task.
+  Stops the command server with `:cancelled` reason. Awaiting callers
+  will receive the result from the command's `result/1` callback.
   """
   @spec cancel(module()) :: :ok | {:error, :no_execution}
   def cancel(robot_module) do
@@ -324,8 +299,8 @@ defmodule BB.Robot.Runtime do
       robot_state: robot_state,
       state: :idle,
       commands: commands,
-      current_task: nil,
-      current_task_ref: nil,
+      current_command_pid: nil,
+      current_command_ref: nil,
       current_command_name: nil,
       current_execution_id: nil,
       parameter_store: store_module,
@@ -411,56 +386,18 @@ defmodule BB.Robot.Runtime do
     end
   end
 
-  def handle_call(:cancel, _from, %{current_task: nil} = state) do
+  def handle_call(:cancel, _from, %{current_command_pid: nil} = state) do
     {:reply, {:error, :no_execution}, state}
   end
 
   def handle_call(:cancel, _from, state) do
-    old_state = state.state
-    state = terminate_current_task(state)
-    state = %{state | state: :idle}
-    state = set_robot_machine_state(state, :idle)
-
-    if old_state != :idle do
-      publish_transition(state, old_state, :idle)
-    end
-
-    {:reply, :ok, state}
-  end
-
-  def handle_call(
-        {:command_complete, execution_id, next_state},
-        _from,
-        %{current_execution_id: execution_id} = state
-      ) do
-    # Command completed normally - handle state transition synchronously
-    old_state = state.state
-
-    # Demonitor and flush any pending :DOWN message
-    if state.current_task_ref do
-      Process.demonitor(state.current_task_ref, [:flush])
-    end
-
-    state = %{
-      state
-      | state: next_state,
-        current_task: nil,
-        current_task_ref: nil,
-        current_command_name: nil,
-        current_execution_id: nil
-    }
-
-    state = set_robot_machine_state(state, next_state)
-
-    if old_state != next_state do
-      publish_transition(state, old_state, next_state)
-    end
-
+    # Stop the command server - it will notify us via {:command_complete, ...} cast
+    BB.Command.cancel(state.current_command_pid)
     {:reply, :ok, state}
   end
 
   def handle_call({:command_complete, _execution_id, _next_state}, _from, state) do
-    # Stale completion (execution_id doesn't match) - ignore
+    # This is now handled via cast, but keep for backwards compatibility
     {:reply, :ok, state}
   end
 
@@ -504,15 +441,92 @@ defmodule BB.Robot.Runtime do
   end
 
   @impl GenServer
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{current_task_ref: ref} = state) do
-    # Task crashed before calling {:command_complete, ...} - fall back to :idle
+  def handle_cast({:command_complete, execution_id, result}, state) do
+    if state.current_execution_id == execution_id do
+      handle_command_completion(state, result)
+    else
+      # Stale completion - ignore
+      {:noreply, state}
+    end
+  end
+
+  def handle_cast({:command_crashed, execution_id, error}, state) do
+    if state.current_execution_id == execution_id do
+      Logger.error("Command #{inspect(state.current_command_name)} crashed: #{inspect(error)}")
+      # Treat crash as completion with error result
+      handle_command_completion(state, {:error, error})
+    else
+      {:noreply, state}
+    end
+  end
+
+  defp handle_command_completion(state, result) do
     old_state = state.state
+
+    # Demonitor and flush any pending :DOWN message
+    if state.current_command_ref do
+      Process.demonitor(state.current_command_ref, [:flush])
+    end
+
+    # Extract next_state from result
+    next_state = extract_next_state(result)
+
+    # Publish command event
+    path = [:command, state.current_command_name, state.current_execution_id]
+
+    case result do
+      {:ok, value} ->
+        publish_command_event(state.robot_module, path, :succeeded, %{result: value})
+
+      {:ok, value, _opts} ->
+        publish_command_event(state.robot_module, path, :succeeded, %{result: value})
+
+      {:error, reason} ->
+        publish_command_event(state.robot_module, path, :failed, %{reason: reason})
+    end
+
+    state = %{
+      state
+      | state: next_state,
+        current_command_pid: nil,
+        current_command_ref: nil,
+        current_command_name: nil,
+        current_execution_id: nil
+    }
+
+    state = set_robot_machine_state(state, next_state)
+
+    if old_state != next_state do
+      publish_transition(state, old_state, next_state)
+    end
+
+    {:noreply, state}
+  end
+
+  defp extract_next_state({:ok, _value, opts}) when is_list(opts) do
+    Keyword.get(opts, :next_state, :idle)
+  end
+
+  defp extract_next_state(_), do: :idle
+
+  @impl GenServer
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{current_command_ref: ref} = state) do
+    # Command server crashed before notifying us - fall back to :idle
+    Logger.warning(
+      "Command #{inspect(state.current_command_name)} process died: #{inspect(reason)}"
+    )
+
+    old_state = state.state
+
+    # Publish failed event
+    path = [:command, state.current_command_name, state.current_execution_id]
+    publish_command_event(state.robot_module, path, :failed, %{reason: {:crashed, reason}})
 
     state = %{
       state
       | state: :idle,
-        current_task: nil,
-        current_task_ref: nil,
+        current_command_pid: nil,
+        current_command_ref: nil,
         current_command_name: nil,
         current_execution_id: nil
     }
@@ -574,16 +588,20 @@ defmodule BB.Robot.Runtime do
   defp handle_execute_command(command, goal, execution_id, state) do
     with :ok <- check_state_allowed(command, state),
          {:ok, state} <- maybe_preempt(command, state) do
-      task = spawn_command_task(state, command, goal, execution_id)
-      task_monitor_ref = Process.monitor(task.pid)
+      {:ok, pid} = spawn_command_server(state, command, goal, execution_id)
+      monitor_ref = Process.monitor(pid)
 
       old_state = state.state
+
+      # Publish command started event
+      path = [:command, command.name, execution_id]
+      publish_command_event(state.robot_module, path, :started, %{goal: goal})
 
       new_state = %{
         state
         | state: :executing,
-          current_task: task,
-          current_task_ref: task_monitor_ref,
+          current_command_pid: pid,
+          current_command_ref: monitor_ref,
           current_command_name: command.name,
           current_execution_id: execution_id
       }
@@ -594,80 +612,60 @@ defmodule BB.Robot.Runtime do
         publish_transition(new_state, old_state, :executing)
       end
 
-      {:reply, :ok, new_state}
+      {:reply, {:ok, pid}, new_state}
     else
       {:error, _} = err ->
         {:reply, err, state}
     end
   end
 
-  defp spawn_command_task(state, command, goal, execution_id) do
+  defp spawn_command_server(state, command, goal, execution_id) do
     robot_module = state.robot_module
     robot = state.robot
     robot_state = state.robot_state
-    runtime = via(robot_module)
-    path = [:command, command.name, execution_id]
 
-    Task.Supervisor.async_nolink(
-      task_supervisor_name(robot_module),
-      fn ->
-        # Build context
-        context = %Context{
-          robot_module: robot_module,
-          robot: robot,
-          robot_state: robot_state,
-          execution_id: execution_id
-        }
+    # Build context
+    context = %Context{
+      robot_module: robot_module,
+      robot: robot,
+      robot_state: robot_state,
+      execution_id: execution_id
+    }
 
-        # Broadcast command started
-        publish_command_event(robot_module, path, :started, %{goal: goal})
+    # Extract handler module and options from child_spec format
+    {handler_module, handler_opts} = normalize_handler(command.handler)
 
-        # Execute handler and parse result
-        raw_result =
-          :telemetry.span(
-            [:bb, :command, :execute],
-            %{robot: robot_module, command: command.name, execution_id: execution_id},
-            fn ->
-              result = command.handler.handle_command(goal, context)
-              {result, %{}}
-            end
-          )
+    child_spec = %{
+      id: execution_id,
+      start:
+        {BB.Command.Server, :start_link,
+         [
+           [
+             callback_module: handler_module,
+             context: context,
+             goal: goal,
+             execution_id: execution_id,
+             runtime_pid: self(),
+             timeout: command.timeout,
+             options: handler_opts
+           ]
+         ]},
+      restart: :temporary
+    }
 
-        {result, next_state} = parse_handler_result(raw_result)
-
-        # Transition state synchronously BEFORE publishing completion event
-        # This ensures state is updated before any subscriber receives the event
-        GenServer.call(runtime, {:command_complete, execution_id, next_state})
-
-        # Broadcast result after state transition
-        case result do
-          {:ok, value} ->
-            publish_command_event(robot_module, path, :succeeded, %{result: value})
-
-          {:error, reason} ->
-            publish_command_event(robot_module, path, :failed, %{reason: reason})
-        end
-
-        result
-      end
-    )
+    DynamicSupervisor.start_child(command_supervisor_name(robot_module), child_spec)
   end
 
-  defp parse_handler_result({:ok, value, opts}) when is_list(opts) do
-    next_state = Keyword.get(opts, :next_state, :idle)
-    {{:ok, value}, next_state}
+  defp normalize_handler({module, opts}) when is_atom(module) and is_list(opts) do
+    {module, opts}
   end
 
-  defp parse_handler_result({:ok, value}) do
-    {{:ok, value}, :idle}
+  defp normalize_handler(module) when is_atom(module) do
+    {module, []}
   end
 
-  defp parse_handler_result({:error, reason}) do
-    {{:error, reason}, :idle}
-  end
-
-  defp task_supervisor_name(robot_module) do
-    BB.Process.via(robot_module, BB.TaskSupervisor)
+  defp command_supervisor_name(robot_module) do
+    BB.Process.via(robot_module, BB.CommandSupervisor)
   end
 
   defp publish_command_event(robot_module, path, status, data) do
@@ -706,13 +704,13 @@ defmodule BB.Robot.Runtime do
     end
   end
 
-  defp maybe_preempt(_command, %{current_task: nil} = state) do
+  defp maybe_preempt(_command, %{current_command_pid: nil} = state) do
     {:ok, state}
   end
 
   defp maybe_preempt(command, state) do
     if :executing in command.allowed_states do
-      state = terminate_current_task(state)
+      state = terminate_current_command(state)
       {:ok, state}
     else
       {:error,
@@ -720,25 +718,18 @@ defmodule BB.Robot.Runtime do
     end
   end
 
-  defp terminate_current_task(%{current_task: nil} = state), do: state
+  defp terminate_current_command(%{current_command_pid: nil} = state), do: state
 
-  defp terminate_current_task(state) do
-    # Broadcast cancelled event before killing the task
-    # so the waiting caller can return
-    path = [:command, state.current_command_name, state.current_execution_id]
-    publish_command_event(state.robot_module, path, :cancelled, %{})
+  defp terminate_current_command(state) do
+    # Stop the command server - it will publish cancelled event in terminate
+    BB.Command.cancel(state.current_command_pid)
 
-    Task.Supervisor.terminate_child(
-      task_supervisor_name(state.robot_module),
-      state.current_task.pid
-    )
-
-    Process.demonitor(state.current_task_ref, [:flush])
+    Process.demonitor(state.current_command_ref, [:flush])
 
     %{
       state
-      | current_task: nil,
-        current_task_ref: nil,
+      | current_command_pid: nil,
+        current_command_ref: nil,
         current_command_name: nil,
         current_execution_id: nil
     }

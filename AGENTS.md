@@ -98,7 +98,7 @@ Transformers run in sequence to process DSL at compile-time:
 - Commands only execute in allowed states
 - Subscribes to sensor messages and updates joint positions
 
-**Commands**: Defined in the DSL `commands` section with handlers implementing `BB.Command` behaviour. Built-in commands include `BB.Command.Arm` and `BB.Command.Disarm`.
+**Commands**: Short-lived GenServers defined in the DSL `commands` section. Handlers use `use BB.Command` and implement `handle_command/3` and `result/1` callbacks. Commands can react to messages during execution and handle safety state changes. Built-in commands include `BB.Command.Arm` and `BB.Command.Disarm`.
 
 **URDF Export** (`lib/bb/urdf/exporter.ex`): Converts robot definitions to URDF XML format for use with ROS tools like RViz and Gazebo. Available via `mix bb.to_urdf`.
 
@@ -135,6 +135,41 @@ Key points:
 - Disarm callbacks run concurrently with 5 second timeout
 - The `:error` state means hardware may not be safe - requires `force_disarm/1` to recover
 
+### Structured Errors
+
+BB uses structured errors via `BB.Error` (built on Splode). All error types must implement the `BB.Error.Severity` protocol.
+
+**Error classes:**
+- `:hardware` - Communication failures with physical devices
+- `:safety` - Safety system violations (always `:critical` severity)
+- `:kinematics` - Motion planning failures
+- `:invalid` - Configuration and validation errors
+- `:state` - State machine violations (command not allowed, timeout, preempted)
+- `:protocol` - Low-level protocol failures (Robotis, I2C, etc.)
+
+**Severity levels:**
+- `:critical` - Immediate safety response required
+- `:error` - Operation failed, may retry or degrade
+- `:warning` - Unusual condition, operation continues
+
+**Creating new error types:**
+
+```elixir
+defmodule BB.Error.State.MyError do
+  use BB.Error, class: :state, fields: [:field1, :field2]
+
+  defimpl BB.Error.Severity do
+    def severity(_), do: :error
+  end
+
+  def message(%{field1: f1, field2: f2}) do
+    "Descriptive message: #{inspect(f1)}, #{f2}"
+  end
+end
+```
+
+**Prefer structured errors over tuples** - Use `{:error, %BB.Error.State.NotAllowed{}}` instead of `{:error, {:not_allowed, reason}}`.
+
 ### Message System
 
 `BB.Message` wraps payloads with timestamp/frame_id. Payload types use `use BB.Message` with a schema for validation via Spark.Options.
@@ -147,4 +182,5 @@ Key points:
 - DSL entities are structs in `lib/bb/dsl/` matching entity names
 - Commands: Return `{:ok, result}` or `{:ok, result, next_state: state}` for state transitions
 - State machine: Robots start `:disarmed`, transition to `:idle` when armed, `:executing` during commands
+- **Errors**: Use structured `BB.Error` types instead of tuple-based errors. All errors must implement `BB.Error.Severity`
 - **Safety**: Actuators controlling physical hardware must implement `BB.Safety` behaviour. Test disarm callbacks thoroughly - they run when things have already gone wrong

@@ -51,7 +51,13 @@ defmodule BB.Command.MoveToTest do
     end
   end
 
-  describe "handle_command/2" do
+  # Helper to call handle_command/3 and extract result
+  defp call_command(goal, context) do
+    {:stop, :normal, state} = MoveTo.handle_command(goal, context, %{result: nil})
+    MoveTo.result(state)
+  end
+
+  describe "handle_command/3" do
     test "returns error when target is missing in single-target mode" do
       robot = MoveToTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -66,7 +72,7 @@ defmodule BB.Command.MoveToTest do
       goal = %{target: {0.3, 0.0, 0.0}, solver: MockSolver}
 
       assert {:error, %InvalidCommand{argument: :target_link, reason: "required"}} =
-               MoveTo.handle_command(goal, context)
+               call_command(goal, context)
     end
 
     test "returns error when solver is missing in single-target mode" do
@@ -83,7 +89,7 @@ defmodule BB.Command.MoveToTest do
       goal = %{target: Vec3.new(0.3, 0.0, 0.0), target_link: :tip}
 
       assert {:error, %InvalidCommand{argument: :solver, reason: "required"}} =
-               MoveTo.handle_command(goal, context)
+               call_command(goal, context)
     end
 
     test "returns ok with metadata on success" do
@@ -114,7 +120,7 @@ defmodule BB.Command.MoveToTest do
         solver: MockSolver
       }
 
-      {:ok, meta} = MoveTo.handle_command(goal, context)
+      {:ok, meta} = call_command(goal, context)
 
       assert meta.reached == true
       assert meta.iterations == 10
@@ -143,7 +149,7 @@ defmodule BB.Command.MoveToTest do
         solver: MockSolver
       }
 
-      {:error, %Unreachable{} = error} = MoveTo.handle_command(goal, context)
+      {:error, %Unreachable{} = error} = call_command(goal, context)
 
       assert error.iterations == 50
       assert error.residual == 0.5
@@ -173,7 +179,7 @@ defmodule BB.Command.MoveToTest do
         respect_limits: false
       }
 
-      {:ok, _meta} = MoveTo.handle_command(goal, context)
+      {:ok, _meta} = call_command(goal, context)
 
       {_robot, _state, _link, _target, opts} = MockSolver.last_call()
       assert opts[:max_iterations] == 100
@@ -203,7 +209,7 @@ defmodule BB.Command.MoveToTest do
         solver: MockSolver
       }
 
-      {:ok, results} = MoveTo.handle_command(goal, context)
+      {:ok, results} = call_command(goal, context)
 
       assert Map.has_key?(results, :tip)
       assert {:ok, _positions, _meta} = results[:tip]
@@ -223,7 +229,7 @@ defmodule BB.Command.MoveToTest do
       goal = %{targets: %{tip: {0.3, 0.0, 0.0}}}
 
       assert {:error, %InvalidCommand{argument: :solver, reason: "required"}} =
-               MoveTo.handle_command(goal, context)
+               call_command(goal, context)
     end
 
     test "returns error when neither target nor targets provided" do
@@ -244,7 +250,7 @@ defmodule BB.Command.MoveToTest do
                 argument: :target_or_targets,
                 reason: "required: must specify either :target or :targets"
               }} =
-               MoveTo.handle_command(goal, context)
+               call_command(goal, context)
     end
   end
 end

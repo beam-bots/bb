@@ -14,10 +14,10 @@ defmodule BB.Robot.LifecycleTest do
 
   defmodule MoveCommand do
     @moduledoc false
-    @behaviour BB.Command
+    use BB.Command
 
-    @impl true
-    def handle_command(goal, context) do
+    @impl BB.Command
+    def handle_command(goal, context, state) do
       positions =
         goal
         |> Enum.into(%{})
@@ -26,8 +26,11 @@ defmodule BB.Robot.LifecycleTest do
       :ok = RobotState.set_positions(context.robot_state, positions)
 
       new_positions = RobotState.get_all_positions(context.robot_state)
-      {:ok, new_positions}
+      {:stop, :normal, %{state | result: {:ok, new_positions}}}
     end
+
+    @impl BB.Command
+    def result(%{result: result}), do: result
   end
 
   defmodule SimpleArm do
@@ -110,8 +113,8 @@ defmodule BB.Robot.LifecycleTest do
 
       assert Runtime.state(SimpleArm) == :disarmed
 
-      {:ok, task} = SimpleArm.arm()
-      assert {:ok, :armed} = Task.await(task)
+      {:ok, cmd} = SimpleArm.arm()
+      assert {:ok, :armed, _opts} = BB.Command.await(cmd)
 
       assert Runtime.state(SimpleArm) == :idle
     end
@@ -119,12 +122,12 @@ defmodule BB.Robot.LifecycleTest do
     test "disarm command transitions from idle to disarmed" do
       start_supervised!(SimpleArm)
 
-      {:ok, task} = SimpleArm.arm()
-      Task.await(task)
+      {:ok, cmd} = SimpleArm.arm()
+      BB.Command.await(cmd)
       assert Runtime.state(SimpleArm) == :idle
 
-      {:ok, task} = SimpleArm.disarm()
-      assert {:ok, :disarmed} = Task.await(task)
+      {:ok, cmd} = SimpleArm.disarm()
+      assert {:ok, :disarmed, _opts} = BB.Command.await(cmd)
 
       assert Runtime.state(SimpleArm) == :disarmed
     end
@@ -132,11 +135,11 @@ defmodule BB.Robot.LifecycleTest do
     test "move command updates joint positions" do
       start_supervised!(SimpleArm)
 
-      {:ok, task} = SimpleArm.arm()
-      Task.await(task)
+      {:ok, cmd} = SimpleArm.arm()
+      BB.Command.await(cmd)
 
-      {:ok, task} = SimpleArm.move(shoulder: 0.5, elbow: 1.0)
-      {:ok, positions} = Task.await(task)
+      {:ok, cmd} = SimpleArm.move(shoulder: 0.5, elbow: 1.0)
+      {:ok, positions} = BB.Command.await(cmd)
 
       assert_in_delta positions.shoulder, 0.5, 0.001
       assert_in_delta positions.elbow, 1.0, 0.001
@@ -149,25 +152,25 @@ defmodule BB.Robot.LifecycleTest do
 
       assert Runtime.state(SimpleArm) == :disarmed
 
-      {:ok, task} = SimpleArm.move(shoulder: 0.5)
-      assert {:error, %StateError{current_state: :disarmed}} = Task.await(task)
+      # Commands that can't start return error directly
+      assert {:error, %StateError{current_state: :disarmed}} = SimpleArm.move(shoulder: 0.5)
     end
 
     test "arm command rejected when already armed" do
       start_supervised!(SimpleArm)
 
-      {:ok, task} = SimpleArm.arm()
-      Task.await(task)
+      {:ok, cmd} = SimpleArm.arm()
+      BB.Command.await(cmd)
 
-      {:ok, task} = SimpleArm.arm()
-      assert {:error, %StateError{current_state: :idle}} = Task.await(task)
+      # Commands that can't start return error directly
+      assert {:error, %StateError{current_state: :idle}} = SimpleArm.arm()
     end
 
     test "disarm command rejected when disarmed" do
       start_supervised!(SimpleArm)
 
-      {:ok, task} = SimpleArm.disarm()
-      assert {:error, %StateError{current_state: :disarmed}} = Task.await(task)
+      # Commands that can't start return error directly
+      assert {:error, %StateError{current_state: :disarmed}} = SimpleArm.disarm()
     end
 
     test "full lifecycle: arm → move → move → disarm" do
@@ -175,23 +178,23 @@ defmodule BB.Robot.LifecycleTest do
 
       assert Runtime.state(SimpleArm) == :disarmed
 
-      {:ok, task} = SimpleArm.arm()
-      assert {:ok, :armed} = Task.await(task)
+      {:ok, cmd} = SimpleArm.arm()
+      assert {:ok, :armed, _opts} = BB.Command.await(cmd)
       assert Runtime.state(SimpleArm) == :idle
 
-      {:ok, task} = SimpleArm.move(shoulder: 0.3)
-      {:ok, positions} = Task.await(task)
+      {:ok, cmd} = SimpleArm.move(shoulder: 0.3)
+      {:ok, positions} = BB.Command.await(cmd)
       assert_in_delta positions.shoulder, 0.3, 0.001
       assert Runtime.state(SimpleArm) == :idle
 
-      {:ok, task} = SimpleArm.move(shoulder: 0.6, elbow: 0.8)
-      {:ok, positions} = Task.await(task)
+      {:ok, cmd} = SimpleArm.move(shoulder: 0.6, elbow: 0.8)
+      {:ok, positions} = BB.Command.await(cmd)
       assert_in_delta positions.shoulder, 0.6, 0.001
       assert_in_delta positions.elbow, 0.8, 0.001
       assert Runtime.state(SimpleArm) == :idle
 
-      {:ok, task} = SimpleArm.disarm()
-      assert {:ok, :disarmed} = Task.await(task)
+      {:ok, cmd} = SimpleArm.disarm()
+      assert {:ok, :disarmed, _opts} = BB.Command.await(cmd)
       assert Runtime.state(SimpleArm) == :disarmed
     end
   end
@@ -204,8 +207,8 @@ defmodule BB.Robot.LifecycleTest do
 
       BB.PubSub.subscribe(SimpleArm, [:state_machine])
 
-      {:ok, task} = SimpleArm.arm()
-      Task.await(task)
+      {:ok, cmd} = SimpleArm.arm()
+      BB.Command.await(cmd)
 
       # Safety.Controller publishes arm transition
       assert_receive {:bb, [:state_machine],
@@ -215,13 +218,13 @@ defmodule BB.Robot.LifecycleTest do
     test "disarm broadcasts transition to disarmed" do
       start_supervised!(SimpleArm)
 
-      {:ok, task} = SimpleArm.arm()
-      Task.await(task)
+      {:ok, cmd} = SimpleArm.arm()
+      BB.Command.await(cmd)
 
       BB.PubSub.subscribe(SimpleArm, [:state_machine])
 
-      {:ok, task} = SimpleArm.disarm()
-      Task.await(task)
+      {:ok, cmd} = SimpleArm.disarm()
+      BB.Command.await(cmd)
 
       # Runtime publishes command start transition
       assert_receive {:bb, [:state_machine],
