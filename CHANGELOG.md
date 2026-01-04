@@ -11,6 +11,21 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.12.0](https://github.com/beam-bots/bb/compare/v0.11.0...v0.12.0) (2026-01-04)
+### Breaking Changes:
+
+* convert commands from Task-based to GenServer-based execution (#27) by James Harton
+
+* convert commands from Task-based to GenServer-based execution by James Harton
+
+
+
+### Improvements:
+
+* add command options support and tests by James Harton
+
+* use structured errors in MoveTo command (#26) by James Harton
+
 ## [v0.11.0](https://github.com/beam-bots/bb/compare/v0.10.0...v0.11.0) (2025-12-30)
 
 
