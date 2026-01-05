@@ -674,7 +674,7 @@ defmodule BB.Dsl do
     target: BB.Dsl.Controller,
     identifier: :name,
     args: [:name, :child_spec],
-    imports: [BB.Dsl.ParamRef],
+    imports: [BB.Dsl.ParamRef, BB.Controller.Action],
     schema: [
       name: [
         type: :atom,

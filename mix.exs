@@ -61,7 +61,95 @@ defmodule BB.MixProject do
         |> Enum.concat(Path.wildcard("documentation/**/*.{md,livemd,cheatmd}")),
       groups_for_extras: [
         Tutorials: ~r/tutorials\//,
+        Topics: ~r/topics\//,
         "DSL Reference": ~r/dsls\//
+      ],
+      groups_for_modules: [
+        Core: [
+          BB,
+          BB.Robot,
+          BB.Supervisor,
+          BB.PubSub,
+          BB.Telemetry
+        ],
+        DSL: [
+          BB.Dsl,
+          ~r/^BB\.Dsl\./
+        ],
+        Commands: [
+          BB.Command,
+          ~r/^BB\.Command\./
+        ],
+        Controllers: [
+          BB.Controller,
+          ~r/^BB\.Controller\./
+        ],
+        Sensors: [
+          BB.Sensor,
+          ~r/^BB\.Sensor\./
+        ],
+        Actuators: [
+          BB.Actuator,
+          ~r/^BB\.Actuator\./
+        ],
+        Messages: [
+          BB.Message,
+          ~r/^BB\.Message\./
+        ],
+        Safety: [
+          BB.Safety,
+          ~r/^BB\.Safety\./
+        ],
+        Parameters: [
+          BB.Parameter,
+          ~r/^BB\.Parameter\./
+        ],
+        Kinematics: [
+          BB.Motion,
+          ~r/^BB\.Motion\./,
+          ~r/^BB\.Robot\.Kinematics/,
+          ~r/^BB\.IK\./
+        ],
+        Math: [
+          ~r/^BB\.Math\./
+        ],
+        Errors: [
+          BB.Error,
+          ~r/^BB\.Error\./
+        ],
+        Collision: [
+          BB.Collision,
+          ~r/^BB\.Collision\./
+        ],
+        URDF: [
+          ~r/^BB\.Urdf\./
+        ],
+        Simulation: [
+          ~r/^BB\.Sim\./
+        ],
+        Bridges: [
+          BB.Bridge,
+          ~r/^BB\.Bridge/
+        ],
+        CLDR: [
+          ~r/^BB\.Cldr/
+        ],
+        Examples: [
+          ~r/^BB\.ExampleRobots/
+        ],
+        Testing: [
+          ~r/^BB\.Test\./
+        ],
+        "Mix Tasks": [
+          ~r/^Mix\.Tasks\.Bb/
+        ],
+        Units: [
+          BB.Unit,
+          ~r/^BB\.Unit\./
+        ],
+        Internals: [
+          ~r/.*/
+        ]
       ],
       source_ref: "main",
       source_url: "https://github.com/beam-bots/bb",
