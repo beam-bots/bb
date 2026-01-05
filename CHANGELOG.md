@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.13.0](https://github.com/beam-bots/bb/compare/v0.12.0...v0.13.0) (2026-01-05)
+
+
+
+
+### Features:
+
+* add reactive controllers for threshold and pattern matching (#28) by James Harton
+
 ## [v0.12.0](https://github.com/beam-bots/bb/compare/v0.11.0...v0.12.0) (2026-01-04)
 ### Breaking Changes:
 
