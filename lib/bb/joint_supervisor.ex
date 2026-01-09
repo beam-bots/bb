@@ -45,6 +45,7 @@ defmodule BB.JointSupervisor do
 
   defp build_children(robot_module, joint, path, opts) do
     joint_path = path ++ [joint.name]
+    simulation_mode = Keyword.get(opts, :simulation)
 
     sensor_children =
       Enum.map(joint.sensors, fn sensor ->
@@ -70,6 +71,13 @@ defmodule BB.JointSupervisor do
         )
       end)
 
+    auto_position_estimators =
+      if simulation_mode do
+        build_auto_position_estimators(robot_module, joint, joint_path, opts)
+      else
+        []
+      end
+
     link_child =
       if joint.link do
         [{BB.LinkSupervisor, {robot_module, joint.link, joint_path, opts}}]
@@ -77,6 +85,37 @@ defmodule BB.JointSupervisor do
         []
       end
 
-    sensor_children ++ actuator_children ++ link_child
+    sensor_children ++ auto_position_estimators ++ actuator_children ++ link_child
+  end
+
+  defp build_auto_position_estimators(robot_module, joint, joint_path, opts) do
+    joint.actuators
+    |> Enum.filter(fn actuator ->
+      not has_position_sensor_for_actuator?(joint.sensors, actuator.name)
+    end)
+    |> Enum.map(fn actuator ->
+      sensor_name = :"#{actuator.name}_position_estimator"
+
+      BB.Process.child_spec(
+        robot_module,
+        sensor_name,
+        {BB.Sensor.OpenLoopPositionEstimator, actuator: actuator.name},
+        joint_path,
+        :sensor,
+        opts
+      )
+    end)
+  end
+
+  defp has_position_sensor_for_actuator?(sensors, actuator_name) do
+    Enum.any?(sensors, fn sensor ->
+      case sensor.child_spec do
+        {BB.Sensor.OpenLoopPositionEstimator, sensor_opts} ->
+          Keyword.get(sensor_opts, :actuator) == actuator_name
+
+        _ ->
+          false
+      end
+    end)
   end
 end
