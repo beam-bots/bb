@@ -172,6 +172,10 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
   end
 
   @impl BB.Sensor
+  def handle_info({:bb, _path, %Message{} = message}, state) do
+    handle_info(message, state)
+  end
+
   def handle_info(%Message{payload: %BeginMotion{} = cmd}, state) do
     state = cancel_tick(state)
     now = System.monotonic_time(:millisecond)

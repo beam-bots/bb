@@ -191,6 +191,114 @@ defmodule BB.Sim.SimulationTest do
     end
   end
 
+  describe "automatic position estimator" do
+    alias BB.Message.Sensor.JointState
+
+    defmodule AutoEstimatorRobot do
+      @moduledoc false
+      use BB
+
+      topology do
+        link :base_link do
+          joint :shoulder do
+            type(:revolute)
+
+            limit do
+              lower(~u(-90 degree))
+              upper(~u(90 degree))
+              velocity(~u(60 degree_per_second))
+              effort(~u(10 newton_meter))
+            end
+
+            actuator(:motor, ServoMotor)
+            # No sensor - should be auto-added in simulation mode
+
+            link :arm do
+            end
+          end
+        end
+      end
+    end
+
+    defmodule ManualEstimatorRobot do
+      @moduledoc false
+      use BB
+
+      topology do
+        link :base_link do
+          joint :shoulder do
+            type(:revolute)
+
+            limit do
+              lower(~u(-90 degree))
+              upper(~u(90 degree))
+              velocity(~u(60 degree_per_second))
+              effort(~u(10 newton_meter))
+            end
+
+            actuator(:motor, ServoMotor)
+            sensor(:my_estimator, {BB.Sensor.OpenLoopPositionEstimator, actuator: :motor})
+
+            link :arm do
+            end
+          end
+        end
+      end
+    end
+
+    test "automatically adds OpenLoopPositionEstimator in simulation mode when no sensor exists" do
+      {:ok, pid} = AutoEstimatorRobot.start_link(simulation: :kinematic)
+
+      # The auto-generated sensor should be named after the actuator
+      refute BB.Process.whereis(AutoEstimatorRobot, :motor_position_estimator) == :undefined
+
+      Supervisor.stop(pid)
+    end
+
+    test "does not add auto estimator when one already exists for the actuator" do
+      {:ok, pid} = ManualEstimatorRobot.start_link(simulation: :kinematic)
+
+      # Manual sensor exists
+      refute BB.Process.whereis(ManualEstimatorRobot, :my_estimator) == :undefined
+
+      # Auto sensor should not be created
+      assert BB.Process.whereis(ManualEstimatorRobot, :motor_position_estimator) == :undefined
+
+      Supervisor.stop(pid)
+    end
+
+    test "auto estimator publishes JointState when actuator receives position command" do
+      Process.flag(:trap_exit, true)
+      {:ok, pid} = AutoEstimatorRobot.start_link(simulation: :kinematic)
+
+      PubSub.subscribe(AutoEstimatorRobot, [:sensor])
+
+      :ok = BB.Safety.arm(AutoEstimatorRobot)
+
+      target_position = 0.5
+      BB.Actuator.set_position!(AutoEstimatorRobot, :motor, target_position)
+
+      # Should receive JointState from the auto-added estimator
+      assert_receive {:bb, [:sensor, :base_link, :shoulder, :motor_position_estimator],
+                      %Message{payload: %JointState{positions: [position]}}},
+                     1000
+
+      # Position should be at or approaching target
+      assert is_float(position)
+
+      Supervisor.stop(pid)
+    end
+
+    test "does not add auto estimator in hardware mode" do
+      {:ok, pid} = AutoEstimatorRobot.start_link()
+
+      # No auto sensor in hardware mode
+      assert BB.Process.whereis(AutoEstimatorRobot, :motor_position_estimator) == :undefined
+
+      Supervisor.stop(pid)
+    end
+  end
+
   describe "bridge simulation options" do
     defmodule BridgeOmitRobot do
       @moduledoc false
