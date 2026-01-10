@@ -94,6 +94,50 @@ end
 
 This creates paths like `[:controller, :pid, :kp]`.
 
+## Passing Parameters at Startup
+
+You can override default values when starting the robot by passing a `params` option. The format is a nested keyword list matching your group structure:
+
+```elixir
+# Override a single parameter
+{:ok, _} = BB.Supervisor.start_link(MyRobot, params: [
+  motion: [max_linear_speed: 2.0]
+])
+
+# Override multiple parameters
+{:ok, _} = BB.Supervisor.start_link(MyRobot, params: [
+  motion: [max_linear_speed: 2.0, max_angular_speed: 1.0],
+  safety: [enabled: false]
+])
+
+# Nested groups use nested keyword lists
+{:ok, _} = BB.Supervisor.start_link(MyRobot, params: [
+  controller: [pid: [kp: 2.5, ki: 0.2]]
+])
+```
+
+Startup parameters are validated against the schema. Invalid values or unknown parameter names cause the robot to fail to start:
+
+```elixir
+# Type mismatch - fails immediately
+{:error, _} = BB.Supervisor.start_link(MyRobot, params: [
+  motion: [max_linear_speed: "fast"]  # Expected float
+])
+
+# Unknown parameter - fails immediately
+{:error, _} = BB.Supervisor.start_link(MyRobot, params: [
+  motion: [unknown_param: 1.0]
+])
+```
+
+The precedence for parameter values is:
+
+1. **DSL defaults** - Applied first from your `param` declarations
+2. **Persisted values** - If using a parameter store, these override defaults
+3. **Startup params** - The `params` option overrides everything else
+
+This lets you define sensible defaults in the DSL, persist tuned values across restarts, and still override specific values for testing or special configurations.
+
 ## Reading Parameters
 
 Start your robot and read parameter values:

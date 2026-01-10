@@ -45,7 +45,20 @@ defmodule BB.Supervisor do
 
   ## Options
 
-  All options are passed through to sensor and actuator child processes.
+    * `:params` - Initial parameter values as a nested keyword list matching
+      the parameter group structure. Overrides DSL defaults and persisted values.
+
+          BB.Supervisor.start_link(MyRobot, params: [
+            motion: [max_speed: 5.0, acceleration: 2.0],
+            debug_mode: true
+          ])
+
+    * `:simulation` - Simulation mode (`:kinematic` or `:external`). When set,
+      actuators are replaced with simulated versions and controllers may be
+      omitted.
+
+  All options are also passed through to sensor, actuator, and controller
+  child processes via the `:bb` key in their start options.
   """
   @spec start_link(module, Keyword.t()) :: Supervisor.on_start()
   def start_link(robot_module, opts \\ []) do
