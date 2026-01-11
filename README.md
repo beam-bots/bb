@@ -113,11 +113,7 @@ Core functionality is implemented. Companion packages:
 - [`bb_servo_pigpio`](https://github.com/beam-bots/bb_servo_pigpio) - pigpio servo driver (Raspberry Pi GPIO)
 - [`bb_servo_robotis`](https://github.com/beam-bots/bb_servo_robotis) - Robotis/Dynamixel servo driver
 
-Planned:
-
-- `bb_sitl` - simulation integration (Gazebo, etc.)
-- `bb_mavlink` - MAVLink protocol bridge
-- `bb_crossfire` - Crossfire RC bridge
+See [proposals](https://github.com/beam-bots/proposals) for planned features.
 
 ## Installation
 

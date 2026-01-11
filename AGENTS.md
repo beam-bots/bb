@@ -184,3 +184,7 @@ end
 - State machine: Robots start `:disarmed`, transition to `:idle` when armed, `:executing` during commands
 - **Errors**: Use structured `BB.Error` types instead of tuple-based errors. All errors must implement `BB.Error.Severity`
 - **Safety**: Actuators controlling physical hardware must implement `BB.Safety` behaviour. Test disarm callbacks thoroughly - they run when things have already gone wrong
+
+## Proposals
+
+Feature proposals for new packages are tracked in the [proposals repository](https://github.com/beam-bots/proposals). Check there for planned features and their design documents.
