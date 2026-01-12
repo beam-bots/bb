@@ -6,9 +6,9 @@ defmodule BB.Dsl.UniquenessTransformer do
   @moduledoc """
   Validates that all entity names are globally unique across the robot.
 
-  This includes links, joints, sensors, actuators, and controllers - all entities
-  that get registered in the process registry. Commands are not included since
-  they're not registered processes.
+  This includes links, joints, sensors, actuators, controllers, and bridges - all
+  entities that get registered in the process registry. Commands are not included
+  since they're not registered processes.
   """
   use Spark.Dsl.Transformer
   alias Spark.Dsl.Transformer
@@ -28,7 +28,7 @@ defmodule BB.Dsl.UniquenessTransformer do
   @impl true
   def transform(dsl) do
     names =
-      [[:sensors], [:controllers], [:topology]]
+      [[:sensors], [:controllers], [:topology], [:parameters]]
       |> Enum.reduce(%{}, fn path, names ->
         dsl
         |> Transformer.get_entities(path)

@@ -295,4 +295,62 @@ defmodule BB.BridgeTest do
       assert {:set_remote, ["PITCH_RATE_P", 0.3]} in calls
     end
   end
+
+  describe "name uniqueness" do
+    test "rejects bridge with same name as controller" do
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:duplicate/sm, fn ->
+        defmodule BridgeControllerSameName do
+          use BB
+
+          parameters do
+            bridge(:duplicate, {BB.Test.ParameterBridge, []})
+          end
+
+          controllers do
+            controller(:duplicate, BB.Test.MockGenServer)
+          end
+
+          topology do
+            link :base
+          end
+        end
+      end
+    end
+
+    test "rejects bridge with same name as sensor" do
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:duplicate/sm, fn ->
+        defmodule BridgeSensorSameName do
+          use BB
+
+          parameters do
+            bridge(:duplicate, {BB.Test.ParameterBridge, []})
+          end
+
+          sensors do
+            sensor(:duplicate, BB.Test.MockGenServer)
+          end
+
+          topology do
+            link :base
+          end
+        end
+      end
+    end
+
+    test "rejects bridge with same name as link" do
+      assert_raise Spark.Error.DslError, ~r/duplicate.*:base/sm, fn ->
+        defmodule BridgeLinkSameName do
+          use BB
+
+          parameters do
+            bridge(:base, {BB.Test.ParameterBridge, []})
+          end
+
+          topology do
+            link :base
+          end
+        end
+      end
+    end
+  end
 end
