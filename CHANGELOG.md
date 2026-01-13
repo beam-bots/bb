@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.13.2](https://github.com/beam-bots/bb/compare/v0.13.1...v0.13.2) (2026-01-13)
+
+
+
+
+### Bug Fixes:
+
+* enforce name uniqueness for bridges in DSL verifier (#31) by James Harton
+
 ## [v0.13.1](https://github.com/beam-bots/bb/compare/v0.13.0...v0.13.1) (2026-01-09)
 
 
