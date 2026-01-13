@@ -11,7 +11,11 @@ SPDX-License-Identifier: Apache-2.0
 [![CI](https://github.com/beam-bots/bb/actions/workflows/ci.yml/badge.svg)](https://github.com/beam-bots/bb/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Hex version badge](https://img.shields.io/hexpm/v/bb.svg)](https://hex.pm/packages/bb)
+[![Hexdocs badge](https://img.shields.io/badge/docs-hexdocs-purple)](https://hexdocs.pm/bb)
 [![REUSE status](https://api.reuse.software/badge/github.com/beam-bots/bb)](https://api.reuse.software/info/github.com/beam-bots/bb)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/11772/badge)](https://www.bestpractices.dev/projects/11772)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/beam-bots/bb/badge)](https://scorecard.dev/viewer/?uri=github.com/beam-bots/bb)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/beam-bots/bb)
 
 Beam Bots is a framework for building resilient robotics projects in Elixir.
 
