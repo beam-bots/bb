@@ -11,6 +11,17 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.15.0](https://github.com/beam-bots/bb/compare/v0.14.0...v0.15.0) (2026-01-18)
+
+
+
+
+### Features:
+
+* add extensible state system with category-based command concurrency (#35) by James Harton
+
+* add extensible state system with category-based command concurrency by James Harton
+
 ## [v0.14.0](https://github.com/beam-bots/bb/compare/v0.13.2...v0.14.0) (2026-01-17)
 
 
