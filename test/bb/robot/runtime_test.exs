@@ -39,7 +39,8 @@ defmodule BB.Robot.RuntimeTest do
 
       command :preemptable do
         handler BB.Test.AsyncCommand
-        allowed_states [:idle, :executing]
+        allowed_states [:idle]
+        cancel [:default]
       end
     end
 
@@ -254,7 +255,7 @@ defmodule BB.Robot.RuntimeTest do
       assert {:ok, :completed} = BB.Command.await(cmd2)
     end
 
-    test "non-preemptable command rejected when executing" do
+    test "non-preemptable command rejected when category full" do
       start_supervised!(RobotWithCommands)
 
       :ok = BB.Safety.arm(RobotWithCommands)
@@ -263,7 +264,8 @@ defmodule BB.Robot.RuntimeTest do
       assert_receive {:executing, ^cmd}, 500
 
       # Errors for rejected commands are returned directly
-      assert {:error, %StateError{current_state: :executing}} =
+      # Category :default is at capacity (1/1) and :immediate doesn't have cancel option
+      assert {:error, %BB.Error.Category.Full{category: :default, limit: 1, current: 1}} =
                Runtime.execute(RobotWithCommands, :immediate, %{})
 
       send(cmd, :complete)

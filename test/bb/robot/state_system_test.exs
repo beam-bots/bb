@@ -32,7 +32,8 @@ defmodule BB.Robot.StateSystemTest do
 
         command :disarm do
           handler BB.Command.Disarm
-          allowed_states [:idle, :recording, :processing, :executing]
+          allowed_states [:idle, :recording, :processing]
+          cancel :*
         end
       end
 
@@ -90,7 +91,8 @@ defmodule BB.Robot.StateSystemTest do
 
         command :disarm do
           handler BB.Command.Disarm
-          allowed_states [:standby, :executing]
+          allowed_states [:standby]
+          cancel :*
         end
       end
 
@@ -139,30 +141,35 @@ defmodule BB.Robot.StateSystemTest do
 
         command :disarm do
           handler BB.Command.Disarm
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel :*
         end
 
         command :move do
           handler BB.Test.AsyncCommand
           category :motion
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel [:motion]
         end
 
         command :scan do
           handler BB.Test.AsyncCommand
           category :sensing
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel [:sensing]
         end
 
         command :blink do
           handler BB.Test.AsyncCommand
           category :auxiliary
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel [:auxiliary]
         end
 
         command :default_cmd do
           handler BB.Test.AsyncCommand
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel [:default]
         end
       end
 
@@ -215,7 +222,8 @@ defmodule BB.Robot.StateSystemTest do
 
         command :disarm do
           handler BB.Command.Disarm
-          allowed_states [:idle, :recording, :playback, :executing]
+          allowed_states [:idle, :recording, :playback]
+          cancel :*
         end
 
         command :enter_recording do
@@ -298,19 +306,22 @@ defmodule BB.Robot.StateSystemTest do
 
         command :disarm do
           handler BB.Command.Disarm
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel :*
         end
 
         command :async_motion do
           handler BB.Test.AsyncCommand
           category :motion
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel [:motion]
         end
 
         command :async_sensing do
           handler BB.Test.AsyncCommand
           category :sensing
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel [:sensing]
         end
       end
 
@@ -406,9 +417,19 @@ defmodule BB.Robot.StateSystemTest do
     defmodule RobotWithConcurrency do
       use BB
 
+      states do
+        state :active do
+          doc "Active mode for testing category concurrency"
+        end
+      end
+
       commands do
         category :parallel do
           concurrency_limit 3
+        end
+
+        category :limited do
+          concurrency_limit 1
         end
 
         command :arm do
@@ -418,18 +439,46 @@ defmodule BB.Robot.StateSystemTest do
 
         command :disarm do
           handler BB.Command.Disarm
-          allowed_states [:idle, :executing]
+          allowed_states [:idle, :active]
+          cancel :*
+        end
+
+        command :enter_active do
+          handler {BB.Command.SetState, to: :active}
+          allowed_states [:idle]
         end
 
         command :parallel_cmd do
           handler BB.Test.AsyncCommand
           category :parallel
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          # No cancel - allows concurrent execution up to category limit
         end
 
         command :exclusive_cmd do
           handler BB.Test.AsyncCommand
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel [:default]
+        end
+
+        command :limited_cmd do
+          handler BB.Test.AsyncCommand
+          category :limited
+          allowed_states [:active]
+          cancel [:limited]
+        end
+
+        command :limited_no_preempt do
+          handler BB.Test.AsyncCommand
+          category :limited
+          # No cancel, so cannot preempt
+          allowed_states [:active]
+        end
+
+        command :non_preemptable_cmd do
+          handler BB.Test.AsyncCommand
+          allowed_states [:idle]
+          # No cancel - will error if :default category is full
         end
       end
 
@@ -467,13 +516,17 @@ defmodule BB.Robot.StateSystemTest do
 
       :ok = BB.Safety.arm(RobotWithConcurrency)
 
-      # Start exclusive_cmd which uses :default category with limit 1
-      {:ok, cmd1} = Runtime.execute(RobotWithConcurrency, :exclusive_cmd, %{notify: self()})
+      # Start non_preemptable_cmd which uses :default category with limit 1
+      {:ok, cmd1} =
+        Runtime.execute(RobotWithConcurrency, :non_preemptable_cmd, %{notify: self()})
+
       assert_receive {:executing, ^cmd1}, 500
 
-      # Second exclusive_cmd should fail (category full, no :executing in allowed_states... wait)
-      # Actually exclusive_cmd has allowed_states [:idle, :executing] so it will preempt
-      # Let me check the error case differently
+      # Second non_preemptable_cmd should fail because:
+      # - :default category is at capacity (1/1)
+      # - :non_preemptable_cmd doesn't have :executing in allowed_states, so can't preempt
+      assert {:error, %BB.Error.Category.Full{category: :default, limit: 1, current: 1}} =
+               Runtime.execute(RobotWithConcurrency, :non_preemptable_cmd, %{notify: self()})
 
       send(cmd1, :complete)
     end
@@ -541,12 +594,14 @@ defmodule BB.Robot.StateSystemTest do
 
         command :disarm do
           handler BB.Command.Disarm
-          allowed_states [:idle, :recording, :executing]
+          allowed_states [:idle, :recording]
+          cancel :*
         end
 
         command :async_cmd do
           handler BB.Test.AsyncCommand
-          allowed_states [:idle, :executing]
+          allowed_states [:idle]
+          cancel [:default]
         end
 
         command :enter_recording do
@@ -662,7 +717,8 @@ defmodule BB.Robot.StateSystemTest do
 
         command :disarm do
           handler BB.Command.Disarm
-          allowed_states [:idle, :phase1, :phase2, :phase3, :executing]
+          allowed_states [:idle, :phase1, :phase2, :phase3]
+          cancel :*
         end
 
         command :multi_phase do

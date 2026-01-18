@@ -1080,8 +1080,9 @@ the robot's state machine to control when they can run.
 |------|------|---------|------|
 | [`handler`](#commands-command-handler){: #commands-command-handler .spark-required} | `module \| {module, keyword}` |  | The handler module implementing the `BB.Command` behaviour. Either a module or `{module, keyword_list}` for parameterised options |
 | [`timeout`](#commands-command-timeout){: #commands-command-timeout } | `pos_integer \| :infinity` | `:infinity` | Timeout for command execution in milliseconds |
-| [`allowed_states`](#commands-command-allowed_states){: #commands-command-allowed_states } | `list(atom)` | `[:idle]` | Robot states in which this command can run. If `:executing` is included, the command can preempt running commands. |
-| [`category`](#commands-command-category){: #commands-command-category } | `atom` |  | The command category for concurrency control. Commands in the same category are limited by that category's concurrency_limit. Defaults to :default if not specified. |
+| [`allowed_states`](#commands-command-allowed_states){: #commands-command-allowed_states } | `atom \| list(atom)` | `[:idle]` | Robot states in which this command can run. Use `:*` for all states (except `:disarmed`). Use `:disarmed` explicitly if the command should run when disarmed. |
+| [`category`](#commands-command-category){: #commands-command-category } | `atom` | `:default` | The command category for concurrency control. Commands in the same category are limited by that category's concurrency_limit. |
+| [`cancel`](#commands-command-cancel){: #commands-command-cancel } | `atom \| list(atom)` | `[]` | Categories of commands this command can cancel when starting. Use `:*` to cancel all running commands, or a list of specific categories. Empty list (default) means the command will error if its category is at capacity. |
 
 
 ### commands.command.argument

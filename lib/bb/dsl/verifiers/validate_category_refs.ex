@@ -21,7 +21,9 @@ defmodule BB.Dsl.Verifiers.ValidateCategoryRefs do
     module = Verifier.get_persisted(dsl_state, :module)
     categories = collect_category_names(dsl_state)
 
-    verify_command_categories(dsl_state, categories, module)
+    with :ok <- verify_command_categories(dsl_state, categories, module) do
+      verify_command_cancel(dsl_state, categories, module)
+    end
   end
 
   defp collect_category_names(dsl_state) do
@@ -67,6 +69,33 @@ defmodule BB.Dsl.Verifiers.ValidateCategoryRefs do
                   end
               """
             )}}
+      end
+    end)
+  end
+
+  defp verify_command_cancel(dsl_state, valid_categories, module) do
+    dsl_state
+    |> Verifier.get_entities([:commands])
+    |> Enum.filter(&is_struct(&1, Command))
+    |> Enum.reduce_while(:ok, fn command, :ok ->
+      invalid_categories = command.cancel -- valid_categories
+
+      if invalid_categories == [] do
+        {:cont, :ok}
+      else
+        {:halt,
+         {:error,
+          DslError.exception(
+            module: module,
+            path: [:commands, command.name, :cancel],
+            message: """
+            Command #{inspect(command.name)} cancel option references undefined categories: #{inspect(invalid_categories)}
+
+            Valid categories: #{inspect(valid_categories)}
+
+            Use :* to cancel all categories, or list specific categories.
+            """
+          )}}
       end
     end)
   end

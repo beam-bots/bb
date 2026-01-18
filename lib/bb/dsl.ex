@@ -782,18 +782,25 @@ defmodule BB.Dsl do
         doc: "Timeout for command execution in milliseconds"
       ],
       allowed_states: [
-        type: {:list, :atom},
+        type: {:wrap_list, :atom},
         required: false,
         default: [:idle],
         doc:
-          "Robot states in which this command can run. If `:executing` is included, the command can preempt running commands."
+          "Robot states in which this command can run. Use `:*` for all states (except `:disarmed`). Use `:disarmed` explicitly if the command should run when disarmed."
       ],
       category: [
         type: :atom,
         required: false,
-        default: nil,
+        default: :default,
         doc:
-          "The command category for concurrency control. Commands in the same category are limited by that category's concurrency_limit. Defaults to :default if not specified."
+          "The command category for concurrency control. Commands in the same category are limited by that category's concurrency_limit."
+      ],
+      cancel: [
+        type: {:wrap_list, :atom},
+        required: false,
+        default: [],
+        doc:
+          "Categories of commands this command can cancel when starting. Use `:*` to cancel all running commands, or a list of specific categories. Empty list (default) means the command will error if its category is at capacity."
       ]
     ]
   }
@@ -991,7 +998,8 @@ defmodule BB.Dsl do
       __MODULE__.CommandTransformer,
       __MODULE__.ParameterTransformer,
       __MODULE__.StateTransformer,
-      __MODULE__.CategoryTransformer
+      __MODULE__.CategoryTransformer,
+      __MODULE__.WildcardExpansionTransformer
     ],
     verifiers: [
       __MODULE__.Verifiers.ValidateChildSpecs,

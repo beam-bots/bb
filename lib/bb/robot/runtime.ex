@@ -785,7 +785,7 @@ defmodule BB.Robot.Runtime do
     category = command.category || :default
 
     with :ok <- check_state_allowed(command, state),
-         {:ok, state} <- check_category_or_preempt(command, category, state) do
+         {:ok, state} <- check_category_or_cancel(command, category, state) do
       {:ok, pid} = spawn_command_server(state, command, goal, execution_id)
       monitor_ref = Process.monitor(pid)
 
@@ -826,66 +826,80 @@ defmodule BB.Robot.Runtime do
     end
   end
 
-  defp check_category_or_preempt(command, category, state) do
+  defp check_category_or_cancel(command, category, state) do
+    # First, cancel commands in categories specified by the command's cancel option
+    state =
+      case command.cancel do
+        [] -> state
+        categories -> cancel_commands_in_categories(state, categories)
+      end
+
+    # Now check if there's capacity in the command's own category
     current = Map.get(state.category_counts, category, 0)
     limit = Map.get(state.category_limits, category, 1)
 
-    cond do
-      # Category has capacity - proceed
-      current < limit ->
-        {:ok, state}
-
-      # Category is full, but command allows preemption - terminate commands in this category
-      :executing in command.allowed_states ->
-        state = preempt_commands_in_category(state, category)
-        {:ok, state}
-
-      # Category is full and no preemption allowed
-      true ->
-        {:error, CategoryFullError.exception(category: category, limit: limit, current: current)}
+    if current < limit do
+      {:ok, state}
+    else
+      {:error, CategoryFullError.exception(category: category, limit: limit, current: current)}
     end
   end
 
-  defp preempt_commands_in_category(state, category) do
-    # Find all commands in this category and terminate them
+  defp cancel_commands_in_categories(state, categories) do
+    # Find all commands in the specified categories and terminate them
     {to_terminate, to_keep} =
       Enum.split_with(state.executing_commands, fn {_id, cmd} ->
-        cmd.category == category
+        cmd.category in categories
       end)
 
-    # Terminate each command
-    Enum.each(to_terminate, fn {_id, cmd} ->
-      BB.Command.cancel(cmd.pid)
-      Process.demonitor(cmd.ref, [:flush])
-    end)
-
-    # Update state
-    %{
+    # Nothing to cancel
+    if to_terminate == [] do
       state
-      | executing_commands: Map.new(to_keep),
-        category_counts: Map.put(state.category_counts, category, 0),
-        # Clear legacy fields if the tracked command was terminated
-        current_command_pid:
-          if(state.current_command_pid in Enum.map(to_terminate, fn {_, c} -> c.pid end),
-            do: nil,
-            else: state.current_command_pid
-          ),
-        current_command_ref:
-          if(state.current_command_ref in Enum.map(to_terminate, fn {_, c} -> c.ref end),
-            do: nil,
-            else: state.current_command_ref
-          ),
-        current_command_name:
-          if(state.current_execution_id in Enum.map(to_terminate, fn {id, _} -> id end),
-            do: nil,
-            else: state.current_command_name
-          ),
-        current_execution_id:
-          if(state.current_execution_id in Enum.map(to_terminate, fn {id, _} -> id end),
-            do: nil,
-            else: state.current_execution_id
-          )
-    }
+    else
+      # Terminate each command
+      Enum.each(to_terminate, fn {_id, cmd} ->
+        BB.Command.cancel(cmd.pid)
+        Process.demonitor(cmd.ref, [:flush])
+      end)
+
+      # Calculate new category counts
+      terminated_pids = MapSet.new(to_terminate, fn {_, c} -> c.pid end)
+      terminated_refs = MapSet.new(to_terminate, fn {_, c} -> c.ref end)
+      terminated_ids = MapSet.new(to_terminate, fn {id, _} -> id end)
+
+      new_category_counts =
+        Enum.reduce(to_terminate, state.category_counts, fn {_id, cmd}, counts ->
+          Map.update(counts, cmd.category, 0, &max(&1 - 1, 0))
+        end)
+
+      # Update state
+      %{
+        state
+        | executing_commands: Map.new(to_keep),
+          category_counts: new_category_counts,
+          # Clear legacy fields if the tracked command was terminated
+          current_command_pid:
+            if(state.current_command_pid in terminated_pids,
+              do: nil,
+              else: state.current_command_pid
+            ),
+          current_command_ref:
+            if(state.current_command_ref in terminated_refs,
+              do: nil,
+              else: state.current_command_ref
+            ),
+          current_command_name:
+            if(state.current_execution_id in terminated_ids,
+              do: nil,
+              else: state.current_command_name
+            ),
+          current_execution_id:
+            if(state.current_execution_id in terminated_ids,
+              do: nil,
+              else: state.current_execution_id
+            )
+      }
+    end
   end
 
   defp spawn_command_server(state, command, goal, execution_id) do
@@ -953,26 +967,12 @@ defmodule BB.Robot.Runtime do
 
   defp check_operational_state(command, state) do
     current_state = state.operational_state
-    has_commands = map_size(state.executing_commands) > 0
     allowed_states = command.allowed_states
 
-    cond do
-      # When commands are executing and command doesn't allow preemption,
-      # fail with StateError (backwards compatible with :executing state)
-      has_commands and :executing not in allowed_states ->
-        {:error, StateError.exception(current_state: :executing, allowed_states: allowed_states)}
-
-      # Direct match with operational state
-      current_state in allowed_states ->
-        :ok
-
-      # Allow :executing in allowed_states to run when commands are executing
-      has_commands and :executing in allowed_states ->
-        :ok
-
-      true ->
-        {:error,
-         StateError.exception(current_state: current_state, allowed_states: allowed_states)}
+    if current_state in allowed_states do
+      :ok
+    else
+      {:error, StateError.exception(current_state: current_state, allowed_states: allowed_states)}
     end
   end
 

@@ -12,9 +12,9 @@ In this tutorial, you'll learn how to define custom operational states and use c
 
 Complete [Commands and State Machine](05-commands.md). You should understand the basic state machine and how to define commands.
 
-## Beyond Idle and Executing
+## Beyond Idle
 
-The default state machine has three states: `:disarmed`, `:idle`, and `:executing`. This works well for simple robots, but real applications often need more operational modes:
+The default state machine has just two operational states: `:disarmed` and `:idle`. This works well for simple robots, but real applications often need more operational modes:
 
 - A data collection robot might have a **recording** mode
 - A reactive robot might have a **reacting** mode where it responds to stimuli
@@ -50,7 +50,8 @@ defmodule DataCollectionRobot do
 
     command :disarm do
       handler BB.Command.Disarm
-      allowed_states [:idle, :recording, :processing, :executing]
+      allowed_states [:idle, :recording, :processing]
+      cancel :*  # Can cancel any running commands
     end
   end
 
@@ -60,7 +61,7 @@ defmodule DataCollectionRobot do
 end
 ```
 
-The built-in states (`:idle`, `:disarmed`, `:executing`) are always available. Your custom states extend what's possible.
+The built-in states (`:idle`, `:disarmed`) are always available. Your custom states extend what's possible.
 
 ## Transitioning Between States
 
@@ -173,7 +174,7 @@ The difference between `state/1` and `operational_state/1`:
 - `operational_state/1` returns the actual operational mode
 - `state/1` returns `:executing` when in `:idle` with commands running (for backwards compatibility)
 
-For custom states, both return the same value regardless of whether commands are running.
+For custom states, both return the actual state regardless of whether commands are running.
 
 ## Command Categories
 
@@ -210,19 +211,22 @@ commands do
   command :move_to do
     handler MyMoveCommand
     category :motion
-    allowed_states [:idle, :executing]
+    allowed_states [:idle]
+    cancel [:motion]  # Can cancel previous motion commands
   end
 
   command :record_frame do
     handler MyRecordCommand
     category :sensing
-    allowed_states [:idle, :executing]
+    allowed_states [:idle]
+    # No cancel - concurrent sensing up to limit
   end
 
   command :set_led do
     handler MyLedCommand
     category :auxiliary
-    allowed_states [:idle, :executing]
+    allowed_states [:idle]
+    # No cancel - concurrent auxiliary up to limit
   end
 end
 ```
@@ -251,21 +255,26 @@ BB.Robot.Runtime.executing_commands(MyRobot)
 
 ### Category Full Behaviour
 
-When a category is at capacity:
+When a category is at capacity, the behaviour depends on the `cancel` option:
 
-1. If the new command has `:executing` in `allowed_states`, it preempts the oldest command in that category
+1. If the command has `cancel` that includes the full category, it cancels commands to make room
 2. Otherwise, the new command is rejected with `{:error, %BB.Error.Category.Full{}}`
 
 ```elixir
 # Start a motion command
 {:ok, cmd1} = MyRobot.move_to(target: pos1)
 
-# Try to start another motion (same category, at limit)
+# Start another motion (same category, at limit)
 {:ok, cmd2} = MyRobot.move_to(target: pos2)
 
 # cmd1 is cancelled, cmd2 runs
-# Because :move_to has allowed_states [:idle, :executing]
+# Because :move_to has cancel: [:motion]
 ```
+
+The `cancel` option accepts:
+- `:*` - cancels all categories
+- `[:motion, :sensing]` - cancels specific categories
+- `[]` (default) - cannot cancel, errors if category is full
 
 ## Introspection APIs
 
@@ -338,7 +347,8 @@ defmodule DataCollectorArm do
 
     command :disarm do
       handler BB.Command.Disarm
-      allowed_states [:idle, :recording, :executing]
+      allowed_states [:idle, :recording]
+      cancel :*  # Can cancel any running commands
     end
 
     command :enter_recording do
@@ -354,13 +364,15 @@ defmodule DataCollectorArm do
     command :move_to do
       handler MoveToCommand
       category :motion
-      allowed_states [:idle, :recording, :executing]
+      allowed_states [:idle, :recording]
+      cancel [:motion]  # Can cancel previous motion commands
     end
 
     command :capture_frame do
       handler CaptureFrameCommand
       category :data
-      allowed_states [:recording, :executing]
+      allowed_states [:recording]
+      cancel [:data]  # Can cancel previous capture commands
     end
   end
 

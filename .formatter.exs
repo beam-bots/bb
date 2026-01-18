@@ -17,6 +17,7 @@ spark_locals_without_parens = [
   box: 1,
   bridge: 2,
   bridge: 3,
+  cancel: 1,
   capsule: 0,
   capsule: 1,
   category: 1,

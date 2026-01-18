@@ -65,7 +65,7 @@ defmodule BB.Dsl.Verifiers.ValidateStateRefs do
     |> Verifier.get_entities([:commands])
     |> Enum.filter(&is_struct(&1, Command))
     |> Enum.reduce_while(:ok, fn command, :ok ->
-      invalid_states = command.allowed_states -- (valid_states ++ [:executing])
+      invalid_states = command.allowed_states -- valid_states
 
       if invalid_states == [] do
         {:cont, :ok}
@@ -80,7 +80,7 @@ defmodule BB.Dsl.Verifiers.ValidateStateRefs do
 
             Valid states: #{inspect(valid_states)}
 
-            Note: :executing is always valid for preemption.
+            Use :* to allow a command to run in any state, or list specific states.
             """
           )}}
       end
