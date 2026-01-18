@@ -43,6 +43,8 @@ defmodule BB.Robot.Runtime do
 
   alias BB.Command.{Context, Event}
   alias BB.Dsl.{Info, Joint, Link}
+  alias BB.Error.Category.Full, as: CategoryFullError
+  alias BB.Error.State.Invalid, as: StateInvalidError
   alias BB.Error.State.NotAllowed, as: StateError
   alias BB.{Message, PubSub}
   alias BB.Message.Sensor.JointState
@@ -53,36 +55,48 @@ defmodule BB.Robot.Runtime do
   alias BB.Safety.Controller, as: SafetyController
   alias BB.StateMachine.Transition
 
+  alias BB.Robot.CommandInfo
+
   defstruct [
     :robot_module,
     :robot,
     :robot_state,
-    :state,
+    :operational_state,
     :commands,
+    :executing_commands,
+    :category_counts,
+    :category_limits,
+    :valid_states,
+    :parameter_store,
+    :parameter_store_state,
+    :simulation_mode,
+    # Legacy fields for backwards compatibility during migration
     :current_command_pid,
     :current_command_ref,
     :current_command_name,
-    :current_execution_id,
-    :parameter_store,
-    :parameter_store_state,
-    :simulation_mode
+    :current_execution_id
   ]
 
-  @type robot_state :: :disarmed | :disarming | :idle | :executing | :error
+  @type robot_state :: :disarmed | :disarming | :idle | :executing | :error | atom()
   @type simulation_mode :: nil | :kinematic | :external
   @type t :: %__MODULE__{
           robot_module: module(),
           robot: BB.Robot.t(),
           robot_state: RobotState.t(),
-          state: robot_state(),
+          operational_state: atom(),
           commands: %{atom() => BB.Dsl.Command.t()},
+          executing_commands: %{reference() => CommandInfo.t()},
+          category_counts: %{atom() => non_neg_integer()},
+          category_limits: %{atom() => pos_integer()},
+          valid_states: [atom()],
+          parameter_store: module() | nil,
+          parameter_store_state: term() | nil,
+          simulation_mode: simulation_mode(),
+          # Legacy fields
           current_command_pid: pid() | nil,
           current_command_ref: reference() | nil,
           current_command_name: atom() | nil,
-          current_execution_id: reference() | nil,
-          parameter_store: module() | nil,
-          parameter_store_state: term() | nil,
-          simulation_mode: simulation_mode()
+          current_execution_id: reference() | nil
         }
 
   @doc """
@@ -103,7 +117,11 @@ defmodule BB.Robot.Runtime do
   Get the current robot state machine state.
 
   Returns `:disarmed` if the robot is not armed (via BB.Safety),
-  otherwise returns the internal state (`:idle` or `:executing`).
+  otherwise returns the internal operational state.
+
+  For backwards compatibility:
+  - When `operational_state` is `:idle` but commands are executing, returns `:executing`
+  - Custom operational states (e.g., `:recording`) are returned directly
 
   Reads directly from ETS for fast concurrent access.
   """
@@ -114,7 +132,15 @@ defmodule BB.Robot.Runtime do
     case safety_state do
       :armed ->
         robot_state = get_robot_state(robot_module)
-        RobotState.get_robot_state(robot_state)
+        internal_state = RobotState.get_robot_state(robot_state)
+
+        # Backwards compatibility: when operational_state is :idle and commands
+        # are running, return :executing
+        if internal_state == :idle and executing?(robot_module) do
+          :executing
+        else
+          internal_state
+        end
 
       :disarmed ->
         :disarmed
@@ -125,6 +151,69 @@ defmodule BB.Robot.Runtime do
       :error ->
         :error
     end
+  end
+
+  @doc """
+  Get the actual operational state, without backwards compatibility translation.
+
+  Unlike `state/1`, this returns the actual operational state regardless of
+  whether commands are executing. Use this when you need to know the true
+  operational context (e.g., `:idle`, `:recording`, `:reacting`).
+
+  Reads directly from ETS for fast concurrent access.
+  """
+  @spec operational_state(module()) :: atom()
+  def operational_state(robot_module) do
+    robot_state = get_robot_state(robot_module)
+    RobotState.get_robot_state(robot_state)
+  end
+
+  @doc """
+  Check if any command is currently executing.
+
+  Reads directly from ETS for fast concurrent access.
+  """
+  @spec executing?(module()) :: boolean()
+  def executing?(robot_module) do
+    GenServer.call(via(robot_module), :any_executing?)
+  end
+
+  @doc """
+  Check if a specific category has commands executing.
+  """
+  @spec executing?(module(), atom()) :: boolean()
+  def executing?(robot_module, category) do
+    GenServer.call(via(robot_module), {:category_executing?, category})
+  end
+
+  @doc """
+  Get information about all currently executing commands.
+  """
+  @spec executing_commands(module()) :: [map()]
+  def executing_commands(robot_module) do
+    GenServer.call(via(robot_module), :executing_commands)
+  end
+
+  @doc """
+  Get the availability of each command category.
+
+  Returns a map of category names to `{current_count, limit}` tuples.
+  """
+  @spec category_availability(module()) :: %{atom() => {non_neg_integer(), pos_integer()}}
+  def category_availability(robot_module) do
+    GenServer.call(via(robot_module), :category_availability)
+  end
+
+  @doc """
+  Transition the operational state during command execution.
+
+  This is called by `BB.Command.transition_state/2` to change the robot's
+  operational state mid-execution. Only the command with the matching
+  execution_id can trigger a transition.
+  """
+  @spec transition_operational_state(module(), reference(), atom()) :: :ok | {:error, term()}
+  def transition_operational_state(robot_module, execution_id, target_state) do
+    GenServer.call(via(robot_module), {:transition_operational_state, execution_id, target_state})
   end
 
   @doc """
@@ -289,7 +378,12 @@ defmodule BB.Robot.Runtime do
     # Initialize parameter store if configured
     {store_module, store_state} = init_parameter_store(robot_module)
 
-    # Internal state tracks :idle/:executing (not :disarmed)
+    # Get initial operational state and valid states from DSL
+    initial_state = Info.initial_state(robot_module)
+    valid_states = Info.state_names(robot_module)
+    category_limits = Info.category_limits(robot_module)
+
+    # Internal state tracks operational state (not safety state)
     # The armed/disarmed state is owned by SafetyController
     simulation_mode = Keyword.get(opts, :simulation)
 
@@ -297,15 +391,20 @@ defmodule BB.Robot.Runtime do
       robot_module: robot_module,
       robot: robot,
       robot_state: robot_state,
-      state: :idle,
+      operational_state: initial_state,
       commands: commands,
+      executing_commands: %{},
+      category_counts: Map.new(Map.keys(category_limits), &{&1, 0}),
+      category_limits: category_limits,
+      valid_states: valid_states,
+      parameter_store: store_module,
+      parameter_store_state: store_state,
+      simulation_mode: simulation_mode,
+      # Legacy fields - kept for backwards compatibility
       current_command_pid: nil,
       current_command_ref: nil,
       current_command_name: nil,
-      current_execution_id: nil,
-      parameter_store: store_module,
-      parameter_store_state: store_state,
-      simulation_mode: simulation_mode
+      current_execution_id: nil
     }
 
     # Register DSL-defined parameters (applies defaults)
@@ -319,6 +418,8 @@ defmodule BB.Robot.Runtime do
       {:ok, state} ->
         # Resolve param refs and subscribe to changes
         state = resolve_and_subscribe_param_refs(state)
+        # Set initial operational state in ETS
+        state = set_robot_machine_state(state, initial_state)
         {:ok, state, {:continue, :schedule_safety_verification}}
 
       {:error, reason} ->
@@ -353,7 +454,7 @@ defmodule BB.Robot.Runtime do
 
   @impl GenServer
   def handle_call({:transition, new_state}, _from, state) do
-    old_state = state.state
+    old_state = state.operational_state
 
     if old_state != new_state do
       state = set_robot_machine_state(state, new_state)
@@ -374,6 +475,66 @@ defmodule BB.Robot.Runtime do
 
   def handle_call(:get_simulation_mode, _from, state) do
     {:reply, state.simulation_mode, state}
+  end
+
+  def handle_call(:any_executing?, _from, state) do
+    {:reply, map_size(state.executing_commands) > 0, state}
+  end
+
+  def handle_call({:category_executing?, category}, _from, state) do
+    count = Map.get(state.category_counts, category, 0)
+    {:reply, count > 0, state}
+  end
+
+  def handle_call(:executing_commands, _from, state) do
+    commands =
+      state.executing_commands
+      |> Map.values()
+      |> Enum.map(fn %CommandInfo{} = info ->
+        %{
+          name: info.name,
+          execution_id: info.ref,
+          pid: info.pid,
+          category: info.category,
+          started_at: info.started_at
+        }
+      end)
+
+    {:reply, commands, state}
+  end
+
+  def handle_call(:category_availability, _from, state) do
+    availability =
+      Map.new(state.category_limits, fn {category, limit} ->
+        current = Map.get(state.category_counts, category, 0)
+        {category, {current, limit}}
+      end)
+
+    {:reply, availability, state}
+  end
+
+  def handle_call({:transition_operational_state, execution_id, target_state}, _from, state) do
+    cond do
+      not Map.has_key?(state.executing_commands, execution_id) ->
+        {:reply, {:error, :not_executing}, state}
+
+      target_state not in state.valid_states ->
+        {:reply,
+         {:error,
+          StateInvalidError.exception(state: target_state, valid_states: state.valid_states)},
+         state}
+
+      true ->
+        old_state = state.operational_state
+        state = set_robot_machine_state(state, target_state)
+        state = %{state | operational_state: target_state}
+
+        if old_state != target_state do
+          publish_transition(state, old_state, target_state)
+        end
+
+        {:reply, :ok, state}
+    end
   end
 
   def handle_call({:execute, command_name, goal, execution_id}, _from, state) do
@@ -442,8 +603,8 @@ defmodule BB.Robot.Runtime do
 
   @impl GenServer
   def handle_cast({:command_complete, execution_id, result}, state) do
-    if state.current_execution_id == execution_id do
-      handle_command_completion(state, result)
+    if Map.has_key?(state.executing_commands, execution_id) do
+      handle_command_completion(state, execution_id, result)
     else
       # Stale completion - ignore
       {:noreply, state}
@@ -451,93 +612,128 @@ defmodule BB.Robot.Runtime do
   end
 
   def handle_cast({:command_crashed, execution_id, error}, state) do
-    if state.current_execution_id == execution_id do
-      Logger.error("Command #{inspect(state.current_command_name)} crashed: #{inspect(error)}")
-      # Treat crash as completion with error result
-      handle_command_completion(state, {:error, error})
-    else
-      {:noreply, state}
+    case Map.get(state.executing_commands, execution_id) do
+      nil ->
+        {:noreply, state}
+
+      command_info ->
+        Logger.error("Command #{inspect(command_info.name)} crashed: #{inspect(error)}")
+        handle_command_completion(state, execution_id, {:error, error})
     end
   end
 
-  defp handle_command_completion(state, result) do
-    old_state = state.state
+  defp handle_command_completion(state, execution_id, result) do
+    command_info = Map.get(state.executing_commands, execution_id)
+    old_state = state.operational_state
 
-    # Demonitor and flush any pending :DOWN message
-    if state.current_command_ref do
-      Process.demonitor(state.current_command_ref, [:flush])
+    demonitor_command(command_info)
+
+    next_state = extract_next_state(result, old_state)
+    publish_command_result(state.robot_module, command_info, execution_id, result)
+
+    state = remove_command_from_tracking(state, execution_id, command_info.category)
+    was_last_command = map_size(state.executing_commands) == 0
+
+    state = handle_completion_transitions(state, old_state, next_state, was_last_command)
+
+    {:noreply, state}
+  end
+
+  defp demonitor_command(command_info) do
+    if command_info && command_info.ref do
+      Process.demonitor(command_info.ref, [:flush])
     end
+  end
 
-    # Extract next_state from result
-    next_state = extract_next_state(result)
-
-    # Publish command event
-    path = [:command, state.current_command_name, state.current_execution_id]
+  defp publish_command_result(robot_module, command_info, execution_id, result) do
+    path = [:command, command_info.name, execution_id]
 
     case result do
       {:ok, value} ->
-        publish_command_event(state.robot_module, path, :succeeded, %{result: value})
+        publish_command_event(robot_module, path, :succeeded, %{result: value})
 
       {:ok, value, _opts} ->
-        publish_command_event(state.robot_module, path, :succeeded, %{result: value})
+        publish_command_event(robot_module, path, :succeeded, %{result: value})
 
       {:error, reason} ->
-        publish_command_event(state.robot_module, path, :failed, %{reason: reason})
+        publish_command_event(robot_module, path, :failed, %{reason: reason})
     end
+  end
 
-    state = %{
+  defp remove_command_from_tracking(state, execution_id, category) do
+    new_executing = Map.delete(state.executing_commands, execution_id)
+    new_counts = Map.update(state.category_counts, category, 0, &max(&1 - 1, 0))
+
+    {legacy_pid, legacy_ref, legacy_name, legacy_id} =
+      if state.current_execution_id == execution_id do
+        {nil, nil, nil, nil}
+      else
+        {state.current_command_pid, state.current_command_ref, state.current_command_name,
+         state.current_execution_id}
+      end
+
+    %{
       state
-      | state: next_state,
-        current_command_pid: nil,
-        current_command_ref: nil,
-        current_command_name: nil,
-        current_execution_id: nil
+      | executing_commands: new_executing,
+        category_counts: new_counts,
+        current_command_pid: legacy_pid,
+        current_command_ref: legacy_ref,
+        current_command_name: legacy_name,
+        current_execution_id: legacy_id
     }
+  end
 
-    state = set_robot_machine_state(state, next_state)
+  defp handle_completion_transitions(state, old_state, next_state, was_last_command) do
+    cond do
+      old_state != next_state ->
+        state = set_robot_machine_state(state, next_state)
 
-    if old_state != next_state do
-      publish_transition(state, old_state, next_state)
+        # Backwards compat: from :idle state, show :executing -> next_state
+        if was_last_command and old_state == :idle do
+          publish_transition(state, :executing, next_state)
+        else
+          publish_transition(state, old_state, next_state)
+        end
+
+        state
+
+      was_last_command and old_state == :idle ->
+        # No state change, but publish :executing -> :idle for backwards compat
+        publish_transition(state, :executing, :idle)
+        state
+
+      true ->
+        state
     end
-
-    {:noreply, state}
   end
 
-  defp extract_next_state({:ok, _value, opts}) when is_list(opts) do
-    Keyword.get(opts, :next_state, :idle)
+  defp extract_next_state({:ok, _value, opts}, current_state) when is_list(opts) do
+    Keyword.get(opts, :next_state, current_state)
   end
 
-  defp extract_next_state(_), do: :idle
+  defp extract_next_state(_, current_state), do: current_state
+
+  defp find_command_by_ref(executing_commands, ref) do
+    Enum.find_value(executing_commands, fn {execution_id, command_info} ->
+      if command_info.ref == ref do
+        {execution_id, command_info}
+      end
+    end)
+  end
 
   @impl GenServer
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{current_command_ref: ref} = state) do
-    # Command server crashed before notifying us - fall back to :idle
-    Logger.warning(
-      "Command #{inspect(state.current_command_name)} process died: #{inspect(reason)}"
-    )
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    # Find the command with this monitor ref
+    case find_command_by_ref(state.executing_commands, ref) do
+      {execution_id, command_info} ->
+        Logger.warning("Command #{inspect(command_info.name)} process died: #{inspect(reason)}")
 
-    old_state = state.state
+        # Treat crash as completion with error result
+        handle_command_completion(state, execution_id, {:error, {:crashed, reason}})
 
-    # Publish failed event
-    path = [:command, state.current_command_name, state.current_execution_id]
-    publish_command_event(state.robot_module, path, :failed, %{reason: {:crashed, reason}})
-
-    state = %{
-      state
-      | state: :idle,
-        current_command_pid: nil,
-        current_command_ref: nil,
-        current_command_name: nil,
-        current_execution_id: nil
-    }
-
-    state = set_robot_machine_state(state, :idle)
-
-    if old_state != :idle do
-      publish_transition(state, old_state, :idle)
+      nil ->
+        {:noreply, state}
     end
-
-    {:noreply, state}
   end
 
   def handle_info({:bb, _path, %Message{payload: %JointState{} = joint_state}}, state) do
@@ -586,36 +782,123 @@ defmodule BB.Robot.Runtime do
   end
 
   defp handle_execute_command(command, goal, execution_id, state) do
+    category = command.category || :default
+
     with :ok <- check_state_allowed(command, state),
-         {:ok, state} <- maybe_preempt(command, state) do
+         {:ok, state} <- check_category_or_cancel(command, category, state) do
       {:ok, pid} = spawn_command_server(state, command, goal, execution_id)
       monitor_ref = Process.monitor(pid)
-
-      old_state = state.state
 
       # Publish command started event
       path = [:command, command.name, execution_id]
       publish_command_event(state.robot_module, path, :started, %{goal: goal})
 
+      # Track the command
+      command_info = %CommandInfo{
+        name: command.name,
+        pid: pid,
+        ref: monitor_ref,
+        category: category,
+        started_at: DateTime.utc_now()
+      }
+
       new_state = %{
         state
-        | state: :executing,
+        | executing_commands: Map.put(state.executing_commands, execution_id, command_info),
+          category_counts: Map.update(state.category_counts, category, 1, &(&1 + 1)),
+          # Legacy fields for backwards compatibility
           current_command_pid: pid,
           current_command_ref: monitor_ref,
           current_command_name: command.name,
           current_execution_id: execution_id
       }
 
-      new_state = set_robot_machine_state(new_state, :executing)
-
-      if old_state != :executing do
-        publish_transition(new_state, old_state, :executing)
+      # Backwards compatibility: publish :idle -> :executing transition when first command starts
+      # This maintains the old PubSub contract where state would transition to :executing
+      if map_size(state.executing_commands) == 0 and state.operational_state == :idle do
+        publish_transition(new_state, :idle, :executing)
       end
 
       {:reply, {:ok, pid}, new_state}
     else
       {:error, _} = err ->
         {:reply, err, state}
+    end
+  end
+
+  defp check_category_or_cancel(command, category, state) do
+    # First, cancel commands in categories specified by the command's cancel option
+    state =
+      case command.cancel do
+        [] -> state
+        categories -> cancel_commands_in_categories(state, categories)
+      end
+
+    # Now check if there's capacity in the command's own category
+    current = Map.get(state.category_counts, category, 0)
+    limit = Map.get(state.category_limits, category, 1)
+
+    if current < limit do
+      {:ok, state}
+    else
+      {:error, CategoryFullError.exception(category: category, limit: limit, current: current)}
+    end
+  end
+
+  defp cancel_commands_in_categories(state, categories) do
+    # Find all commands in the specified categories and terminate them
+    {to_terminate, to_keep} =
+      Enum.split_with(state.executing_commands, fn {_id, cmd} ->
+        cmd.category in categories
+      end)
+
+    # Nothing to cancel
+    if to_terminate == [] do
+      state
+    else
+      # Terminate each command
+      Enum.each(to_terminate, fn {_id, cmd} ->
+        BB.Command.cancel(cmd.pid)
+        Process.demonitor(cmd.ref, [:flush])
+      end)
+
+      # Calculate new category counts
+      terminated_pids = MapSet.new(to_terminate, fn {_, c} -> c.pid end)
+      terminated_refs = MapSet.new(to_terminate, fn {_, c} -> c.ref end)
+      terminated_ids = MapSet.new(to_terminate, fn {id, _} -> id end)
+
+      new_category_counts =
+        Enum.reduce(to_terminate, state.category_counts, fn {_id, cmd}, counts ->
+          Map.update(counts, cmd.category, 0, &max(&1 - 1, 0))
+        end)
+
+      # Update state
+      %{
+        state
+        | executing_commands: Map.new(to_keep),
+          category_counts: new_category_counts,
+          # Clear legacy fields if the tracked command was terminated
+          current_command_pid:
+            if(state.current_command_pid in terminated_pids,
+              do: nil,
+              else: state.current_command_pid
+            ),
+          current_command_ref:
+            if(state.current_command_ref in terminated_refs,
+              do: nil,
+              else: state.current_command_ref
+            ),
+          current_command_name:
+            if(state.current_execution_id in terminated_ids,
+              do: nil,
+              else: state.current_command_name
+            ),
+          current_execution_id:
+            if(state.current_execution_id in terminated_ids,
+              do: nil,
+              else: state.current_execution_id
+            )
+      }
     end
   end
 
@@ -674,65 +957,32 @@ defmodule BB.Robot.Runtime do
   end
 
   defp check_state_allowed(command, state) do
-    safety_state = BB.Safety.state(state.robot_module)
-
-    case safety_state do
-      :error ->
-        {:error, :safety_error}
-
-      :disarming ->
-        {:error, :disarming}
-
-      :armed ->
-        if state.state in command.allowed_states do
-          :ok
-        else
-          {:error,
-           StateError.exception(
-             current_state: state.state,
-             allowed_states: command.allowed_states
-           )}
-        end
-
-      :disarmed ->
-        if :disarmed in command.allowed_states do
-          :ok
-        else
-          {:error,
-           StateError.exception(current_state: :disarmed, allowed_states: command.allowed_states)}
-        end
+    case BB.Safety.state(state.robot_module) do
+      :error -> {:error, :safety_error}
+      :disarming -> {:error, :disarming}
+      :armed -> check_operational_state(command, state)
+      :disarmed -> check_disarmed_state(command)
     end
   end
 
-  defp maybe_preempt(_command, %{current_command_pid: nil} = state) do
-    {:ok, state}
+  defp check_operational_state(command, state) do
+    current_state = state.operational_state
+    allowed_states = command.allowed_states
+
+    if current_state in allowed_states do
+      :ok
+    else
+      {:error, StateError.exception(current_state: current_state, allowed_states: allowed_states)}
+    end
   end
 
-  defp maybe_preempt(command, state) do
-    if :executing in command.allowed_states do
-      state = terminate_current_command(state)
-      {:ok, state}
+  defp check_disarmed_state(command) do
+    if :disarmed in command.allowed_states do
+      :ok
     else
       {:error,
-       StateError.exception(current_state: :executing, allowed_states: command.allowed_states)}
+       StateError.exception(current_state: :disarmed, allowed_states: command.allowed_states)}
     end
-  end
-
-  defp terminate_current_command(%{current_command_pid: nil} = state), do: state
-
-  defp terminate_current_command(state) do
-    # Stop the command server - it will publish cancelled event in terminate
-    BB.Command.cancel(state.current_command_pid)
-
-    Process.demonitor(state.current_command_ref, [:flush])
-
-    %{
-      state
-      | current_command_pid: nil,
-        current_command_ref: nil,
-        current_command_name: nil,
-        current_execution_id: nil
-    }
   end
 
   defp publish_transition(state, from, to) do
@@ -742,7 +992,7 @@ defmodule BB.Robot.Runtime do
 
   defp set_robot_machine_state(state, new_robot_state) do
     RobotState.set_robot_state(state.robot_state, new_robot_state)
-    %{state | state: new_robot_state}
+    %{state | operational_state: new_robot_state}
   end
 
   defp update_joint_state(robot_state, %JointState{} = joint_state) do

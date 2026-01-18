@@ -84,6 +84,7 @@ defmodule BB.Command do
 
   alias BB.Command.Context
   alias BB.Command.ResultCache
+  alias BB.Robot.Runtime
 
   @type goal :: map()
   @type result :: term()
@@ -318,6 +319,50 @@ defmodule BB.Command do
     :exit, {:noproc, _} -> :ok
   end
 
+  @doc """
+  Transition to a new operational state during command execution.
+
+  This function allows a command to change the robot's operational state
+  mid-execution. This is useful for multi-phase commands where different
+  phases require different contexts.
+
+  ## Arguments
+
+  - `context` - The command context (passed to `handle_command/3`)
+  - `target_state` - The state to transition to (must be defined in DSL)
+
+  ## Returns
+
+  - `:ok` - Transition successful
+  - `{:error, reason}` - Transition failed
+
+  ## Example
+
+      def handle_command(_goal, context, state) do
+        # Start in processing state
+        :ok = BB.Command.transition_state(context, :processing)
+        # Do work...
+        send(self(), :start_phase_two)
+        {:noreply, state}
+      end
+
+      def handle_info(:start_phase_two, context, state) do
+        # Move to finalising state
+        :ok = BB.Command.transition_state(context, :finalising)
+        # Do more work...
+        {:stop, :normal, state}
+      end
+
+  """
+  @spec transition_state(Context.t(), atom()) :: :ok | {:error, term()}
+  def transition_state(%Context{} = context, target_state) when is_atom(target_state) do
+    Runtime.transition_operational_state(
+      context.robot_module,
+      context.execution_id,
+      target_state
+    )
+  end
+
   @doc false
   defmacro __using__(opts) do
     schema_opts = opts[:options_schema]
@@ -373,7 +418,7 @@ defmodule BB.Command do
       unquote(
         if schema_opts do
           quote do
-            @__bb_options_schema Spark.Options.new!(unquote(schema_opts))
+            @__bb_options_schema unquote(schema_opts)
             @impl BB.Command
             def options_schema, do: @__bb_options_schema
             defoverridable options_schema: 0

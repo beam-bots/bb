@@ -1005,12 +1005,51 @@ Target: `BB.Dsl.Controller`
 Robot commands with Goal → Feedback → Result semantics
 
 ### Nested DSLs
+ * [category](#commands-category)
  * [command](#commands-command)
    * argument
 
 
 
 
+
+### commands.category
+```elixir
+category name
+```
+
+
+A command category for grouping commands with concurrent execution limits.
+
+Categories define logical groups of commands (e.g., `:motion`, `:sensing`,
+`:auxiliary`) with configurable concurrency limits. Commands in different
+categories can run concurrently, while commands in the same category are
+limited to the category's `concurrency_limit`.
+
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#commands-category-name){: #commands-category-name .spark-required} | `atom` |  | A unique name for the category |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`doc`](#commands-category-doc){: #commands-category-doc } | `String.t` |  | Documentation describing this category |
+| [`concurrency_limit`](#commands-category-concurrency_limit){: #commands-category-concurrency_limit } | `pos_integer` | `1` | Maximum number of commands in this category that can run concurrently |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Category`
 
 ### commands.command
 ```elixir
@@ -1041,7 +1080,9 @@ the robot's state machine to control when they can run.
 |------|------|---------|------|
 | [`handler`](#commands-command-handler){: #commands-command-handler .spark-required} | `module \| {module, keyword}` |  | The handler module implementing the `BB.Command` behaviour. Either a module or `{module, keyword_list}` for parameterised options |
 | [`timeout`](#commands-command-timeout){: #commands-command-timeout } | `pos_integer \| :infinity` | `:infinity` | Timeout for command execution in milliseconds |
-| [`allowed_states`](#commands-command-allowed_states){: #commands-command-allowed_states } | `list(atom)` | `[:idle]` | Robot states in which this command can run. If `:executing` is included, the command can preempt running commands. |
+| [`allowed_states`](#commands-command-allowed_states){: #commands-command-allowed_states } | `atom \| list(atom)` | `[:idle]` | Robot states in which this command can run. Use `:*` for all states (except `:disarmed`). Use `:disarmed` explicitly if the command should run when disarmed. |
+| [`category`](#commands-command-category){: #commands-command-category } | `atom` | `:default` | The command category for concurrency control. Commands in the same category are limited by that category's concurrency_limit. |
+| [`cancel`](#commands-command-cancel){: #commands-command-cancel } | `atom \| list(atom)` | `[]` | Categories of commands this command can cancel when starting. Use `:*` to cancel all running commands, or a list of specific categories. Empty list (default) means the command will error if its category is at capacity. |
 
 
 ### commands.command.argument
@@ -1265,6 +1306,68 @@ end
 ### Introspection
 
 Target: `BB.Dsl.Bridge`
+
+
+
+
+## states
+Custom operational states for the robot.
+
+The built-in `:idle` state is always available. Define additional states
+here and use commands to transition between them. Commands can specify
+which states they're allowed to run in via `allowed_states`.
+
+
+### Nested DSLs
+ * [state](#states-state)
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`initial_state`](#states-initial_state){: #states-initial_state } | `atom` | `:idle` | The initial operational state when the robot starts |
+
+
+
+### states.state
+```elixir
+state name
+```
+
+
+A custom operational state for the robot.
+
+States define the operational context the robot can be in. Commands specify
+which states they can run in via `allowed_states`, and can transition to new
+states via `next_state:` in their result.
+
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#states-state-name){: #states-state-name .spark-required} | `atom` |  | A unique name for the state |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`doc`](#states-state-doc){: #states-state-doc } | `String.t` |  | Documentation describing this state |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.State`
 
 
 

@@ -14,18 +14,21 @@ Complete [Starting and Stopping](02-starting-and-stopping.md). You should unders
 
 ## The Robot State Machine
 
-Every Beam Bots robot has a state machine that controls when commands can execute:
+Every Beam Bots robot has a state machine with two core operational states:
 
 ```
-:disarmed ──arm──→ :idle
-:idle ──execute──→ :executing
-:executing ──complete──→ :idle
-:idle ──disarm──→ :disarmed
+:disarmed ──arm──→ :idle ──disarm──→ :disarmed
 ```
 
 - **:disarmed** - Robot is safe, actuators won't respond
 - **:idle** - Robot is ready, waiting for commands
-- **:executing** - A command is currently running
+
+When commands are running, the robot remains in its current operational state. For backwards compatibility, `BB.Robot.Runtime.state/1` returns `:executing` when commands are running in `:idle` state:
+
+```elixir
+BB.Robot.Runtime.state(MyRobot)  # => :executing (when commands running in :idle)
+BB.Robot.Runtime.operational_state(MyRobot)  # => :idle (the actual state)
+```
 
 > **For Roboticists:** This is similar to the arming concept in flight controllers. A disarmed robot won't move even if commanded to.
 
@@ -531,50 +534,58 @@ receive do
 end
 ```
 
-## Command Preemption
+## Command Cancellation
 
-By default, commands can only run in `:idle` state - you can't start a new command while one is executing. But sometimes you want commands that can interrupt a running command.
+By default, when a command's category is at capacity (typically 1 command), starting another command in that category returns an error. But sometimes you want commands that can cancel running commands to make room.
 
-Add `:executing` to `allowed_states` to enable preemption:
+Use the `cancel` option to specify which categories a command can cancel:
 
 ```elixir
 commands do
   command :move_to do
     handler MoveToCommand
-    allowed_states [:idle, :executing]  # Can preempt other commands
+    allowed_states [:idle]
+    cancel [:default]  # Can cancel other commands in :default category
   end
 
   command :emergency_stop do
     handler EmergencyStopCommand
-    allowed_states [:idle, :executing]  # Can always run
+    allowed_states :*    # Can run in any state
+    cancel :*            # Cancels all running commands
   end
 end
 ```
 
-When a command executes in `:executing` state:
-1. The currently running command is cancelled
-2. The new command starts immediately
-3. The preempted command's `result/1` is called and awaiting callers receive the result
+When a command with `cancel` starts:
+1. Running commands in the specified categories are cancelled
+2. The new command starts
+3. Cancelled commands' `result/1` is called and awaiting callers receive `{:error, :cancelled}`
+
+The `cancel` option accepts:
+- `:*` - cancels all categories (expanded to all defined categories at compile time)
+- `[:category1, :category2]` - cancels specific categories
+- `[]` (default) - cannot cancel anything, errors if category is full
 
 This is useful for:
 - **Motion commands** - send a new target without waiting for the previous move to complete
 - **Emergency stop** - immediately halt regardless of what's running
 - **Trajectory updates** - smoothly blend into a new path
 
-Example with preemptable motion:
+Example with cancellable motion:
 
 ```elixir
 # Start moving to position A
 {:ok, cmd_a} = MyRobot.move_to(position: 1.0)
 
 # Before it completes, redirect to position B
+# This cancels cmd_a automatically
 {:ok, cmd_b} = MyRobot.move_to(position: 2.0)
 
-# cmd_a returns {:error, :cancelled} (if result/1 handles nil result)
+# cmd_a returns {:error, :cancelled}
 # cmd_b continues to completion
 ```
 
-> **Caution:** Only allow preemption for commands where interruption is safe. A calibration routine or homing sequence probably shouldn't be preemptable.
+> **Caution:** Only enable cancellation for commands where interruption is safe. A calibration routine or homing sequence probably shouldn't be cancellable.
 
 ## Cancelling Commands
 
@@ -598,3 +609,9 @@ You now understand the command system and robot state machine. In the next tutor
 - Understand URDF limitations
 
 Continue to [Exporting to URDF](06-urdf-export.md).
+
+For more advanced state management, see [Custom States and Command Categories](11-custom-states.md) to learn about:
+
+- Defining custom operational modes beyond `:idle` (e.g., `:recording`, `:reacting`)
+- Running multiple commands concurrently with category-based concurrency
+- Mid-execution state transitions

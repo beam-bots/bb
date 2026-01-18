@@ -49,7 +49,8 @@ defmodule BB.CommandTest do
         command :navigate do
           handler(BB.CommandTest.TestHandler)
           timeout(30_000)
-          allowed_states([:idle, :executing])
+          allowed_states([:idle])
+          cancel([:default])
         end
       end
 
@@ -59,11 +60,12 @@ defmodule BB.CommandTest do
       end
     end
 
-    test "command with custom timeout and allowed_states" do
+    test "command with custom timeout, allowed_states and cancel" do
       [command] = Info.commands(CommandWithOptionsRobot)
       assert command.name == :navigate
       assert command.timeout == 30_000
-      assert command.allowed_states == [:idle, :executing]
+      assert command.allowed_states == [:idle]
+      assert command.cancel == [:default]
     end
   end
 
@@ -125,7 +127,8 @@ defmodule BB.CommandTest do
 
         command :disarm do
           handler(BB.CommandTest.TestHandler)
-          allowed_states([:idle, :executing])
+          allowed_states([:idle])
+          cancel([:default])
         end
 
         command :navigate do
