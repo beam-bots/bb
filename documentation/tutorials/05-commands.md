@@ -598,3 +598,9 @@ You now understand the command system and robot state machine. In the next tutor
 - Understand URDF limitations
 
 Continue to [Exporting to URDF](06-urdf-export.md).
+
+For more advanced state management, see [Custom States and Command Categories](11-custom-states.md) to learn about:
+
+- Defining custom operational modes beyond `:idle` and `:executing`
+- Running multiple commands concurrently with category-based concurrency
+- Mid-execution state transitions
