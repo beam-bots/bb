@@ -84,12 +84,14 @@ Disarm the robot if servo current exceeds safe limits:
 defmodule MyRobot do
   use BB
 
-  controller :over_current, {BB.Controller.Threshold,
-    topic: [:sensor, :servo_status],
-    field: :current,
-    max: 1.21,
-    action: command(:disarm)
-  }
+  controllers do
+    controller :over_current, {BB.Controller.Threshold,
+      topic: [:sensor, :servo_status],
+      field: :current,
+      max: 1.21,
+      action: command(:disarm)
+    }
+  end
 end
 ```
 
@@ -98,11 +100,13 @@ end
 React to proximity sensor readings:
 
 ```elixir
-controller :collision, {BB.Controller.PatternMatch,
-  topic: [:sensor, :proximity],
-  match: fn msg -> msg.payload.distance < 0.05 end,
-  action: command(:disarm)
-}
+controllers do
+  controller :collision, {BB.Controller.PatternMatch,
+    topic: [:sensor, :proximity],
+    match: fn msg -> msg.payload.distance < 0.05 end,
+    action: command(:disarm)
+  }
+end
 ```
 
 ### Temperature Monitoring with Callback
@@ -110,17 +114,19 @@ controller :collision, {BB.Controller.PatternMatch,
 Log warnings when temperature is outside safe range:
 
 ```elixir
-controller :temp_monitor, {BB.Controller.Threshold,
-  topic: [:sensor, :temperature],
-  field: :value,
-  min: 10.0,
-  max: 45.0,
-  cooldown_ms: 5000,
-  action: handle_event(fn msg, ctx ->
-    Logger.warning("[#{ctx.controller_name}] Temperature out of range: #{msg.payload.value}°C")
-    :ok
-  end)
-}
+controllers do
+  controller :temp_monitor, {BB.Controller.Threshold,
+    topic: [:sensor, :temperature],
+    field: :value,
+    min: 10.0,
+    max: 45.0,
+    cooldown_ms: 5000,
+    action: handle_event(fn msg, ctx ->
+      Logger.warning("[#{ctx.controller_name}] Temperature out of range: #{msg.payload.value}°C")
+      :ok
+    end)
+  }
+end
 ```
 
 ### Nested Field Access
@@ -128,12 +134,14 @@ controller :temp_monitor, {BB.Controller.Threshold,
 Access nested fields in message payloads:
 
 ```elixir
-controller :voltage_monitor, {BB.Controller.Threshold,
-  topic: [:sensor, :power],
-  field: [:battery, :voltage],  # Accesses msg.payload.battery.voltage
-  min: 11.0,
-  action: command(:disarm)
-}
+controllers do
+  controller :voltage_monitor, {BB.Controller.Threshold,
+    topic: [:sensor, :power],
+    field: [:battery, :voltage],  # Accesses msg.payload.battery.voltage
+    min: 11.0,
+    action: command(:disarm)
+  }
+end
 ```
 
 ## Cooldown Behaviour

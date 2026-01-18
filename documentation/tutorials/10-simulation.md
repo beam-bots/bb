@@ -264,5 +264,5 @@ You now know how to:
 For more advanced topics, see:
 
 - [Custom States and Command Categories](11-custom-states.md) - Define operational modes and concurrent commands
-- [Safety](../topics/safety.md) - Understanding the safety system
+- [Safety](../topics/understanding-safety.md) - Understanding the safety system
 - [Parameters](07-parameters.md) - Runtime-adjustable configuration

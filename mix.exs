@@ -61,7 +61,9 @@ defmodule BB.MixProject do
         |> Enum.concat(Path.wildcard("documentation/**/*.{md,livemd,cheatmd}")),
       groups_for_extras: [
         Tutorials: ~r/tutorials\//,
-        Topics: ~r/topics\//,
+        "How-to Guides": ~r/how-to\//,
+        Explanation: ~r/topics\//,
+        Reference: ~r/reference\//,
         "DSL Reference": ~r/dsls\//
       ],
       groups_for_modules: [

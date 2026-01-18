@@ -93,7 +93,9 @@ mix bb.to_urdf MyRobot -o robot.urdf
 
 ## Documentation
 
-See the tutorials for a guided introduction:
+### Tutorials
+
+Guided introduction to Beam Bots:
 
 1. [Your First Robot](https://hexdocs.pm/bb/01-first-robot.html) - defining robots with the DSL
 2. [Starting and Stopping](https://hexdocs.pm/bb/02-starting-and-stopping.html) - supervision trees
@@ -104,7 +106,31 @@ See the tutorials for a guided introduction:
 7. [Parameters](https://hexdocs.pm/bb/07-parameters.html) - runtime-adjustable configuration
 8. [Parameter Bridges](https://hexdocs.pm/bb/08-parameter-bridges.html) - bidirectional remote access
 
-The [DSL Reference](https://hexdocs.pm/bb/dsl-bb.html) documents all available options.
+### How-to Guides
+
+Task-oriented guides for common operations:
+
+- [Integrate a Servo Driver](https://hexdocs.pm/bb/integrate-servo-driver.html) - creating hardware driver packages
+- [Add a Custom Command](https://hexdocs.pm/bb/add-custom-command.html) - extending the command system
+- [Implement Safety Callbacks](https://hexdocs.pm/bb/implement-safety-callbacks.html) - safe hardware shutdown
+- [Deploy to Nerves](https://hexdocs.pm/bb/deploy-to-nerves.html) - embedded deployment
+- [Write a Custom Sensor](https://hexdocs.pm/bb/write-custom-sensor.html) - creating sensor modules
+
+### Explanation
+
+Understanding the architecture:
+
+- [Understanding Safety](https://hexdocs.pm/bb/understanding-safety.html) - the safety system design
+- [Supervision Architecture](https://hexdocs.pm/bb/supervision-architecture.html) - why topology mirrors supervision
+- [Command System](https://hexdocs.pm/bb/command-system.html) - command execution patterns
+- [PubSub System](https://hexdocs.pm/bb/pubsub-system.html) - hierarchical messaging
+
+### Reference
+
+- [DSL Reference](https://hexdocs.pm/bb/dsl-bb.html) - all DSL options
+- [Message Types](https://hexdocs.pm/bb/message-types.html) - PubSub message schemas
+- [Error Types](https://hexdocs.pm/bb/error-types.html) - structured error reference
+- [Telemetry Events](https://hexdocs.pm/bb/telemetry-events.html) - observability
 
 ## Status
 
