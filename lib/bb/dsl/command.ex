@@ -19,6 +19,7 @@ defmodule BB.Dsl.Command do
             handler: nil,
             timeout: :infinity,
             allowed_states: [:idle],
+            category: nil,
             arguments: []
 
   alias Spark.Dsl.Entity
@@ -30,6 +31,7 @@ defmodule BB.Dsl.Command do
           handler: module,
           timeout: timeout,
           allowed_states: [atom],
+          category: atom | nil,
           arguments: [BB.Dsl.Command.Argument.t()]
         }
 end

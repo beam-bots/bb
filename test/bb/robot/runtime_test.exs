@@ -205,10 +205,12 @@ defmodule BB.Robot.RuntimeTest do
 
       :ok = BB.Safety.arm(RobotWithCommands)
 
-      {:ok, _task} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
 
-      assert_receive :executing, 500
+      assert_receive {:executing, ^cmd}, 500
       assert Runtime.state(RobotWithCommands) == :executing
+
+      send(cmd, :complete)
     end
 
     test "async command transitions back to idle on completion" do
@@ -217,8 +219,9 @@ defmodule BB.Robot.RuntimeTest do
       :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
-      assert_receive :executing, 500
+      assert_receive {:executing, ^cmd}, 500
 
+      send(cmd, :complete)
       assert {:ok, :completed} = BB.Command.await(cmd)
 
       # Give the runtime a moment to process the :DOWN message
@@ -233,12 +236,12 @@ defmodule BB.Robot.RuntimeTest do
 
       {:ok, cmd1} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       ref = Process.monitor(cmd1)
-      assert_receive :executing, 500
+      assert_receive {:executing, ^cmd1}, 500
       assert Runtime.state(RobotWithCommands) == :executing
 
       # Start a preemptable command - it should cancel the first command
       {:ok, cmd2} = Runtime.execute(RobotWithCommands, :preemptable, %{notify: self()})
-      assert_receive :executing, 500
+      assert_receive {:executing, ^cmd2}, 500
 
       # Wait for cmd1 to fully terminate (ensures result is in cache)
       assert_receive {:DOWN, ^ref, :process, ^cmd1, _reason}, 500
@@ -246,7 +249,8 @@ defmodule BB.Robot.RuntimeTest do
       # First command returns cancelled error
       assert {:error, :cancelled} = BB.Command.await(cmd1)
 
-      # Second command should complete
+      # Second command should complete after we tell it to
+      send(cmd2, :complete)
       assert {:ok, :completed} = BB.Command.await(cmd2)
     end
 
@@ -255,12 +259,14 @@ defmodule BB.Robot.RuntimeTest do
 
       :ok = BB.Safety.arm(RobotWithCommands)
 
-      {:ok, _cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
-      assert_receive :executing, 500
+      {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      assert_receive {:executing, ^cmd}, 500
 
       # Errors for rejected commands are returned directly
       assert {:error, %StateError{current_state: :executing}} =
                Runtime.execute(RobotWithCommands, :immediate, %{})
+
+      send(cmd, :complete)
     end
 
     test "cancel returns error when nothing executing" do
@@ -275,7 +281,7 @@ defmodule BB.Robot.RuntimeTest do
       :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
-      assert_receive :executing, 500
+      assert_receive {:executing, ^cmd}, 500
 
       assert :ok = Runtime.cancel(RobotWithCommands)
 
@@ -310,7 +316,8 @@ defmodule BB.Robot.RuntimeTest do
       :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, cmd} = RobotWithCommands.async_cmd(notify: self())
-      assert_receive :executing, 500
+      assert_receive {:executing, ^cmd}, 500
+      send(cmd, :complete)
       assert {:ok, :completed} = BB.Command.await(cmd)
     end
   end

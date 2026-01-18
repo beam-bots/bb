@@ -8,6 +8,7 @@ defmodule BB.Dsl.DefaultNameTransformer do
 
   alias BB.Dsl.{
     Actuator,
+    Category,
     Collision,
     Command,
     Controller,
@@ -16,6 +17,7 @@ defmodule BB.Dsl.DefaultNameTransformer do
     Link,
     Material,
     Sensor,
+    State,
     Visual
   }
 
@@ -36,6 +38,7 @@ defmodule BB.Dsl.DefaultNameTransformer do
          {:ok, dsl, counts} <- name_entities(dsl, [:sensors], %{}),
          {:ok, dsl, counts} <- name_entities(dsl, [:controllers], counts),
          {:ok, dsl, counts} <- name_entities(dsl, [:commands], counts),
+         {:ok, dsl, counts} <- name_entities(dsl, [:states], counts),
          {:ok, dsl, _counts} <- name_entities(dsl, [:topology], counts) do
       {:ok, dsl}
     end
@@ -134,6 +137,13 @@ defmodule BB.Dsl.DefaultNameTransformer do
 
   defp name_entity(collision, counts) when is_struct(collision, Collision),
     do: maybe_set_name(collision, :collision, counts)
+
+  # Category and State entities always have explicit names, just pass through
+  defp name_entity(category, counts) when is_struct(category, Category),
+    do: {:ok, category, counts}
+
+  defp name_entity(state, counts) when is_struct(state, State),
+    do: {:ok, state, counts}
 
   defp name_entity(nil, counts), do: {:ok, nil, counts}
 

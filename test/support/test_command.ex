@@ -16,13 +16,21 @@ defmodule BB.Test.ImmediateSuccessCommand do
 end
 
 defmodule BB.Test.AsyncCommand do
-  @moduledoc false
+  @moduledoc """
+  A test command that waits for an explicit :complete message before finishing.
+
+  Usage:
+    {:ok, cmd} = Runtime.execute(Robot, :async_cmd, %{notify: self()})
+    assert_receive {:executing, ^cmd}
+    # ... do stuff while command is running ...
+    send(cmd, :complete)
+    assert {:ok, :completed} = BB.Command.await(cmd)
+  """
   use BB.Command
 
   @impl BB.Command
   def handle_command(%{notify: pid}, _context, state) do
-    send(pid, :executing)
-    Process.send_after(self(), :complete, 50)
+    send(pid, {:executing, self()})
     {:noreply, state}
   end
 

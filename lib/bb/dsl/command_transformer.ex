@@ -34,7 +34,7 @@ defmodule BB.Dsl.CommandTransformer do
       {:ok, result} = BB.Command.await(cmd)
   """
   use Spark.Dsl.Transformer
-  alias BB.Dsl.Info
+  alias BB.Dsl.{Command, Info}
   alias BB.Robot.Runtime
   alias Spark.Dsl.Transformer
 
@@ -51,7 +51,10 @@ defmodule BB.Dsl.CommandTransformer do
   @doc false
   @impl true
   def transform(dsl) do
-    commands = Info.commands(dsl)
+    commands =
+      dsl
+      |> Info.commands()
+      |> Enum.filter(&is_struct(&1, Command))
 
     if Enum.empty?(commands) do
       {:ok, dsl}

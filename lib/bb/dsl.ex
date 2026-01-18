@@ -787,6 +787,46 @@ defmodule BB.Dsl do
         default: [:idle],
         doc:
           "Robot states in which this command can run. If `:executing` is included, the command can preempt running commands."
+      ],
+      category: [
+        type: :atom,
+        required: false,
+        default: nil,
+        doc:
+          "The command category for concurrency control. Commands in the same category are limited by that category's concurrency_limit. Defaults to :default if not specified."
+      ]
+    ]
+  }
+
+  @category %Entity{
+    name: :category,
+    describe: """
+    A command category for grouping commands with concurrent execution limits.
+
+    Categories define logical groups of commands (e.g., `:motion`, `:sensing`,
+    `:auxiliary`) with configurable concurrency limits. Commands in different
+    categories can run concurrently, while commands in the same category are
+    limited to the category's `concurrency_limit`.
+    """,
+    target: BB.Dsl.Category,
+    identifier: :name,
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the category"
+      ],
+      doc: [
+        type: :string,
+        required: false,
+        doc: "Documentation describing this category"
+      ],
+      concurrency_limit: [
+        type: :pos_integer,
+        required: false,
+        default: 1,
+        doc: "Maximum number of commands in this category that can run concurrently"
       ]
     ]
   }
@@ -794,7 +834,53 @@ defmodule BB.Dsl do
   @commands %Section{
     name: :commands,
     describe: "Robot commands with Goal → Feedback → Result semantics",
-    entities: [@command]
+    entities: [@category, @command]
+  }
+
+  @state %Entity{
+    name: :state,
+    describe: """
+    A custom operational state for the robot.
+
+    States define the operational context the robot can be in. Commands specify
+    which states they can run in via `allowed_states`, and can transition to new
+    states via `next_state:` in their result.
+    """,
+    target: BB.Dsl.State,
+    identifier: :name,
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the state"
+      ],
+      doc: [
+        type: :string,
+        required: false,
+        doc: "Documentation describing this state"
+      ]
+    ]
+  }
+
+  @states %Section{
+    name: :states,
+    describe: """
+    Custom operational states for the robot.
+
+    The built-in `:idle` state is always available. Define additional states
+    here and use commands to transition between them. Commands can specify
+    which states they're allowed to run in via `allowed_states`.
+    """,
+    entities: [@state],
+    schema: [
+      initial_state: [
+        type: :atom,
+        required: false,
+        default: :idle,
+        doc: "The initial operational state when the robot starts"
+      ]
+    ]
   }
 
   @param_group %Entity{
@@ -895,7 +981,7 @@ defmodule BB.Dsl do
   }
 
   use Spark.Dsl.Extension,
-    sections: [@topology, @settings, @sensors, @controllers, @commands, @parameters],
+    sections: [@topology, @settings, @sensors, @controllers, @commands, @parameters, @states],
     transformers: [
       __MODULE__.DefaultNameTransformer,
       __MODULE__.TopologyTransformer,
@@ -903,10 +989,14 @@ defmodule BB.Dsl do
       __MODULE__.UniquenessTransformer,
       __MODULE__.RobotTransformer,
       __MODULE__.CommandTransformer,
-      __MODULE__.ParameterTransformer
+      __MODULE__.ParameterTransformer,
+      __MODULE__.StateTransformer,
+      __MODULE__.CategoryTransformer
     ],
     verifiers: [
       __MODULE__.Verifiers.ValidateChildSpecs,
-      __MODULE__.Verifiers.ValidateParamRefs
+      __MODULE__.Verifiers.ValidateParamRefs,
+      __MODULE__.Verifiers.ValidateStateRefs,
+      __MODULE__.Verifiers.ValidateCategoryRefs
     ]
 end
