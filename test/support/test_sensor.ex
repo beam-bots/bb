@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MySensor do
-  @moduledoc """
-  A minimal test sensor that implements BB.Sensor behaviour.
-  Used in DSL tests where a sensor module is required.
-  """
+  @moduledoc false
+
+  # A minimal test sensor that implements BB.Sensor behaviour.
+  # Used in DSL tests where a sensor module is required.
   use BB.Sensor,
     options_schema: [
       frequency: [

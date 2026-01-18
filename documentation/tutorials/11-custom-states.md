@@ -439,4 +439,4 @@ BB.Command.await(capture_cmd)
 You now understand custom states and command categories. Continue exploring:
 
 - [Parameters](07-parameters.md) for runtime-adjustable configuration
-- [Safety](../topics/safety.md) for implementing safe hardware control
+- [Safety](../topics/understanding-safety.md) for implementing safe hardware control
