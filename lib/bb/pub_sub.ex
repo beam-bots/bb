@@ -116,15 +116,21 @@ defmodule BB.PubSub do
     path
     |> ancestor_paths()
     |> Enum.each(fn topic ->
-      registry_module.dispatch(registry, topic, fn entries ->
-        for {pid, msg_types} <- entries,
-            msg_types == [] or message_module in msg_types do
-          send(pid, {:bb, path, message})
-        end
-      end)
+      registry_module.dispatch(
+        registry,
+        topic,
+        &dispatch_to_subscribers(&1, path, message, message_module)
+      )
     end)
 
     :ok
+  end
+
+  defp dispatch_to_subscribers(entries, path, message, message_module) do
+    for {pid, msg_types} <- entries,
+        msg_types == [] or message_module in msg_types do
+      send(pid, {:bb, path, message})
+    end
   end
 
   @doc """
