@@ -10,13 +10,9 @@ updates:
       interval: "weekly"
     groups:
       dev-dependencies:
-        patterns:
-          - "credo"
-          - "dialyxir"
-          - "ex_check"
-          - "ex_doc"
-          - "git_ops"
-          - "mix_audit"
+        dependency-type: 'development'
+      prod-dependencies:
+        dependency-type: 'production'
 
   - package-ecosystem: "github-actions"
     directory: "/"
