@@ -57,11 +57,7 @@ defmodule BB.Collision.Mesh do
           {:ok, bounds}
 
         :miss ->
-          with {:ok, vertices} <- parse_mesh(path),
-               {:ok, bounds} <- compute_bounds(vertices) do
-            put_cached(cache_key, bounds)
-            {:ok, bounds}
-          end
+          load_and_cache_bounds(path, cache_key)
       end
     end
   end
@@ -74,6 +70,14 @@ defmodule BB.Collision.Mesh do
     case load_bounds(path) do
       {:ok, bounds} -> bounds
       {:error, reason} -> raise "Failed to load mesh bounds: #{inspect(reason)}"
+    end
+  end
+
+  defp load_and_cache_bounds(path, cache_key) do
+    with {:ok, vertices} <- parse_mesh(path),
+         {:ok, bounds} <- compute_bounds(vertices) do
+      put_cached(cache_key, bounds)
+      {:ok, bounds}
     end
   end
 
