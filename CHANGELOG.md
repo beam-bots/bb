@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.15.1](https://github.com/beam-bots/bb/compare/v0.15.0...v0.15.1) (2026-02-08)
+
+
+
+
+### Bug Fixes:
+
+* docs: correct `BB.Message.Sensor.IMU` references to `BB.Message.Sensor.Imu` by James Harton
+
 ## [v0.15.0](https://github.com/beam-bots/bb/compare/v0.14.0...v0.15.0) (2026-01-18)
 
 
