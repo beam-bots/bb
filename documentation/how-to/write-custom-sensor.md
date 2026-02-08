@@ -181,10 +181,10 @@ end
 ### IMU Data
 
 ```elixir
-alias BB.Message.Sensor.IMU
+alias BB.Message.Sensor.Imu
 
 def publish_imu(orientation, angular_vel, linear_accel, state) do
-  message = IMU.new!(
+  message = Imu.new!(
     orientation: orientation,
     angular_velocity: angular_vel,
     linear_acceleration: linear_accel

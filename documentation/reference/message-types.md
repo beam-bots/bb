@@ -70,7 +70,7 @@ Battery status information.
 
 Inertial measurement unit data.
 
-**Module:** `BB.Message.Sensor.IMU`
+**Module:** `BB.Message.Sensor.Imu`
 
 **Fields:**
 
