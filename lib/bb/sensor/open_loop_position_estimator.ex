@@ -198,6 +198,10 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
     {:noreply, state, state.max_silence_ms}
   end
 
+  def handle_info(%Message{}, state) do
+    {:noreply, state, state.max_silence_ms}
+  end
+
   def handle_info(:tick, %{tick_ref: nil} = state) do
     {:noreply, state, state.max_silence_ms}
   end

@@ -8,6 +8,7 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
 
   alias BB.Message
   alias BB.Message.Actuator.BeginMotion
+  alias BB.Message.Actuator.Command.Position, as: CommandPosition
   alias BB.Sensor.OpenLoopPositionEstimator
 
   import BB.Unit
@@ -323,6 +324,20 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
       assert_receive {:position, position}
       assert position < 0.0
       assert position > -1.0
+    end
+  end
+
+  describe "unhandled message types" do
+    test "ignores Command.Position messages from shared pubsub channel" do
+      state = init_sensor()
+
+      command = Message.new!(CommandPosition, @actuator_name, position: 1.0)
+      envelope = {:bb, [:actuator, @joint_name, @actuator_name], command}
+
+      reject(&BB.PubSub.publish/3)
+
+      assert {:noreply, ^state, _timeout} =
+               OpenLoopPositionEstimator.handle_info(envelope, state)
     end
   end
 
