@@ -15,13 +15,25 @@ This tutorial guides you through defining your first robot with Beam Bots. By th
 
 ### Quick Start with Igniter
 
-The fastest way to get started is with [Igniter](https://hex.pm/packages/igniter):
+The fastest way to get started is with [Igniter](https://hex.pm/packages/igniter). First, install the `igniter_new` archive if you haven't already:
+
+```bash
+mix archive.install hex igniter_new
+```
+
+Then create a new project with BB installed:
+
+```bash
+mix igniter.new my_robot --install bb
+```
+
+This creates a new Elixir project with a `MyRobot.Robot` module containing arm/disarm commands and a base link, adds it to your supervision tree, and configures the formatter. You can skip to [Step 2](#step-2-add-a-joint-and-child-link) and modify the generated module.
+
+If you already have an existing Elixir project, you can add BB to it instead:
 
 ```bash
 mix igniter.install bb
 ```
-
-This creates a `{YourApp}.Robot` module with arm/disarm commands and a base link, adds it to your supervision tree, and configures the formatter. You can skip to [Step 2](#step-2-add-a-joint-and-child-link) and modify the generated module.
 
 ### Manual Installation
 
