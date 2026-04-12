@@ -402,7 +402,7 @@ iex> Map.keys(robot.joints)
 iex> robot.joints.pan_joint.type
 :revolute
 
-iex> robot.joints.pan_joint.limit.upper
+iex> robot.joints.pan_joint.limits.upper
 1.5707963267948966  # 90 degrees in radians
 ```
 
