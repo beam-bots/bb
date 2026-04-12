@@ -26,8 +26,8 @@ Every Beam Bots robot has a state machine with two core operational states:
 When commands are running, the robot remains in its current operational state. For backwards compatibility, `BB.Robot.Runtime.state/1` returns `:executing` when commands are running in `:idle` state:
 
 ```elixir
-BB.Robot.Runtime.state(MyRobot)  # => :executing (when commands running in :idle)
-BB.Robot.Runtime.operational_state(MyRobot)  # => :idle (the actual state)
+BB.Robot.Runtime.state(MyRobot.Robot)  # => :executing (when commands running in :idle)
+BB.Robot.Runtime.operational_state(MyRobot.Robot)  # => :idle (the actual state)
 ```
 
 > **For Roboticists:** This is similar to the arming concept in flight controllers. A disarmed robot won't move even if commanded to.
@@ -39,8 +39,8 @@ BB.Robot.Runtime.operational_state(MyRobot)  # => :idle (the actual state)
 Query the current state:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
-iex> BB.Robot.Runtime.state(MyRobot)
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
+iex> BB.Robot.Runtime.state(MyRobot.Robot)
 :disarmed
 ```
 
@@ -51,7 +51,7 @@ New robots always start in `:disarmed`.
 To use the standard arm/disarm commands, add them to your robot:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   commands do
@@ -75,10 +75,10 @@ end
 The DSL generates convenience functions on your module:
 
 ```elixir
-iex> {:ok, cmd} = MyRobot.arm()
+iex> {:ok, cmd} = MyRobot.Robot.arm()
 iex> {:ok, :armed, _opts} = BB.Command.await(cmd)
 
-iex> BB.Robot.Runtime.state(MyRobot)
+iex> BB.Robot.Runtime.state(MyRobot.Robot)
 :idle
 ```
 
@@ -92,11 +92,11 @@ Commands are short-lived GenServers. When you execute a command:
 
 ```elixir
 # Execute and wait for result
-{:ok, cmd} = MyRobot.arm()
+{:ok, cmd} = MyRobot.Robot.arm()
 {:ok, result, _opts} = BB.Command.await(cmd)
 
 # Execute with timeout
-{:ok, cmd} = MyRobot.move(shoulder: 0.5)
+{:ok, cmd} = MyRobot.Robot.move(shoulder: 0.5)
 case BB.Command.yield(cmd, 5000) do
   {:ok, result} -> handle_result(result)
   {:error, reason} -> handle_error(reason)
@@ -335,7 +335,7 @@ end
 Execute with keyword arguments:
 
 ```elixir
-{:ok, cmd} = MyRobot.move_joint(joint: :shoulder, position: 0.5)
+{:ok, cmd} = MyRobot.Robot.move_joint(joint: :shoulder, position: 0.5)
 {:ok, result} = BB.Command.await(cmd)
 ```
 
@@ -392,10 +392,10 @@ end
 When a command cannot start (wrong state), `execute/3` returns the error directly:
 
 ```elixir
-iex> BB.Robot.Runtime.state(MyRobot)
+iex> BB.Robot.Runtime.state(MyRobot.Robot)
 :disarmed
 
-iex> MyRobot.move_joint(joint: :shoulder, position: 0.5)
+iex> MyRobot.Robot.move_joint(joint: :shoulder, position: 0.5)
 {:error, %BB.Error.State.NotAllowed{
   current_state: :disarmed,
   allowed_states: [:idle]
@@ -407,10 +407,10 @@ iex> MyRobot.move_joint(joint: :shoulder, position: 0.5)
 Commands only execute in their allowed states:
 
 ```elixir
-iex> BB.Robot.Runtime.state(MyRobot)
+iex> BB.Robot.Runtime.state(MyRobot.Robot)
 :disarmed
 
-iex> MyRobot.move_joint(joint: :shoulder, position: 0.5)
+iex> MyRobot.Robot.move_joint(joint: :shoulder, position: 0.5)
 {:error, %BB.Error.State.NotAllowed{
   current_state: :disarmed,
   allowed_states: [:idle]
@@ -522,9 +522,9 @@ iex> {:ok, :disarmed, _} = BB.Command.await(cmd)
 Monitor state machine changes via PubSub:
 
 ```elixir
-BB.PubSub.subscribe(MyRobot, [:state_machine])
+BB.PubSub.subscribe(MyRobot.Robot, [:state_machine])
 
-{:ok, cmd} = MyRobot.arm()
+{:ok, cmd} = MyRobot.Robot.arm()
 BB.Command.await(cmd)
 
 # Receive transition messages
@@ -575,11 +575,11 @@ Example with cancellable motion:
 
 ```elixir
 # Start moving to position A
-{:ok, cmd_a} = MyRobot.move_to(position: 1.0)
+{:ok, cmd_a} = MyRobot.Robot.move_to(position: 1.0)
 
 # Before it completes, redirect to position B
 # This cancels cmd_a automatically
-{:ok, cmd_b} = MyRobot.move_to(position: 2.0)
+{:ok, cmd_b} = MyRobot.Robot.move_to(position: 2.0)
 
 # cmd_a returns {:error, :cancelled}
 # cmd_b continues to completion
@@ -592,10 +592,10 @@ Example with cancellable motion:
 Cancel a running command explicitly:
 
 ```elixir
-{:ok, cmd} = MyRobot.long_running_command()
+{:ok, cmd} = MyRobot.Robot.long_running_command()
 
 # Later, if needed
-BB.Robot.Runtime.cancel(MyRobot)
+BB.Robot.Runtime.cancel(MyRobot.Robot)
 
 # The command's result/1 is called and awaiting callers receive the result
 ```

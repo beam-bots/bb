@@ -209,13 +209,13 @@ Use `BB.Telemetry` helpers:
 
 ```elixir
 # Span (start/stop automatically)
-BB.Telemetry.span([:bb, :custom, :operation], %{robot: MyRobot}, fn ->
+BB.Telemetry.span([:bb, :custom, :operation], %{robot: MyRobot.Robot}, fn ->
   result = do_work()
   {result, %{items_processed: 10}}
 end)
 
 # Single event
-BB.Telemetry.emit([:bb, :custom, :event], %{count: 1}, %{robot: MyRobot})
+BB.Telemetry.emit([:bb, :custom, :event], %{count: 1}, %{robot: MyRobot.Robot})
 ```
 
 ## Metrics Collection

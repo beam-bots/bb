@@ -48,7 +48,7 @@ alias BB.IK.FABRIK
 alias BB.Robot.State
 
 # Get your robot
-robot = MyRobot.robot()
+robot = MyRobot.Robot.robot()
 {:ok, state} = State.new(robot)
 
 # Define where you want the end-effector to go
@@ -115,7 +115,7 @@ defmodule IKDemo do
 end
 
 # Usage
-robot = MyRobot.robot()
+robot = MyRobot.Robot.robot()
 {:ok, state} = BB.Robot.State.new(robot)
 IKDemo.check_reachability(robot, state, :tip, {0.3, 0.2, 0.0})
 ```
@@ -157,7 +157,7 @@ case FABRIK.solve(robot, state, :tip, target) do
     IO.inspect(meta.positions, label: "Best effort angles")
 
     # If you want to move to the best-effort position,
-    # use BB.Motion.send_positions(MyRobot, meta.positions)
+    # use BB.Motion.send_positions(MyRobot.Robot, meta.positions)
 end
 ```
 
@@ -206,10 +206,10 @@ The `BB.Motion` module bridges IK solving with actuator commands, making it easy
 alias BB.Motion
 
 # Start your robot
-{:ok, _pid} = MyRobot.start_link([])
+{:ok, _pid} = MyRobot.Robot.start_link([])
 
 # Move the end-effector to a target position
-case Motion.move_to(MyRobot, :tip, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK) do
+case Motion.move_to(MyRobot.Robot, :tip, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK) do
   {:ok, meta} ->
     IO.puts("Moved in #{meta.iterations} iterations")
 
@@ -228,13 +228,13 @@ This solves IK, updates the robot state, and sends position commands to all actu
 alias BB.IK.FABRIK.Motion
 
 # Same as above but pre-configured for FABRIK
-case Motion.move_to(MyRobot, :tip, {0.3, 0.2, 0.1}) do
+case Motion.move_to(MyRobot.Robot, :tip, {0.3, 0.2, 0.1}) do
   {:ok, meta} -> :moved
   {:error, _, _} -> :failed
 end
 
 # Just solve without moving (for validation)
-case Motion.solve(MyRobot, :tip, {0.3, 0.2, 0.1}) do
+case Motion.solve(MyRobot.Robot, :tip, {0.3, 0.2, 0.1}) do
   {:ok, positions, _meta} -> IO.inspect(positions, label: "Would set")
   {:error, _, _} -> :unreachable
 end
@@ -250,7 +250,7 @@ targets = %{
   right_foot: {-0.1, 0.0, 0.0}
 }
 
-case Motion.move_to_multi(MyRobot, targets, solver: BB.IK.FABRIK) do
+case Motion.move_to_multi(MyRobot.Robot, targets, solver: BB.IK.FABRIK) do
   {:ok, results} ->
     Enum.each(results, fn {link, {:ok, _pos, meta}} ->
       IO.puts("#{link}: #{meta.iterations} iterations")
@@ -272,7 +272,7 @@ alias BB.IK.FABRIK.Tracker
 
 # Start tracking
 {:ok, tracker} = Tracker.start_link(
-  robot: MyRobot,
+  robot: MyRobot.Robot,
   target_link: :gripper,
   initial_target: {0.3, 0.2, 0.1},
   update_rate: 30   # Hz
@@ -317,7 +317,7 @@ By default, the solver respects joint limits defined in your robot:
 
 ```elixir
 topology do
-  link :base do
+  link :base_link do
     joint :shoulder do
       type(:revolute)
       limit do

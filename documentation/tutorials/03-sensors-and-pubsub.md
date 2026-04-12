@@ -10,18 +10,18 @@ In this tutorial, you'll learn how to add sensors to your robot and subscribe to
 
 ## Prerequisites
 
-Complete [Starting and Stopping](02-starting-and-stopping.md). You should have a `MyRobot` module that you can start.
+Complete [Starting and Stopping](02-starting-and-stopping.md). You should have a `MyRobot.Robot` module that you can start.
 
 ## Adding a Sensor to the DSL
 
 Sensors are processes that publish data. Add one to your robot:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   topology do
-    link :base do
+    link :base_link do
       sensor :imu, MyImuSensor
 
       joint :pan_joint do
@@ -90,7 +90,7 @@ end
 Key points:
 
 - BB passes `:robot` and `:path` in the options
-- The path reflects where the sensor is in the topology (e.g., `[:base, :imu]`)
+- The path reflects where the sensor is in the topology (e.g., `[:base_link, :imu]`)
 - Publish with `[:sensor | path]` to identify it as a sensor message
 
 > **For Roboticists:** This is similar to ROS publishers. The sensor publishes on a topic (path) and subscribers receive the messages asynchronously.
@@ -102,8 +102,8 @@ Key points:
 Start your robot and subscribe to sensor messages:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
-iex> BB.PubSub.subscribe(MyRobot, [:sensor])
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
+iex> BB.PubSub.subscribe(MyRobot.Robot, [:sensor])
 {:ok, #PID<0.234.0>}
 ```
 
@@ -111,8 +111,8 @@ Now your IEx process receives sensor messages:
 
 ```elixir
 iex> flush()
-{:bb, [:sensor, :base, :imu], %BB.Message{...}}
-{:bb, [:sensor, :base, :imu], %BB.Message{...}}
+{:bb, [:sensor, :base_link, :imu], %BB.Message{...}}
+{:bb, [:sensor, :base_link, :imu], %BB.Message{...}}
 ```
 
 ## Subscription Patterns
@@ -121,16 +121,16 @@ The path you subscribe to determines which messages you receive:
 
 ```elixir
 # All sensor messages from anywhere
-BB.PubSub.subscribe(MyRobot, [:sensor])
+BB.PubSub.subscribe(MyRobot.Robot, [:sensor])
 
-# Sensors under the base link
-BB.PubSub.subscribe(MyRobot, [:sensor, :base])
+# Sensors under the base_link
+BB.PubSub.subscribe(MyRobot.Robot, [:sensor, :base_link])
 
 # Only the specific IMU sensor
-BB.PubSub.subscribe(MyRobot, [:sensor, :base, :imu])
+BB.PubSub.subscribe(MyRobot.Robot, [:sensor, :base_link, :imu])
 
 # All messages (sensors, actuators, everything)
-BB.PubSub.subscribe(MyRobot, [])
+BB.PubSub.subscribe(MyRobot.Robot, [])
 ```
 
 ## Filtering by Message Type
@@ -140,7 +140,7 @@ Subscribe only to specific message types:
 ```elixir
 alias BB.Message.Sensor.Imu
 
-BB.PubSub.subscribe(MyRobot, [:sensor],
+BB.PubSub.subscribe(MyRobot.Robot, [:sensor],
   message_types: [Imu]
 )
 ```
@@ -308,7 +308,7 @@ The `Spark.Options` schema validates attributes when creating messages. If valid
 Stop receiving messages:
 
 ```elixir
-BB.PubSub.unsubscribe(MyRobot, [:sensor])
+BB.PubSub.unsubscribe(MyRobot.Robot, [:sensor])
 ```
 
 ## Debugging Subscriptions
@@ -316,7 +316,7 @@ BB.PubSub.unsubscribe(MyRobot, [:sensor])
 List who's subscribed to a path:
 
 ```elixir
-iex> BB.PubSub.subscribers(MyRobot, [:sensor])
+iex> BB.PubSub.subscribers(MyRobot.Robot, [:sensor])
 [{#PID<0.234.0>, []}]  # PID and message type filters
 ```
 
@@ -326,7 +326,7 @@ Pass configuration to your sensor:
 
 ```elixir
 topology do
-  link :base do
+  link :base_link do
     sensor :imu, {MyImuSensor, sample_rate: 200, bus: :spi0}
   end
 end
@@ -350,7 +350,7 @@ end
 Some sensors aren't attached to a specific link (e.g., GPS, battery monitor). Define them at robot level:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   sensors do
@@ -364,7 +364,7 @@ defmodule MyRobot do
 end
 ```
 
-These sensors publish with shorter paths: `[:sensor, :gps]` instead of `[:sensor, :base, :gps]`.
+These sensors publish with shorter paths: `[:sensor, :gps]` instead of `[:sensor, :base_link, :gps]`.
 
 ## What's Next?
 

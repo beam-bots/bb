@@ -29,7 +29,7 @@ Diagnose and fix common issues with BB's publish-subscribe system.
 Subscribe to the root path to see everything:
 
 ```elixir
-BB.subscribe(MyRobot, [])
+BB.subscribe(MyRobot.Robot, [])
 
 # Messages will print in IEx
 # {:bb, [:sensor, :shoulder], %BB.Message{...}}
@@ -70,7 +70,7 @@ defmodule MessageCounter do
 end
 
 # Usage
-MessageCounter.start_link(MyRobot)
+MessageCounter.start_link(MyRobot.Robot)
 Process.sleep(5000)
 MessageCounter.get_counts()
 # => %{"sensor.shoulder" => 50, "state_machine" => 2}
@@ -81,7 +81,7 @@ MessageCounter.get_counts()
 In Livebook with bb_kino:
 
 ```elixir
-BB.Kino.events(MyRobot)
+BB.Kino.events(MyRobot.Robot)
 ```
 
 Or with bb_liveview dashboard - the event stream component shows all messages.
@@ -92,7 +92,7 @@ Or with bb_liveview dashboard - the event stream component shows all messages.
 
 ```elixir
 # List all processes for the robot
-Registry.select(BB.Registry, [{{MyRobot, :"$1", :"$2"}, [], [{{:"$1", :"$2"}}]}])
+Registry.select(BB.Registry, [{{MyRobot.Robot, :"$1", :"$2"}, [], [{{:"$1", :"$2"}}]}])
 # => [{[:sensor, :shoulder], #PID<0.456.0>}, ...]
 ```
 
@@ -106,17 +106,17 @@ Paths are hierarchical. Common mistakes:
 
 ```elixir
 # WRONG - extra nesting
-BB.subscribe(MyRobot, [:joint, :shoulder, :sensor, :encoder])
+BB.subscribe(MyRobot.Robot, [:joint, :shoulder, :sensor, :encoder])
 
 # RIGHT - sensors are at joint level
-BB.subscribe(MyRobot, [:sensor, :encoder])
+BB.subscribe(MyRobot.Robot, [:sensor, :encoder])
 ```
 
 Check what path the publisher uses:
 
 ```elixir
 # Subscribe to everything, look at actual paths
-BB.subscribe(MyRobot, [])
+BB.subscribe(MyRobot.Robot, [])
 ```
 
 ### Check 3: Subscription Active?
@@ -126,7 +126,7 @@ Subscriptions are process-linked. If your process restarted, you need to resubsc
 ```elixir
 # In GenServer init
 def init(opts) do
-  BB.subscribe(MyRobot, [:sensor])
+  BB.subscribe(MyRobot.Robot, [:sensor])
   {:ok, %{}}
 end
 
@@ -207,14 +207,14 @@ end
 ```elixir
 # BAD - subscribes twice
 def init(opts) do
-  BB.subscribe(MyRobot, [:sensor])
-  BB.subscribe(MyRobot, [:sensor, :shoulder])  # Also matches!
+  BB.subscribe(MyRobot.Robot, [:sensor])
+  BB.subscribe(MyRobot.Robot, [:sensor, :shoulder])  # Also matches!
   {:ok, %{}}
 end
 
 # GOOD - subscribe to most specific path
 def init(opts) do
-  BB.subscribe(MyRobot, [:sensor, :shoulder])
+  BB.subscribe(MyRobot.Robot, [:sensor, :shoulder])
   {:ok, %{}}
 end
 ```
@@ -225,7 +225,7 @@ Check if multiple processes publish to the same path:
 
 ```elixir
 # Find all processes that might publish to [:sensor, :shoulder]
-Registry.select(BB.Registry, [{{MyRobot, :"$1", :"$2"}, [], [{{:"$1", :"$2"}}]}])
+Registry.select(BB.Registry, [{{MyRobot.Robot, :"$1", :"$2"}, [], [{{:"$1", :"$2"}}]}])
 |> Enum.filter(fn {path, _pid} ->
   List.starts_with?(path, [:sensor, :shoulder])
 end)
@@ -237,7 +237,7 @@ end)
 
 ```elixir
 # Check if process is alive
-case BB.Process.whereis(MyRobot, [:sensor, :shoulder]) do
+case BB.Process.whereis(MyRobot.Robot, [:sensor, :shoulder]) do
   {:ok, pid} ->
     if Process.alive?(pid), do: :running, else: :dead
 
@@ -256,7 +256,7 @@ If your process called `BB.unsubscribe/2` or restarted without resubscribing.
 
 ```elixir
 # Check if robot supervisor is running
-case Process.whereis(MyRobot.Supervisor) do
+case Process.whereis(MyRobot.Robot.Supervisor) do
   nil -> :stopped
   pid -> if Process.alive?(pid), do: :running, else: :stopping
 end
@@ -289,7 +289,7 @@ end
 
 ```elixir
 # All subscriptions for a robot
-Registry.lookup(BB.PubSub.Registry, {MyRobot, []})
+Registry.lookup(BB.PubSub.Registry, {MyRobot.Robot, []})
 # => [{pid, path_prefix}, ...]
 ```
 
@@ -333,10 +333,10 @@ For actuator commands where PubSub overhead matters:
 
 ```elixir
 # Instead of
-BB.Actuator.set_position(MyRobot, [:actuator, :servo], position)
+BB.Actuator.set_position(MyRobot.Robot, [:actuator, :servo], position)
 
 # Use direct
-BB.Actuator.set_position!(MyRobot, :servo, position)
+BB.Actuator.set_position!(MyRobot.Robot, :servo, position)
 ```
 
 ## Quick Reference

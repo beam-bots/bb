@@ -18,7 +18,7 @@ Create a command handler that integrates with the robot state machine and provid
 Add the command to your robot's `commands` block:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   commands do
@@ -127,14 +127,14 @@ The DSL generates a convenience function on your robot module:
 
 ```elixir
 # Start the robot
-{:ok, _} = BB.Supervisor.start_link(MyRobot)
+{:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
 
 # Arm first (commands need :idle state)
-{:ok, cmd} = MyRobot.arm()
+{:ok, cmd} = MyRobot.Robot.arm()
 {:ok, :armed, _} = BB.Command.await(cmd)
 
 # Execute your command
-{:ok, cmd} = MyRobot.move_to(target: %{shoulder: 0.5, elbow: 1.0})
+{:ok, cmd} = MyRobot.Robot.move_to(target: %{shoulder: 0.5, elbow: 1.0})
 
 # Wait for completion
 case BB.Command.await(cmd, 10_000) do
@@ -277,20 +277,20 @@ defmodule MyRobot.MoveToCommandTest do
   use ExUnit.Case
 
   setup do
-    {:ok, _} = BB.Supervisor.start_link(MyRobot, simulation: :kinematic)
-    {:ok, cmd} = MyRobot.arm()
+    {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot, simulation: :kinematic)
+    {:ok, cmd} = MyRobot.Robot.arm()
     {:ok, :armed, _} = BB.Command.await(cmd)
     :ok
   end
 
   test "moves to target positions" do
-    {:ok, cmd} = MyRobot.move_to(target: %{shoulder: 0.5})
+    {:ok, cmd} = MyRobot.Robot.move_to(target: %{shoulder: 0.5})
     assert {:ok, %{shoulder: position}} = BB.Command.await(cmd, 5000)
     assert_in_delta position, 0.5, 0.02
   end
 
   test "returns error for invalid joints" do
-    {:ok, cmd} = MyRobot.move_to(target: %{nonexistent: 0.5})
+    {:ok, cmd} = MyRobot.Robot.move_to(target: %{nonexistent: 0.5})
     assert {:error, %BB.Error.Invalid.UnknownJoints{}} = BB.Command.await(cmd)
   end
 end

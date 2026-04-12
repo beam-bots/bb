@@ -162,11 +162,11 @@ Use `BB.Robot.Runtime` to query the current state:
 
 ```elixir
 # Get the operational state (what mode the robot is in)
-BB.Robot.Runtime.operational_state(MyRobot)
+BB.Robot.Runtime.operational_state(MyRobot.Robot)
 # => :idle | :recording | :processing | ...
 
 # Get the "classic" state (backwards compatible)
-BB.Robot.Runtime.state(MyRobot)
+BB.Robot.Runtime.state(MyRobot.Robot)
 # => :disarmed | :idle | :executing | :recording | ...
 ```
 
@@ -240,13 +240,13 @@ end
 
 ```elixir
 # Start a motion command
-{:ok, move_cmd} = MyRobot.move_to(target: position)
+{:ok, move_cmd} = MyRobot.Robot.move_to(target: position)
 
 # While moving, start recording (different category - runs concurrently)
-{:ok, record_cmd} = MyRobot.record_frame(sensor: :camera)
+{:ok, record_cmd} = MyRobot.Robot.record_frame(sensor: :camera)
 
 # Both commands are now running
-BB.Robot.Runtime.executing_commands(MyRobot)
+BB.Robot.Runtime.executing_commands(MyRobot.Robot)
 # => [
 #   %{name: :move_to, category: :motion, pid: #PID<...>},
 #   %{name: :record_frame, category: :sensing, pid: #PID<...>}
@@ -262,10 +262,10 @@ When a category is at capacity, the behaviour depends on the `cancel` option:
 
 ```elixir
 # Start a motion command
-{:ok, cmd1} = MyRobot.move_to(target: pos1)
+{:ok, cmd1} = MyRobot.Robot.move_to(target: pos1)
 
 # Start another motion (same category, at limit)
-{:ok, cmd2} = MyRobot.move_to(target: pos2)
+{:ok, cmd2} = MyRobot.Robot.move_to(target: pos2)
 
 # cmd1 is cancelled, cmd2 runs
 # Because :move_to has cancel: [:motion]
@@ -282,19 +282,19 @@ Query the execution state:
 
 ```elixir
 # Is anything executing?
-BB.Robot.Runtime.executing?(MyRobot)
+BB.Robot.Runtime.executing?(MyRobot.Robot)
 # => true | false
 
 # Is a specific category occupied?
-BB.Robot.Runtime.executing?(MyRobot, :motion)
+BB.Robot.Runtime.executing?(MyRobot.Robot, :motion)
 # => true | false
 
 # List all running commands
-BB.Robot.Runtime.executing_commands(MyRobot)
+BB.Robot.Runtime.executing_commands(MyRobot.Robot)
 # => [%{name: :move_to, category: :motion, pid: #PID<...>, ...}]
 
 # Get category availability
-BB.Robot.Runtime.category_availability(MyRobot)
+BB.Robot.Runtime.category_availability(MyRobot.Robot)
 # => %{motion: {1, 1}, sensing: {0, 2}, default: {0, 1}}
 #    Format: {current_count, limit}
 ```

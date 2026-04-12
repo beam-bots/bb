@@ -10,7 +10,7 @@ In this tutorial, you'll learn how to compute link positions from joint angles u
 
 ## Prerequisites
 
-Complete [Your First Robot](01-first-robot.md). You should have a `MyRobot` module with at least two joints.
+Complete [Your First Robot](01-first-robot.md). You should have a `MyRobot.Robot` module with at least two joints.
 
 ## What is Forward Kinematics?
 
@@ -28,7 +28,7 @@ BB uses 4x4 homogeneous transformation matrices internally, leveraging Nx tensor
 Pass a map of joint positions to compute where a link is:
 
 ```elixir
-iex> robot = MyRobot.robot()
+iex> robot = MyRobot.Robot.robot()
 iex> alias BB.Robot.Kinematics
 
 iex> positions = %{
@@ -51,11 +51,11 @@ Positions are in **radians** for revolute joints and **metres** for prismatic jo
 For a running robot, query the Runtime for current joint positions:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
-iex> positions = BB.Robot.Runtime.positions(MyRobot)
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
+iex> positions = BB.Robot.Runtime.positions(MyRobot.Robot)
 %{pan_joint: 0.0, tilt_joint: 0.0}
 
-iex> robot = MyRobot.robot()
+iex> robot = MyRobot.Robot.robot()
 iex> {x, y, z} = Kinematics.link_position(robot, positions, :camera_link)
 ```
 
@@ -94,7 +94,7 @@ Compute transforms for every link at once:
 iex> positions = %{pan_joint: :math.pi() / 4, tilt_joint: :math.pi() / 6}
 iex> transforms = Kinematics.all_link_transforms(robot, positions)
 %{
-  base: #Nx.Tensor<...>,
+  base_link: #Nx.Tensor<...>,
   pan_link: #Nx.Tensor<...>,
   camera_link: #Nx.Tensor<...>
 }
@@ -148,7 +148,7 @@ defmodule KinematicsDemo do
 end
 
 # Run it
-robot = MyRobot.robot()
+robot = MyRobot.Robot.robot()
 KinematicsDemo.sweep_pan(robot)
 ```
 
@@ -182,7 +182,7 @@ This differs from the DSL where you can use degrees and other units. The `~u()` 
 Each link has its own coordinate frame. The transform returned by `forward_kinematics/3` describes how to get from the base frame to the link's frame.
 
 For a pan-tilt camera:
-- **base** frame: fixed to the world
+- **base_link** frame: fixed to the world
 - **pan_link** frame: rotates with the pan joint
 - **camera_link** frame: rotates with both pan and tilt
 

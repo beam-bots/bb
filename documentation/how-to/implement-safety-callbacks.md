@@ -186,12 +186,12 @@ defmodule MyActuator.SafetyTest do
 
   test "disarm works after actuator crash" do
     # Start robot
-    {:ok, sup} = BB.Supervisor.start_link(MyRobot)
-    {:ok, cmd} = MyRobot.arm()
+    {:ok, sup} = BB.Supervisor.start_link(MyRobot.Robot)
+    {:ok, cmd} = MyRobot.Robot.arm()
     BB.Command.await(cmd)
 
     # Get actuator pid
-    {:ok, actuator_pid} = BB.Process.whereis(MyRobot, [:joint, :servo])
+    {:ok, actuator_pid} = BB.Process.whereis(MyRobot.Robot, [:joint, :servo])
 
     # Expect disarm to be called
     expect(SomeHardware, :set_output, fn _device, _pin, 0 -> :ok end)
@@ -200,13 +200,13 @@ defmodule MyActuator.SafetyTest do
     Process.exit(actuator_pid, :kill)
 
     # Disarm should still work
-    assert :ok = BB.Safety.disarm(MyRobot)
+    assert :ok = BB.Safety.disarm(MyRobot.Robot)
   end
 
   test "disarm callback can access hardware directly" do
     # Test the callback in isolation
     opts = %{
-      robot: MyRobot,
+      robot: MyRobot.Robot,
       path: [:joint, :servo],
       opts: [pin: 18, bus: "i2c-1"]
     }
@@ -243,7 +243,7 @@ Recovery from `:error` state requires manual intervention:
 
 ```elixir
 # After fixing the hardware issue
-BB.Safety.force_disarm(MyRobot)
+BB.Safety.force_disarm(MyRobot.Robot)
 ```
 
 ## Common Mistakes

@@ -29,7 +29,7 @@ Parameters are configuration values that can be changed at runtime without recom
 Add a `parameters` section to your robot definition:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   parameters do
@@ -41,7 +41,7 @@ defmodule MyRobot do
   end
 
   topology do
-    link :base
+    link :base_link
   end
 end
 ```
@@ -100,18 +100,18 @@ You can override default values when starting the robot by passing a `params` op
 
 ```elixir
 # Override a single parameter
-{:ok, _} = BB.Supervisor.start_link(MyRobot, params: [
+{:ok, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
   motion: [max_linear_speed: 2.0]
 ])
 
 # Override multiple parameters
-{:ok, _} = BB.Supervisor.start_link(MyRobot, params: [
+{:ok, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
   motion: [max_linear_speed: 2.0, max_angular_speed: 1.0],
   safety: [enabled: false]
 ])
 
 # Nested groups use nested keyword lists
-{:ok, _} = BB.Supervisor.start_link(MyRobot, params: [
+{:ok, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
   controller: [pid: [kp: 2.5, ki: 0.2]]
 ])
 ```
@@ -120,12 +120,12 @@ Startup parameters are validated against the schema. Invalid values or unknown p
 
 ```elixir
 # Type mismatch - fails immediately
-{:error, _} = BB.Supervisor.start_link(MyRobot, params: [
+{:error, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
   motion: [max_linear_speed: "fast"]  # Expected float
 ])
 
 # Unknown parameter - fails immediately
-{:error, _} = BB.Supervisor.start_link(MyRobot, params: [
+{:error, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
   motion: [unknown_param: 1.0]
 ])
 ```
@@ -143,18 +143,18 @@ This lets you define sensible defaults in the DSL, persist tuned values across r
 Start your robot and read parameter values:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
-iex> BB.Parameter.get(MyRobot, [:motion, :max_linear_speed])
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
+iex> BB.Parameter.get(MyRobot.Robot, [:motion, :max_linear_speed])
 {:ok, 1.0}
 
-iex> BB.Parameter.get(MyRobot, [:safety, :collision_distance])
+iex> BB.Parameter.get(MyRobot.Robot, [:safety, :collision_distance])
 {:ok, 0.3}
 ```
 
 Use `get!/2` if you want to raise on missing parameters:
 
 ```elixir
-iex> BB.Parameter.get!(MyRobot, [:motion, :max_linear_speed])
+iex> BB.Parameter.get!(MyRobot.Robot, [:motion, :max_linear_speed])
 1.0
 ```
 
@@ -163,7 +163,7 @@ iex> BB.Parameter.get!(MyRobot, [:motion, :max_linear_speed])
 Enumerate all parameters or filter by prefix:
 
 ```elixir
-iex> BB.Parameter.list(MyRobot)
+iex> BB.Parameter.list(MyRobot.Robot)
 [
   {[:motion, :max_linear_speed], %{value: 1.0, type: :float, ...}},
   {[:motion, :max_angular_speed], %{value: 0.5, type: :float, ...}},
@@ -171,7 +171,7 @@ iex> BB.Parameter.list(MyRobot)
   ...
 ]
 
-iex> BB.Parameter.list(MyRobot, prefix: [:motion])
+iex> BB.Parameter.list(MyRobot.Robot, prefix: [:motion])
 [
   {[:motion, :max_linear_speed], %{value: 1.0, type: :float, ...}},
   {[:motion, :max_angular_speed], %{value: 0.5, type: :float, ...}}
@@ -183,20 +183,20 @@ iex> BB.Parameter.list(MyRobot, prefix: [:motion])
 Change parameter values at runtime:
 
 ```elixir
-iex> BB.Parameter.set(MyRobot, [:motion, :max_linear_speed], 2.0)
+iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_linear_speed], 2.0)
 :ok
 
-iex> BB.Parameter.get(MyRobot, [:motion, :max_linear_speed])
+iex> BB.Parameter.get(MyRobot.Robot, [:motion, :max_linear_speed])
 {:ok, 2.0}
 ```
 
 Values are validated against the schema. Invalid values are rejected:
 
 ```elixir
-iex> BB.Parameter.set(MyRobot, [:motion, :max_linear_speed], -1.0)
+iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_linear_speed], -1.0)
 {:error, "must be at least 0.0"}
 
-iex> BB.Parameter.set(MyRobot, [:motion, :max_linear_speed], "fast")
+iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_linear_speed], "fast")
 {:error, "expected float, got \"fast\""}
 ```
 
@@ -205,7 +205,7 @@ iex> BB.Parameter.set(MyRobot, [:motion, :max_linear_speed], "fast")
 Update multiple parameters atomically with `set_many/2`:
 
 ```elixir
-iex> BB.Parameter.set_many(MyRobot, [
+iex> BB.Parameter.set_many(MyRobot.Robot, [
 ...>   {[:controller, :pid, :kp], 2.0},
 ...>   {[:controller, :pid, :ki], 0.2},
 ...>   {[:controller, :pid, :kd], 0.05}
@@ -216,7 +216,7 @@ iex> BB.Parameter.set_many(MyRobot, [
 If any parameter fails validation, none are changed:
 
 ```elixir
-iex> BB.Parameter.set_many(MyRobot, [
+iex> BB.Parameter.set_many(MyRobot.Robot, [
 ...>   {[:controller, :pid, :kp], 2.0},
 ...>   {[:controller, :pid, :ki], -0.5}  # Invalid: negative
 ...> ])
@@ -228,10 +228,10 @@ iex> BB.Parameter.set_many(MyRobot, [
 Parameter changes are published via PubSub. Subscribe to receive notifications:
 
 ```elixir
-iex> BB.PubSub.subscribe(MyRobot, [:param])
+iex> BB.PubSub.subscribe(MyRobot.Robot, [:param])
 {:ok, #PID<0.234.0>}
 
-iex> BB.Parameter.set(MyRobot, [:motion, :max_linear_speed], 3.0)
+iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_linear_speed], 3.0)
 :ok
 
 iex> flush()
@@ -249,10 +249,10 @@ Subscribe to specific parameter paths:
 
 ```elixir
 # All motion parameters
-BB.PubSub.subscribe(MyRobot, [:param, :motion])
+BB.PubSub.subscribe(MyRobot.Robot, [:param, :motion])
 
 # Just the max speed
-BB.PubSub.subscribe(MyRobot, [:param, :motion, :max_linear_speed])
+BB.PubSub.subscribe(MyRobot.Robot, [:param, :motion, :max_linear_speed])
 ```
 
 ## Parameters in Components
@@ -261,7 +261,7 @@ Controllers, sensors, and actuators can define inline parameters:
 
 ```elixir
 topology do
-  link :base do
+  link :base_link do
     joint :shoulder, type: :revolute do
       controller :position, {MyPIDController, []} do
         param :kp, type: :float, default: 1.0, min: 0.0
@@ -276,7 +276,7 @@ end
 These parameters are accessible via their full path:
 
 ```elixir
-BB.Parameter.get(MyRobot, [:base, :shoulder, :position, :kp])
+BB.Parameter.get(MyRobot.Robot, [:base_link, :shoulder, :position, :kp])
 ```
 
 ## Implementing a Parameterised Controller
@@ -369,11 +369,11 @@ end
 Unit parameters are validated and can be converted:
 
 ```elixir
-iex> BB.Parameter.set(MyRobot, [:motion, :max_speed], ~u(2.0 m/s))
+iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_speed], ~u(2.0 m/s))
 :ok
 
 # Units are converted to SI base for storage
-iex> BB.Parameter.get(MyRobot, [:motion, :max_speed])
+iex> BB.Parameter.get(MyRobot.Robot, [:motion, :max_speed])
 {:ok, 2.0}  # metres per second
 ```
 

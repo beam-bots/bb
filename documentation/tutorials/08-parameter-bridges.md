@@ -28,7 +28,7 @@ Parameter bridges provide bidirectional access between BB and remote systems:
 Add bridges to your `parameters` section:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   parameters do
@@ -132,8 +132,8 @@ end
 Now when parameters change, you'll see debug output:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
-iex> BB.Parameter.set(MyRobot, [:max_speed], 2.0)
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
+iex> BB.Parameter.set(MyRobot.Robot, [:max_speed], 2.0)
 [DEBUG] Parameter [:max_speed] changed:
   Old: 1.0
   New: 2.0
@@ -264,29 +264,29 @@ end
 Access remote parameters through the `BB.Parameter` API:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot)
+iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
 
 # List parameters on the flight controller
-iex> {:ok, params} = BB.Parameter.list_remote(MyRobot, :fc)
+iex> {:ok, params} = BB.Parameter.list_remote(MyRobot.Robot, :fc)
 {:ok, [
   %{id: "PITCH_RATE_P", value: 0.1, path: [:fc, :pitch, :rate, :p], ...},
   %{id: "ROLL_RATE_P", value: 0.15, path: [:fc, :roll, :rate, :p], ...}
 ]}
 
 # Get a specific parameter
-iex> {:ok, value} = BB.Parameter.get_remote(MyRobot, :fc, "PITCH_RATE_P")
+iex> {:ok, value} = BB.Parameter.get_remote(MyRobot.Robot, :fc, "PITCH_RATE_P")
 {:ok, 0.1}
 
 # Set a parameter on the FC
-iex> :ok = BB.Parameter.set_remote(MyRobot, :fc, "PITCH_RATE_P", 0.12)
+iex> :ok = BB.Parameter.set_remote(MyRobot.Robot, :fc, "PITCH_RATE_P", 0.12)
 :ok
 
 # Subscribe to changes
-iex> :ok = BB.Parameter.subscribe_remote(MyRobot, :fc, "PITCH_RATE_P")
+iex> :ok = BB.Parameter.subscribe_remote(MyRobot.Robot, :fc, "PITCH_RATE_P")
 :ok
 
 # Subscribe to PubSub using the path from list_remote
-iex> BB.PubSub.subscribe(MyRobot, [:fc, :pitch, :rate, :p])
+iex> BB.PubSub.subscribe(MyRobot.Robot, [:fc, :pitch, :rate, :p])
 {:ok, #PID<0.234.0>}
 ```
 

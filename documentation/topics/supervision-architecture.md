@@ -93,7 +93,7 @@ When you call `BB.Supervisor.start_link/2`, it reads the pre-generated spec and 
 Some processes belong to the robot as a whole, not specific links:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   # Robot-level controller (manages I2C bus)
@@ -108,7 +108,7 @@ defmodule MyRobot do
 
   topology do
     # Joint-level processes
-    link :base do
+    link :base_link do
       joint :shoulder do
         actuator :servo, {...}
         sensor :position, {...}
@@ -162,10 +162,10 @@ Registration uses Elixir's Registry with the robot module as the key namespace.
 
 ```elixir
 # Normal start - all hardware processes
-BB.Supervisor.start_link(MyRobot)
+BB.Supervisor.start_link(MyRobot.Robot)
 
 # Simulation mode - actuators replaced with simulators
-BB.Supervisor.start_link(MyRobot, simulation: :kinematic)
+BB.Supervisor.start_link(MyRobot.Robot, simulation: :kinematic)
 ```
 
 In simulation mode:
@@ -200,7 +200,7 @@ sensors do
 end
 
 topology do
-  link :base do
+  link :base_link do
     joint :pan do ... end         # Camera pan
     joint :tilt do ... end        # Camera tilt
   end

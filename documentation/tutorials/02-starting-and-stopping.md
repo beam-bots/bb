@@ -10,14 +10,14 @@ In the previous tutorial, we defined a robot using the Beam Bots DSL. Now we'll 
 
 ## Prerequisites
 
-Complete [Your First Robot](01-first-robot.md) first. You should have a `MyRobot` module defined.
+Complete [Your First Robot](01-first-robot.md) first. You should have a `MyRobot.Robot` module defined.
 
 ## Starting the Robot
 
 Start your robot with `BB.Supervisor.start_link/2`:
 
 ```elixir
-iex> {:ok, pid} = BB.Supervisor.start_link(MyRobot)
+iex> {:ok, pid} = BB.Supervisor.start_link(MyRobot.Robot)
 {:ok, #PID<0.234.0>}
 ```
 
@@ -28,7 +28,7 @@ Your robot is now running. The supervisor has spawned a tree of processes that m
 BB creates a supervision tree that reflects your robot's topology:
 
 ```
-BB.Supervisor (MyRobot)
+BB.Supervisor (MyRobot.Robot)
 ├── Registry              - Process name registry
 ├── PubSub Registry       - Message routing
 ├── Task.Supervisor       - Command execution
@@ -36,7 +36,7 @@ BB.Supervisor (MyRobot)
 ├── SensorSupervisor      - Robot-level sensors
 ├── ControllerSupervisor  - Robot-level controllers
 ├── BridgeSupervisor      - Parameter bridges
-└── LinkSupervisor (:base)
+└── LinkSupervisor (:base_link)
     └── JointSupervisor (:pan_joint)
         └── LinkSupervisor (:pan_link)
             └── JointSupervisor (:tilt_joint)
@@ -70,9 +70,9 @@ This mirrors how physical robot failures propagate - a broken wrist doesn't stop
 You can inspect the running processes:
 
 ```elixir
-iex> Supervisor.which_children(MyRobot)
+iex> Supervisor.which_children(MyRobot.Robot)
 [
-  {{BB.LinkSupervisor, :base}, #PID<0.236.0>, :supervisor, ...},
+  {{BB.LinkSupervisor, :base_link}, #PID<0.236.0>, :supervisor, ...},
   {BB.Robot.Runtime, #PID<0.235.0>, :worker, ...},
   ...
 ]
@@ -91,7 +91,7 @@ Navigate to the Applications tab and find your robot's supervision tree.
 Stop the robot by stopping its supervisor:
 
 ```elixir
-iex> Supervisor.stop(MyRobot)
+iex> Supervisor.stop(MyRobot.Robot)
 :ok
 ```
 
@@ -111,7 +111,7 @@ defmodule MyApp.Application do
   def start(_type, _args) do
     children = [
       # Start the robot supervisor
-      MyRobot
+      MyRobot.Robot
     ]
 
     opts = [strategy: :one_for_one, name: MyApp.Supervisor]
@@ -141,7 +141,7 @@ Each robot has its own isolated supervision tree.
 The `Runtime` process manages your robot's operational state. When the robot starts, it's in the `:disarmed` state - a safe mode where actuators won't respond to commands.
 
 ```elixir
-iex> BB.Robot.Runtime.state(MyRobot)
+iex> BB.Robot.Runtime.state(MyRobot.Robot)
 :disarmed
 ```
 
@@ -152,7 +152,7 @@ We'll cover the state machine and commands in [Commands and State Machine](05-co
 Every process in the robot tree is registered with a unique name. You can look up any process:
 
 ```elixir
-iex> BB.Process.whereis(MyRobot, :pan_joint)
+iex> BB.Process.whereis(MyRobot.Robot, :pan_joint)
 #PID<0.238.0>
 ```
 

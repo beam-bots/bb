@@ -81,7 +81,7 @@ At least one of `:min` or `:max` must be provided for Threshold.
 Disarm the robot if servo current exceeds safe limits:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   controllers do
@@ -156,7 +156,7 @@ The first matching message always triggers immediately (no initial delay).
 
 ## Integration with Commands
 
-Reactive controllers work alongside the command system. When a controller triggers `command(:disarm)`, it's equivalent to calling `MyRobot.disarm([])` - the command goes through the normal command execution flow with state machine validation.
+Reactive controllers work alongside the command system. When a controller triggers `command(:disarm)`, it's equivalent to calling `MyRobot.Robot.disarm([])` - the command goes through the normal command execution flow with state machine validation.
 
 This means:
 - Commands are logged via telemetry

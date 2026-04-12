@@ -27,7 +27,7 @@ Then create a new project with BB installed:
 mix igniter.new my_robot --install bb
 ```
 
-This creates a new Elixir project with a `MyRobot.Robot` module containing arm/disarm commands and a base link, adds it to your supervision tree, and configures the formatter. You can skip to [Step 2](#step-2-add-a-joint-and-child-link) and modify the generated module.
+This creates a new Elixir project with a `MyRobot.Robot` module, adds it to your supervision tree, and configures the formatter. The generated module includes arm/disarm commands (covered in [Commands and State Machine](05-commands.md)) and a base link — you can skip ahead to [Step 2](#step-2-add-a-joint-and-child-link) and modify it.
 
 If you already have an existing Elixir project, you can add BB to it instead:
 
@@ -57,19 +57,19 @@ We'll create a simple two-link robot arm: a base that can rotate (pan), with an 
         |
     [pan_link]   <- pan joint rotates this
         |
-    [base]       <- fixed to the world
+    [base_link]  <- fixed to the world
 ```
 
 ## Step 1: Create the Module
 
-Create a new file `lib/my_robot.ex`:
+Create a new file `lib/my_robot/robot.ex`:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   topology do
-    link :base do
+    link :base_link do
     end
   end
 end
@@ -79,13 +79,13 @@ Let's break this down:
 
 - `use BB` brings in the Beam Bots DSL and the `~u` sigil for physical units
 - `topology do ... end` defines the robot's physical structure
-- `link :base do ... end` creates our first link (rigid body)
+- `link :base_link do ... end` creates our first link (rigid body)
 
 Compile and test:
 
 ```elixir
-iex> MyRobot.robot()
-%BB.Robot{name: MyRobot, links: %{base: %BB.Robot.Link{...}}, ...}
+iex> MyRobot.Robot.robot()
+%BB.Robot{name: MyRobot.Robot, links: %{base_link: %BB.Robot.Link{...}}, ...}
 ```
 
 The `robot/0` function returns a compiled struct optimised for runtime use.
@@ -95,11 +95,11 @@ The `robot/0` function returns a compiled struct optimised for runtime use.
 Joints connect links. Let's add a pan joint that allows rotation around the Z-axis:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   topology do
-    link :base do
+    link :base_link do
       joint :pan_joint do
         type(:revolute)
 
@@ -190,11 +190,11 @@ The joint is now 5cm above the base link's origin.
 Let's add a tilt joint to create a full pan-tilt mechanism:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   topology do
-    link :base do
+    link :base_link do
       joint :pan_joint do
         type(:revolute)
 
@@ -248,7 +248,7 @@ The tilt joint rotates around the Y-axis (specified by `roll(~u(-90 degree))` wh
 To visualise the robot, add visual geometry to each link:
 
 ```elixir
-link :base do
+link :base_link do
   visual do
     cylinder do
       radius(~u(0.04 meter))
@@ -283,11 +283,11 @@ Available geometry types:
 Here's the full robot definition:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   topology do
-    link :base do
+    link :base_link do
       visual do
         cylinder do
           radius(~u(0.04 meter))
@@ -392,9 +392,9 @@ end
 The `robot/0` function returns a `BB.Robot` struct:
 
 ```elixir
-iex> robot = MyRobot.robot()
+iex> robot = MyRobot.Robot.robot()
 iex> Map.keys(robot.links)
-[:base, :pan_link, :camera_link]
+[:base_link, :pan_link, :camera_link]
 
 iex> Map.keys(robot.joints)
 [:pan_joint, :tilt_joint]

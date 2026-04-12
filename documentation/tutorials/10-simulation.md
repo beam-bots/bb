@@ -17,7 +17,7 @@ Complete [Your First Robot](01-first-robot.md) and [Starting and Stopping](02-st
 Start your robot in kinematic simulation mode by passing the `simulation` option:
 
 ```elixir
-iex> {:ok, pid} = MyRobot.start_link(simulation: :kinematic)
+iex> {:ok, pid} = MyRobot.Robot.start_link(simulation: :kinematic)
 {:ok, #PID<0.234.0>}
 ```
 
@@ -28,11 +28,11 @@ The robot is now running entirely in software. Actuators receive commands and pu
 You can check whether a robot is running in simulation mode:
 
 ```elixir
-iex> BB.Robot.Runtime.simulation_mode(MyRobot)
+iex> BB.Robot.Runtime.simulation_mode(MyRobot.Robot)
 :kinematic
 
 # Hardware mode returns nil
-iex> BB.Robot.Runtime.simulation_mode(MyRobot)
+iex> BB.Robot.Runtime.simulation_mode(MyRobot.Robot)
 nil
 ```
 
@@ -58,17 +58,17 @@ The existing `OpenLoopPositionEstimator` sensor works unchanged, estimating posi
 
 ```elixir
 # Start in simulation
-{:ok, _pid} = MyRobot.start_link(simulation: :kinematic)
+{:ok, _pid} = MyRobot.Robot.start_link(simulation: :kinematic)
 
 # Arm the robot (required even in simulation)
-:ok = BB.Safety.arm(MyRobot)
+:ok = BB.Safety.arm(MyRobot.Robot)
 
 # Send a position command
-BB.Actuator.set_position!(MyRobot, :shoulder_motor, 1.57)
+BB.Actuator.set_position!(MyRobot.Robot, :shoulder_motor, 1.57)
 
 # The OpenLoopPositionEstimator will estimate position over time
 Process.sleep(500)
-position = BB.Robot.Runtime.joint_position(MyRobot, :shoulder)
+position = BB.Robot.Runtime.joint_position(MyRobot.Robot, :shoulder)
 ```
 
 ## Controller Behaviour in Simulation
@@ -152,13 +152,13 @@ The simulation option is an atom to allow future expansion:
 
 ```elixir
 # Current: kinematic simulation
-MyRobot.start_link(simulation: :kinematic)
+MyRobot.Robot.start_link(simulation: :kinematic)
 
 # Future: external physics engine
-MyRobot.start_link(simulation: :external)
+MyRobot.Robot.start_link(simulation: :external)
 
 # Future: built-in physics
-MyRobot.start_link(simulation: :physics)
+MyRobot.Robot.start_link(simulation: :physics)
 ```
 
 ## Environment-Based Mode Selection
@@ -180,7 +180,7 @@ defmodule MyApp.Application do
       end
 
     children = [
-      {MyRobot, simulation: simulation_mode}
+      {MyRobot.Robot, simulation: simulation_mode}
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one)
@@ -207,14 +207,14 @@ defmodule MyRobotTest do
   use ExUnit.Case
 
   test "robot moves to home position" do
-    {:ok, pid} = MyRobot.start_link(simulation: :kinematic)
+    {:ok, pid} = MyRobot.Robot.start_link(simulation: :kinematic)
 
-    :ok = BB.Safety.arm(MyRobot)
-    :ok = BB.Command.execute(MyRobot, :home)
+    :ok = BB.Safety.arm(MyRobot.Robot)
+    :ok = BB.Command.execute(MyRobot.Robot, :home)
 
     # Verify the robot reached home position
     assert_eventually fn ->
-      pos = BB.Robot.Runtime.joint_position(MyRobot, :shoulder)
+      pos = BB.Robot.Runtime.joint_position(MyRobot.Robot, :shoulder)
       abs(pos - 0.0) < 0.01
     end
 
@@ -229,10 +229,10 @@ You can subscribe to motion messages from simulated actuators:
 
 ```elixir
 # Subscribe to actuator messages
-BB.PubSub.subscribe(MyRobot, [:actuator, :base, :shoulder, :motor])
+BB.PubSub.subscribe(MyRobot.Robot, [:actuator, :base_link, :shoulder, :motor])
 
 # Send a command
-BB.Actuator.set_position!(MyRobot, :motor, 1.0)
+BB.Actuator.set_position!(MyRobot.Robot, :motor, 1.0)
 
 # Receive the BeginMotion message
 receive do

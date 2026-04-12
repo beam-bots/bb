@@ -90,8 +90,8 @@ end
 The Runtime enforces these constraints:
 
 ```elixir
-BB.Robot.Runtime.state(MyRobot)  #=> :disarmed
-MyRobot.move_to(position: 1.0)   #=> {:error, %NotAllowed{}}
+BB.Robot.Runtime.state(MyRobot.Robot)  #=> :disarmed
+MyRobot.Robot.move_to(position: 1.0)   #=> {:error, %NotAllowed{}}
 ```
 
 ### Custom States
@@ -132,7 +132,7 @@ The built-in states (`:idle`, `:disarmed`) are always available. Your custom sta
 ### 1. Execution Request
 
 ```elixir
-{:ok, cmd_pid} = MyRobot.move_to(target: %{shoulder: 0.5})
+{:ok, cmd_pid} = MyRobot.Robot.move_to(target: %{shoulder: 0.5})
 ```
 
 The DSL generates this function. It calls `BB.Robot.Runtime.execute/3`.
@@ -202,7 +202,7 @@ Callers have options:
 ### Blocking Wait
 
 ```elixir
-{:ok, cmd} = MyRobot.move_to(target: %{shoulder: 0.5})
+{:ok, cmd} = MyRobot.Robot.move_to(target: %{shoulder: 0.5})
 {:ok, result} = BB.Command.await(cmd)  # blocks until done
 ```
 
@@ -227,7 +227,7 @@ end
 ### Fire and Forget
 
 ```elixir
-{:ok, _cmd} = MyRobot.move_to(target: %{shoulder: 0.5})
+{:ok, _cmd} = MyRobot.Robot.move_to(target: %{shoulder: 0.5})
 # Don't await - let it run
 ```
 

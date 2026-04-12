@@ -14,13 +14,13 @@ BB's PubSub uses hierarchical paths for addressing. Messages are published to pa
 
 ```elixir
 # Publish to a specific path
-BB.publish(MyRobot, [:sensor, :shoulder], joint_state)
+BB.publish(MyRobot.Robot, [:sensor, :shoulder], joint_state)
 
 # Subscribe to exact path
-BB.subscribe(MyRobot, [:sensor, :shoulder])
+BB.subscribe(MyRobot.Robot, [:sensor, :shoulder])
 
 # Subscribe to all sensors (subtree)
-BB.subscribe(MyRobot, [:sensor])
+BB.subscribe(MyRobot.Robot, [:sensor])
 ```
 
 ## Why Hierarchical Addressing?
@@ -60,7 +60,7 @@ New components can publish without coordinating with subscribers. The hierarchy 
 
 ```elixir
 # New sensor added - just publish to its path
-BB.publish(MyRobot, [:sensor, :wrist], wrist_data)
+BB.publish(MyRobot.Robot, [:sensor, :wrist], wrist_data)
 
 # Existing [:sensor] subscribers automatically receive it
 ```
@@ -106,7 +106,7 @@ Messages are created using the payload module's `new!/2` function, which returns
 message = JointState.new!(:shoulder, name: :shoulder, positions: [0.5])
 
 # Publish the message
-BB.publish(MyRobot, [:sensor, :shoulder], message)
+BB.publish(MyRobot.Robot, [:sensor, :shoulder], message)
 ```
 
 The first argument to `new!/2` is the `frame_id` (typically the joint or link name), and the second is a keyword list of payload attributes.
@@ -134,21 +134,21 @@ BB.publish(robot_module, [:controller, controller_name], status_message)
 ### Exact Path
 
 ```elixir
-BB.subscribe(MyRobot, [:sensor, :shoulder])
+BB.subscribe(MyRobot.Robot, [:sensor, :shoulder])
 # Receives: [:sensor, :shoulder] only
 ```
 
 ### Subtree (Prefix)
 
 ```elixir
-BB.subscribe(MyRobot, [:sensor])
+BB.subscribe(MyRobot.Robot, [:sensor])
 # Receives: [:sensor, :shoulder], [:sensor, :elbow], [:sensor, :wrist], etc.
 ```
 
 ### Root (Everything)
 
 ```elixir
-BB.subscribe(MyRobot, [])
+BB.subscribe(MyRobot.Robot, [])
 # Receives: all messages for this robot
 ```
 
@@ -158,13 +158,13 @@ By default, subscriptions receive all message types published to matching paths.
 
 ```elixir
 # Only receive JointState messages from sensors
-BB.subscribe(MyRobot, [:sensor], message_types: [BB.Message.Sensor.JointState])
+BB.subscribe(MyRobot.Robot, [:sensor], message_types: [BB.Message.Sensor.JointState])
 
 # Only receive IMU data from a specific sensor
-BB.subscribe(MyRobot, [:sensor, :imu], message_types: [BB.Message.Sensor.Imu])
+BB.subscribe(MyRobot.Robot, [:sensor, :imu], message_types: [BB.Message.Sensor.Imu])
 
 # Multiple types
-BB.subscribe(MyRobot, [:sensor], message_types: [
+BB.subscribe(MyRobot.Robot, [:sensor], message_types: [
   BB.Message.Sensor.JointState,
   BB.Message.Sensor.Imu
 ])
@@ -175,7 +175,7 @@ An empty list (the default) means no filtering - receive all message types at ma
 ### Unsubscribing
 
 ```elixir
-BB.unsubscribe(MyRobot, [:sensor, :shoulder])
+BB.unsubscribe(MyRobot.Robot, [:sensor, :shoulder])
 ```
 
 ## Routing Mechanics
@@ -342,7 +342,7 @@ The PubSub system copies messages to each subscriber. For large payloads:
 ### See All Messages
 
 ```elixir
-BB.subscribe(MyRobot, [])
+BB.subscribe(MyRobot.Robot, [])
 # In iex, you'll see all {:bb, path, message} tuples
 ```
 
@@ -351,7 +351,7 @@ BB.subscribe(MyRobot, [])
 ```elixir
 # In a GenServer
 def init(_) do
-  BB.subscribe(MyRobot, [])
+  BB.subscribe(MyRobot.Robot, [])
   {:ok, %{counts: %{}}}
 end
 

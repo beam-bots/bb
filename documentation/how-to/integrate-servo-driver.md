@@ -248,7 +248,7 @@ end
 Wire up the controller and actuator in your robot's DSL:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   controllers do
@@ -256,7 +256,7 @@ defmodule MyRobot do
   end
 
   topology do
-    link :base do
+    link :base_link do
       joint :shoulder, type: :revolute do
         limit lower: ~u(-90 degree), upper: ~u(90 degree), velocity: ~u(60 degree_per_second)
 
@@ -287,10 +287,10 @@ defmodule MyServo.ActuatorTest do
     end)
 
     # Start robot in simulation
-    {:ok, _} = BB.Supervisor.start_link(MyRobot, simulation: :kinematic)
+    {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot, simulation: :kinematic)
 
     # Send position command
-    BB.Actuator.set_position!(MyRobot, :servo, 0.0)
+    BB.Actuator.set_position!(MyRobot.Robot, :servo, 0.0)
   end
 end
 ```

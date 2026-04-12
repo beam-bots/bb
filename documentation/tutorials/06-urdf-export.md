@@ -30,13 +30,13 @@ Export your robot with the `bb.to_urdf` mix task:
 
 ```bash
 # Print URDF to stdout
-mix bb.to_urdf MyRobot
+mix bb.to_urdf MyRobot.Robot
 
 # Write to a file
-mix bb.to_urdf MyRobot --output robot.urdf
+mix bb.to_urdf MyRobot.Robot --output robot.urdf
 
 # Short form
-mix bb.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot.Robot -o robot.urdf
 ```
 
 ## Example Output
@@ -45,8 +45,8 @@ For a simple two-joint robot, the output looks like:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<robot name="MyRobot">
-  <link name="base">
+<robot name="MyRobot.Robot">
+  <link name="base_link">
     <visual>
       <geometry>
         <cylinder radius="0.04" length="0.05"/>
@@ -66,7 +66,7 @@ For a simple two-joint robot, the output looks like:
   </link>
 
   <joint name="pan_joint" type="revolute">
-    <parent link="base"/>
+    <parent link="base_link"/>
     <child link="pan_link"/>
     <origin xyz="0.0 0.0 0.05" rpy="0.0 0.0 0.0"/>
     <axis xyz="0.0 0.0 1.0"/>
@@ -85,10 +85,10 @@ You can also export from Elixir code:
 alias BB.Urdf.Exporter
 
 # From a module
-{:ok, xml} = Exporter.export(MyRobot)
+{:ok, xml} = Exporter.export(MyRobot.Robot)
 
 # From a robot struct
-robot = MyRobot.robot()
+robot = MyRobot.Robot.robot()
 {:ok, xml} = Exporter.export_robot(robot)
 
 # Write to file
@@ -101,7 +101,7 @@ If you have ROS installed, view your robot:
 
 ```bash
 # Export the robot
-mix bb.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot.Robot -o robot.urdf
 
 # View in RViz (requires ROS)
 roslaunch urdf_tutorial display.launch model:=robot.urdf
@@ -113,7 +113,7 @@ For simulation in Gazebo:
 
 ```bash
 # Export
-mix bb.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot.Robot -o robot.urdf
 
 # Launch Gazebo with the model
 gazebo --verbose robot.urdf

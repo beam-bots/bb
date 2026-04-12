@@ -101,11 +101,11 @@ end
 Add the sensor to your robot:
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   topology do
-    link :base do
+    link :base_link do
       sensor :distance, {MySensor, pin: 18, poll_interval: 50}
     end
   end
@@ -118,7 +118,7 @@ Consume the sensor data elsewhere:
 
 ```elixir
 # In another process
-BB.subscribe(MyRobot, [:sensor, :distance])
+BB.subscribe(MyRobot.Robot, [:sensor, :distance])
 
 # In handle_info
 def handle_info({:bb, [:sensor, :distance], %{payload: range}}, state) do

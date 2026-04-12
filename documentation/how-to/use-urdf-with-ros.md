@@ -20,16 +20,16 @@ Use the mix task to export:
 
 ```bash
 # Print to stdout
-mix bb.to_urdf MyRobot
+mix bb.to_urdf MyRobot.Robot
 
 # Write to file
-mix bb.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot.Robot -o robot.urdf
 ```
 
 Or programmatically:
 
 ```elixir
-urdf = BB.URDF.Exporter.export(MyRobot)
+urdf = BB.URDF.Exporter.export(MyRobot.Robot)
 File.write!("robot.urdf", urdf)
 ```
 
@@ -44,7 +44,7 @@ check_urdf robot.urdf
 Expected output:
 
 ```
-robot name is: MyRobot
+robot name is: MyRobot.Robot
 ---------- Successfully Parsed XML ---------------
 root Link: base has 1 child(ren)
     child(1):  link_1
@@ -180,7 +180,7 @@ end
 defp handle_ros_command(msg) do
   for {name, position} <- Enum.zip(msg.name, msg.position) do
     joint = String.to_atom(name)
-    BB.Actuator.set_position!(MyRobot, joint, position)
+    BB.Actuator.set_position!(MyRobot.Robot, joint, position)
   end
 end
 ```
