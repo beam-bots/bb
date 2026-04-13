@@ -33,11 +33,11 @@ Beam Bots is a framework for building resilient robotics projects in Elixir.
 ## Example
 
 ```elixir
-defmodule MyRobot do
+defmodule MyRobot.Robot do
   use BB
 
   topology do
-    link :base do
+    link :base_link do
       joint :shoulder do
         type(:revolute)
 
@@ -80,15 +80,15 @@ defmodule MyRobot do
 end
 
 # Start the supervision tree
-{:ok, _pid} = BB.Supervisor.start_link(MyRobot)
+{:ok, _pid} = BB.Supervisor.start_link(MyRobot.Robot)
 
 # Compute forward kinematics
-robot = MyRobot.robot()
+robot = MyRobot.Robot.robot()
 positions = %{shoulder: :math.pi() / 4, elbow: 0.0}
 {x, y, z} = BB.Robot.Kinematics.link_position(robot, positions, :forearm)
 
 # Export to URDF
-mix bb.to_urdf MyRobot -o robot.urdf
+mix bb.to_urdf MyRobot.Robot -o robot.urdf
 ```
 
 ## Documentation
