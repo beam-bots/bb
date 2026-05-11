@@ -149,6 +149,17 @@ defmodule BB.Dsl do
            ]},
         doc: "Maximum velocity - both positive and negative - that can be commanded to the joint",
         required: true
+      ],
+      acceleration: [
+        type:
+          {:or,
+           [
+             unit_type(compatible: :degree_per_square_second),
+             unit_type(compatible: :meter_per_square_second)
+           ]},
+        doc:
+          "Maximum acceleration - both positive and negative - that can be commanded to the joint. Optional; when omitted, motion timing assumes a rectangular velocity profile.",
+        required: false
       ]
     ]
   }
@@ -992,6 +1003,7 @@ defmodule BB.Dsl do
     transformers: [
       __MODULE__.DefaultNameTransformer,
       __MODULE__.TopologyTransformer,
+      __MODULE__.ValidateLimitUnitsTransformer,
       __MODULE__.SupervisorTransformer,
       __MODULE__.UniquenessTransformer,
       __MODULE__.RobotTransformer,

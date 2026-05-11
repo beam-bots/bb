@@ -61,17 +61,20 @@ defmodule BB.Robot.Joint do
   - `lower`/`upper`: angle limits in radians
   - `velocity`: max angular velocity in rad/s
   - `effort`: max torque in N·m
+  - `acceleration`: max angular acceleration in rad/s² (optional)
 
   For prismatic joints:
   - `lower`/`upper`: position limits in meters
   - `velocity`: max linear velocity in m/s
   - `effort`: max effort in N·m (as defined in DSL)
+  - `acceleration`: max linear acceleration in m/s² (optional)
   """
   @type limits :: %{
           lower: float() | nil,
           upper: float() | nil,
           velocity: float(),
-          effort: float()
+          effort: float(),
+          acceleration: float() | nil
         }
 
   @typedoc """

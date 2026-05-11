@@ -167,6 +167,38 @@ defmodule BB.Robot.Units do
   end
 
   @doc """
+  Convert a linear acceleration unit to metres per second squared (float).
+
+  ## Examples
+
+      iex> import BB.Unit
+      iex> BB.Robot.Units.to_meters_per_square_second(~u(9.81 meter_per_square_second))
+      9.81
+  """
+  @spec to_meters_per_square_second(Cldr.Unit.t()) :: float()
+  def to_meters_per_square_second(%Cldr.Unit{} = unit) do
+    unit
+    |> Cldr.Unit.convert!(:meter_per_square_second)
+    |> extract_float()
+  end
+
+  @doc """
+  Convert an angular acceleration unit to radians per second squared (float).
+
+  ## Examples
+
+      iex> import BB.Unit
+      iex> BB.Robot.Units.to_radians_per_square_second(~u(360 degree_per_square_second))
+      :math.pi() * 2
+  """
+  @spec to_radians_per_square_second(Cldr.Unit.t()) :: float()
+  def to_radians_per_square_second(%Cldr.Unit{} = unit) do
+    unit
+    |> Cldr.Unit.convert!(:radian_per_square_second)
+    |> extract_float()
+  end
+
+  @doc """
   Convert a linear damping coefficient to N·s/m (float).
 
   ## Examples
@@ -247,6 +279,14 @@ defmodule BB.Robot.Units do
   @spec to_radians_per_second_or_nil(Cldr.Unit.t() | nil) :: float() | nil
   def to_radians_per_second_or_nil(nil), do: nil
   def to_radians_per_second_or_nil(unit), do: to_radians_per_second(unit)
+
+  @spec to_meters_per_square_second_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  def to_meters_per_square_second_or_nil(nil), do: nil
+  def to_meters_per_square_second_or_nil(unit), do: to_meters_per_square_second(unit)
+
+  @spec to_radians_per_square_second_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  def to_radians_per_square_second_or_nil(nil), do: nil
+  def to_radians_per_square_second_or_nil(unit), do: to_radians_per_square_second(unit)
 
   @spec to_linear_damping_or_nil(Cldr.Unit.t() | nil) :: float() | nil
   def to_linear_damping_or_nil(nil), do: nil

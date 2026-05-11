@@ -285,8 +285,23 @@ defmodule BB.Robot.Builder do
         [:limits, :effort]
       )
 
-    limits = %{lower: lower, upper: upper, velocity: velocity, effort: effort}
-    subs = lower_subs ++ upper_subs ++ velocity_subs ++ effort_subs
+    {acceleration, acceleration_subs} =
+      convert_value_with_ref_or_nil(
+        limit.acceleration,
+        &Units.to_radians_per_square_second_or_nil/1,
+        joint_name,
+        [:limits, :acceleration]
+      )
+
+    limits = %{
+      lower: lower,
+      upper: upper,
+      velocity: velocity,
+      effort: effort,
+      acceleration: acceleration
+    }
+
+    subs = lower_subs ++ upper_subs ++ velocity_subs ++ effort_subs ++ acceleration_subs
     {limits, subs}
   end
 
@@ -318,8 +333,23 @@ defmodule BB.Robot.Builder do
     {effort, effort_subs} =
       convert_value_with_ref(limit.effort, &Units.to_newton/1, joint_name, [:limits, :effort])
 
-    limits = %{lower: lower, upper: upper, velocity: velocity, effort: effort}
-    subs = lower_subs ++ upper_subs ++ velocity_subs ++ effort_subs
+    {acceleration, acceleration_subs} =
+      convert_value_with_ref_or_nil(
+        limit.acceleration,
+        &Units.to_meters_per_square_second_or_nil/1,
+        joint_name,
+        [:limits, :acceleration]
+      )
+
+    limits = %{
+      lower: lower,
+      upper: upper,
+      velocity: velocity,
+      effort: effort,
+      acceleration: acceleration
+    }
+
+    subs = lower_subs ++ upper_subs ++ velocity_subs ++ effort_subs ++ acceleration_subs
     {limits, subs}
   end
 
@@ -340,8 +370,23 @@ defmodule BB.Robot.Builder do
         [:limits, :effort]
       )
 
-    limits = %{lower: nil, upper: nil, velocity: velocity, effort: effort}
-    subs = velocity_subs ++ effort_subs
+    {acceleration, acceleration_subs} =
+      convert_value_with_ref_or_nil(
+        limit.acceleration,
+        &Units.to_radians_per_square_second_or_nil/1,
+        joint_name,
+        [:limits, :acceleration]
+      )
+
+    limits = %{
+      lower: nil,
+      upper: nil,
+      velocity: velocity,
+      effort: effort,
+      acceleration: acceleration
+    }
+
+    subs = velocity_subs ++ effort_subs ++ acceleration_subs
     {limits, subs}
   end
 
