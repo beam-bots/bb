@@ -105,25 +105,24 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
 
   defp check_fields(limit, expected_units, path, module, joint_type) do
     Enum.reduce_while(expected_units, :ok, fn {field, expected_unit}, :ok ->
-      case Map.get(limit, field) do
-        nil ->
-          {:cont, :ok}
-
-        %ParamRef{} ->
-          {:cont, :ok}
-
-        %Cldr.Unit{} = value ->
-          if Unit.compatible?(value, expected_unit) do
-            {:cont, :ok}
-          else
-            {:halt, {:error, mismatch_error(module, path, field, value, expected_unit, joint_type)}}
-          end
-
-        _ ->
-          {:cont, :ok}
-      end
+      check_field(Map.get(limit, field), field, expected_unit, path, module, joint_type)
     end)
   end
+
+  defp check_field(nil, _field, _expected_unit, _path, _module, _joint_type), do: {:cont, :ok}
+
+  defp check_field(%ParamRef{}, _field, _expected_unit, _path, _module, _joint_type),
+    do: {:cont, :ok}
+
+  defp check_field(%Cldr.Unit{} = value, field, expected_unit, path, module, joint_type) do
+    if Unit.compatible?(value, expected_unit) do
+      {:cont, :ok}
+    else
+      {:halt, {:error, mismatch_error(module, path, field, value, expected_unit, joint_type)}}
+    end
+  end
+
+  defp check_field(_value, _field, _expected_unit, _path, _module, _joint_type), do: {:cont, :ok}
 
   defp mismatch_error(module, path, field, value, expected_unit, joint_type) do
     DslError.exception(

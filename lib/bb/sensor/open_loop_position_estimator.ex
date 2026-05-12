@@ -271,42 +271,44 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
 
   defp trapezoidal_position(state, now, total_duration_ms) do
     distance = state.target_position - state.initial_position
-    direction = if distance >= 0, do: 1.0, else: -1.0
-    abs_distance = abs(distance)
     a = state.acceleration
     v = state.peak_velocity
 
-    if a == 0.0 or v == 0.0 or abs_distance == 0.0 do
-      state.target_position
-    else
-      t_accel_s = v / a
-      accel_duration_ms = round(t_accel_s * 1000)
-      elapsed_ms = now - state.command_time
-      total_ms = total_duration_ms
-      signed_accel = direction * a
-      signed_v = direction * v
+    cond do
+      a == 0.0 -> state.target_position
+      v == 0.0 -> state.target_position
+      distance == 0.0 -> state.target_position
+      true -> trapezoidal_phase(state, now, total_duration_ms, distance, a, v)
+    end
+  end
 
-      cond do
-        elapsed_ms <= 0 ->
-          state.initial_position
+  defp trapezoidal_phase(state, now, total_ms, distance, a, v) do
+    direction = if distance >= 0, do: 1.0, else: -1.0
+    accel_duration_ms = round(v / a * 1000)
+    elapsed_ms = now - state.command_time
+    signed_accel = direction * a
+    signed_v = direction * v
 
-        elapsed_ms >= total_ms ->
-          state.target_position
+    cond do
+      elapsed_ms <= 0 ->
+        state.initial_position
 
-        elapsed_ms < accel_duration_ms ->
-          t = elapsed_ms / 1000
-          state.initial_position + 0.5 * signed_accel * t * t
+      elapsed_ms >= total_ms ->
+        state.target_position
 
-        elapsed_ms > total_ms - accel_duration_ms ->
-          t_remaining = (total_ms - elapsed_ms) / 1000
-          state.target_position - 0.5 * signed_accel * t_remaining * t_remaining
+      elapsed_ms < accel_duration_ms ->
+        t = elapsed_ms / 1000
+        state.initial_position + 0.5 * signed_accel * t * t
 
-        true ->
-          accel_s = accel_duration_ms / 1000
-          cruise_elapsed_s = (elapsed_ms - accel_duration_ms) / 1000
-          accel_distance = 0.5 * signed_accel * accel_s * accel_s
-          state.initial_position + accel_distance + signed_v * cruise_elapsed_s
-      end
+      elapsed_ms > total_ms - accel_duration_ms ->
+        t_remaining = (total_ms - elapsed_ms) / 1000
+        state.target_position - 0.5 * signed_accel * t_remaining * t_remaining
+
+      true ->
+        accel_s = accel_duration_ms / 1000
+        cruise_elapsed_s = (elapsed_ms - accel_duration_ms) / 1000
+        accel_distance = 0.5 * signed_accel * accel_s * accel_s
+        state.initial_position + accel_distance + signed_v * cruise_elapsed_s
     end
   end
 
