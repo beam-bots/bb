@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 spark_locals_without_parens = [
+  acceleration: 1,
   actuator: 2,
   actuator: 3,
   allowed_states: 1,

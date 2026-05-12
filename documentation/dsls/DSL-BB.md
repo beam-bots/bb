@@ -816,6 +816,7 @@ Limits applied to joint movement
 | [`velocity`](#topology-joint-limit-velocity){: #topology-joint-limit-velocity .spark-required} | `any` |  | Maximum velocity - both positive and negative - that can be commanded to the joint |
 | [`lower`](#topology-joint-limit-lower){: #topology-joint-limit-lower } | `any` |  | The lower joint limit |
 | [`upper`](#topology-joint-limit-upper){: #topology-joint-limit-upper } | `any` |  | The upper joint limit |
+| [`acceleration`](#topology-joint-limit-acceleration){: #topology-joint-limit-acceleration } | `any` |  | Maximum acceleration - both positive and negative - that can be commanded to the joint. Optional; when omitted, motion timing assumes a rectangular velocity profile. |
 
 
 

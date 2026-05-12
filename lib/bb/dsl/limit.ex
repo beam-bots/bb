@@ -11,7 +11,8 @@ defmodule BB.Dsl.Limit do
             lower: nil,
             upper: nil,
             effort: nil,
-            velocity: nil
+            velocity: nil,
+            acceleration: nil
 
   alias Spark.Dsl.Entity
 
@@ -21,6 +22,7 @@ defmodule BB.Dsl.Limit do
           lower: nil | Cldr.Unit.t(),
           upper: nil | Cldr.Unit.t(),
           effort: Cldr.Unit.t(),
-          velocity: Cldr.Unit.t()
+          velocity: Cldr.Unit.t(),
+          acceleration: nil | Cldr.Unit.t()
         }
 end

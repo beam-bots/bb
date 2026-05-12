@@ -16,6 +16,13 @@ defmodule BB.Message.Actuator.BeginMotion do
   - `expected_arrival` - When motion should complete (monotonic milliseconds)
   - `command_id` - Optional correlation ID from the originating command
   - `command_type` - Optional type of command that initiated this motion
+  - `acceleration` - Optional acceleration magnitude (rad/s² or m/s²) used when
+    the motion follows a trapezoidal/triangular velocity profile. `nil`
+    indicates a rectangular profile and is the legacy behaviour.
+  - `peak_velocity` - Optional peak velocity magnitude (rad/s or m/s) achieved
+    during the motion. Paired with `acceleration` to fully describe a
+    trapezoidal or triangular profile. `nil` falls back to easing-based
+    interpolation.
 
   ## Example
 
@@ -33,7 +40,15 @@ defmodule BB.Message.Actuator.BeginMotion do
 
   @command_types [:position, :velocity, :effort, :trajectory]
 
-  defstruct [:initial_position, :target_position, :expected_arrival, :command_id, :command_type]
+  defstruct [
+    :initial_position,
+    :target_position,
+    :expected_arrival,
+    :command_id,
+    :command_type,
+    :acceleration,
+    :peak_velocity
+  ]
 
   use BB.Message,
     schema: [
@@ -57,6 +72,18 @@ defmodule BB.Message.Actuator.BeginMotion do
         type: {:in, @command_types},
         required: false,
         doc: "Type of command that initiated this motion"
+      ],
+      acceleration: [
+        type: {:or, [:float, nil]},
+        required: false,
+        doc:
+          "Acceleration magnitude (rad/s² or m/s²) for trapezoidal profiles. Nil means rectangular profile."
+      ],
+      peak_velocity: [
+        type: {:or, [:float, nil]},
+        required: false,
+        doc:
+          "Peak velocity magnitude (rad/s or m/s) during the motion. Paired with `acceleration`."
       ]
     ]
 
@@ -67,6 +94,8 @@ defmodule BB.Message.Actuator.BeginMotion do
           target_position: float(),
           expected_arrival: integer(),
           command_id: reference() | nil,
-          command_type: command_type() | nil
+          command_type: command_type() | nil,
+          acceleration: float() | nil,
+          peak_velocity: float() | nil
         }
 end
