@@ -11,6 +11,27 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.15.2](https://github.com/beam-bots/bb/compare/v0.15.1...v0.15.2) (2026-05-12)
+
+
+
+
+### Bug Fixes:
+
+* docs: update README example to match Igniter output (#73) by James Harton
+
+* docs: align tutorial with Igniter-generated code (#73) by James Harton
+
+* docs: use `limits` instead of `limit` in first robot tutorial (#74) by James Harton
+
+* docs: clarify Igniter quick start instructions (#72) by James Harton
+
+* `OpenLoopPositionEstimator` crash on `set_position/3` in kinematic simulation (#59) by James Harton
+
+### Improvements:
+
+* Trapezoidal motion profile and accurate position tracking in `BB.Sim.Actuator` (#85) by James Harton
+
 ## [v0.15.1](https://github.com/beam-bots/bb/compare/v0.15.0...v0.15.1) (2026-02-08)
 
 
