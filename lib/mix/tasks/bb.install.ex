@@ -18,18 +18,19 @@ if Code.ensure_loaded?(Igniter) do
     use Igniter.Mix.Task
 
     alias Igniter.Project.Formatter
-    alias Igniter.Project.Module
 
     @impl Igniter.Mix.Task
     def info(_argv, _parent) do
       %Igniter.Mix.Task.Info{
-        composes: ["bb.add_robot"]
+        composes: ["bb.add_robot"],
+        schema: [robot: :string],
+        aliases: [r: :robot]
       }
     end
 
     @impl Igniter.Mix.Task
     def igniter(igniter) do
-      robot_module = Module.module_name(igniter, "Robot")
+      robot_module = BB.Igniter.robot_module(igniter)
 
       igniter
       |> Formatter.import_dep(:bb)

@@ -34,13 +34,7 @@ if Code.ensure_loaded?(Igniter) do
 
     @impl Igniter.Mix.Task
     def igniter(igniter) do
-      options = igniter.args.options
-
-      robot_module =
-        case Keyword.get(options, :robot) do
-          nil -> Module.module_name(igniter, "Robot")
-          name -> Module.parse(name)
-        end
+      robot_module = BB.Igniter.robot_module(igniter)
 
       igniter
       |> create_robot_module(robot_module)
