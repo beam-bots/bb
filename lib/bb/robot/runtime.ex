@@ -783,6 +783,7 @@ defmodule BB.Robot.Runtime do
 
   defp handle_execute_command(command, goal, execution_id, state) do
     category = command.category || :default
+    goal = coerce_goal(goal, command.arguments)
 
     with :ok <- check_state_allowed(command, state),
          {:ok, state} <- check_category_or_cancel(command, category, state) do
@@ -1359,4 +1360,65 @@ defmodule BB.Robot.Runtime do
   defp implements_safety?(module) do
     Spark.implements_behaviour?(module, BB.Safety)
   end
+
+  # Coerce goal values to their declared types and fill in declared defaults.
+  #
+  # Callers that go through `Map.new(keyword)` from the generated robot
+  # functions get atom keys + native Elixir values for free. Callers like the
+  # LiveView dashboard arrive with string values from HTML form submissions —
+  # `"ee_link"` instead of `:ee_link`, `"0.03"` instead of `0.03`. This lets
+  # those values reach the handler with their declared types.
+  #
+  # Coercion is best-effort: if a string can't be parsed, the original value
+  # is left in place so the handler can decide how to handle it. Unknown atoms
+  # specifically use `String.to_existing_atom/1` to avoid uncontrolled atom
+  # table growth.
+  @doc false
+  @spec coerce_goal(map(), [BB.Dsl.Command.Argument.t()]) :: map()
+  def coerce_goal(goal, arguments) when is_map(goal) and is_list(arguments) do
+    Enum.reduce(arguments, goal, fn arg, acc ->
+      case Map.fetch(acc, arg.name) do
+        {:ok, value} ->
+          Map.put(acc, arg.name, coerce_value(value, arg.type))
+
+        :error ->
+          maybe_put_default(acc, arg)
+      end
+    end)
+  end
+
+  defp maybe_put_default(goal, %{default: nil}), do: goal
+  defp maybe_put_default(goal, %{name: name, default: default}), do: Map.put(goal, name, default)
+
+  defp coerce_value(value, _type) when not is_binary(value), do: value
+
+  defp coerce_value(value, :atom) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> value
+  end
+
+  defp coerce_value(value, :integer) do
+    case Integer.parse(value) do
+      {int, ""} -> int
+      _ -> value
+    end
+  end
+
+  defp coerce_value(value, :float) do
+    case Float.parse(value) do
+      {float, ""} -> float
+      _ -> value
+    end
+  end
+
+  defp coerce_value("true", :boolean), do: true
+  defp coerce_value("false", :boolean), do: false
+
+  defp coerce_value(value, {:in, allowed}) do
+    coerced = coerce_value(value, :atom)
+    if coerced in allowed, do: coerced, else: value
+  end
+
+  defp coerce_value(value, _type), do: value
 end

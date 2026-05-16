@@ -371,4 +371,79 @@ defmodule BB.Robot.RuntimeTest do
                       }}
     end
   end
+
+  describe "coerce_goal/2" do
+    alias BB.Dsl.Command.Argument
+
+    test "passes through values that are already the declared type" do
+      args = [%Argument{name: :ee_link, type: :atom}, %Argument{name: :radius, type: :float}]
+      goal = %{ee_link: :gripper, radius: 0.5}
+
+      assert Runtime.coerce_goal(goal, args) == goal
+    end
+
+    test "coerces string atoms via to_existing_atom" do
+      _ = :pre_existing_atom
+      args = [%Argument{name: :name, type: :atom}]
+
+      assert Runtime.coerce_goal(%{name: "pre_existing_atom"}, args) == %{
+               name: :pre_existing_atom
+             }
+    end
+
+    test "leaves unknown atom strings alone rather than blowing up" do
+      args = [%Argument{name: :name, type: :atom}]
+      goal = %{name: "this_definitely_does_not_exist_as_an_atom_anywhere"}
+
+      assert Runtime.coerce_goal(goal, args) == goal
+    end
+
+    test "parses integer and float strings from form submissions" do
+      args = [
+        %Argument{name: :points, type: :integer},
+        %Argument{name: :radius, type: :float}
+      ]
+
+      assert Runtime.coerce_goal(%{points: "16", radius: "0.03"}, args) ==
+               %{points: 16, radius: 0.03}
+    end
+
+    test "leaves unparseable numeric strings alone" do
+      args = [%Argument{name: :n, type: :integer}]
+      goal = %{n: "not a number"}
+
+      assert Runtime.coerce_goal(goal, args) == goal
+    end
+
+    test "coerces boolean strings" do
+      args = [%Argument{name: :flag, type: :boolean}]
+
+      assert Runtime.coerce_goal(%{flag: "true"}, args) == %{flag: true}
+      assert Runtime.coerce_goal(%{flag: "false"}, args) == %{flag: false}
+    end
+
+    test "coerces {:in, …} enum values to atom and validates membership" do
+      args = [%Argument{name: :plane, type: {:in, [:xy, :xz, :yz]}}]
+
+      assert Runtime.coerce_goal(%{plane: "xz"}, args) == %{plane: :xz}
+      # A value outside the enum is passed through unchanged
+      assert Runtime.coerce_goal(%{plane: "diagonal"}, args) == %{plane: "diagonal"}
+    end
+
+    test "fills declared defaults when keys are missing" do
+      args = [
+        %Argument{name: :radius, type: :float, default: 0.03},
+        %Argument{name: :no_default, type: :integer}
+      ]
+
+      assert Runtime.coerce_goal(%{}, args) == %{radius: 0.03}
+    end
+
+    test "leaves keys that aren't declared in arguments alone" do
+      args = [%Argument{name: :declared, type: :integer}]
+
+      assert Runtime.coerce_goal(%{declared: "5", undeclared: "hello"}, args) ==
+               %{declared: 5, undeclared: "hello"}
+    end
+  end
 end
