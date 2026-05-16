@@ -110,6 +110,65 @@ if Code.ensure_loaded?(Igniter) do
       )
     end
 
+    @doc """
+    Adds a `link` entry to the robot's `topology do … end` section.
+
+    `body_code` is the DSL inside the link block as a string, e.g.
+
+        visual do
+          origin do z(~u(0.1 meter)) end
+        end
+
+        joint :shoulder do
+          ...
+        end
+
+    The section is created if it doesn't already exist. Idempotent on `name`:
+    if a top-level link with the same name is already present, the igniter is
+    returned unchanged.
+    """
+    @spec add_topology_link(Igniter.t(), module(), atom(), String.t()) :: Igniter.t()
+    def add_topology_link(igniter, robot_module, name, body_code) do
+      code = "link :#{name} do\n#{indent(body_code)}\nend\n"
+      add_named_dsl_entity(igniter, robot_module, :topology, :link, name, code)
+    end
+
+    @doc """
+    Populates an existing empty `link` in the robot's topology with `body_code`.
+
+    `link_path` is the chain of link names from the topology root down to the
+    leaf to populate, e.g. `[:base_link]` or
+    `[:base_link, :shoulder_link, :upper_arm_link]`.
+
+    Idempotent: if the leaf link already has any DSL entities in its body,
+    the igniter is returned unchanged so user customisations are preserved.
+    If the leaf link is empty, `body_code` is inserted as its body.
+
+    Returns the igniter unchanged if any link in `link_path` doesn't exist.
+    """
+    @spec populate_link(Igniter.t(), module(), [atom(), ...], String.t()) :: Igniter.t()
+    def populate_link(igniter, robot_module, link_path, body_code)
+        when is_list(link_path) and link_path != [] do
+      Spark.Igniter.update_dsl(igniter, robot_module, [{:section, :topology}], nil, fn zipper ->
+        maybe_insert_link_body(zipper, link_path, body_code)
+      end)
+    end
+
+    defp maybe_insert_link_body(zipper, link_path, body_code) do
+      case descend_to_link_body(zipper, link_path) do
+        {:ok, body_zipper} -> insert_if_empty(zipper, body_zipper, body_code)
+        :error -> {:ok, zipper}
+      end
+    end
+
+    defp insert_if_empty(zipper, body_zipper, body_code) do
+      if link_body_empty?(body_zipper) do
+        {:ok, Common.add_code(body_zipper, body_code)}
+      else
+        {:ok, zipper}
+      end
+    end
+
     defp wrap_in_groups([leaf], body_code) do
       "group :#{leaf} do\n#{indent(body_code)}\nend\n"
     end
@@ -162,6 +221,43 @@ if Code.ensure_loaded?(Igniter) do
            {:ok, group_body} <- Common.move_to_do_block(group_zipper) do
         group_path_exists?(group_body, rest)
       else
+        _ -> false
+      end
+    end
+
+    defp descend_to_link_body(zipper, [name]) do
+      case find_named_link(zipper, name) do
+        {:ok, link_zipper} -> Common.move_to_do_block(link_zipper)
+        :error -> :error
+      end
+    end
+
+    defp descend_to_link_body(zipper, [name | rest]) do
+      with {:ok, link_zipper} <- find_named_link(zipper, name),
+           {:ok, body_zipper} <- Common.move_to_do_block(link_zipper) do
+        descend_to_link_body(body_zipper, rest)
+      else
+        _ -> :error
+      end
+    end
+
+    defp find_named_link(zipper, name) do
+      case Function.move_to_function_call_in_current_scope(
+             zipper,
+             :link,
+             [2, 3],
+             &Function.argument_equals?(&1, 0, name)
+           ) do
+        {:ok, link_zipper} -> {:ok, link_zipper}
+        _ -> :error
+      end
+    end
+
+    defp link_body_empty?(body_zipper) do
+      case Sourceror.Zipper.node(body_zipper) do
+        nil -> true
+        {:__block__, _, []} -> true
+        {:__block__, _, [nil]} -> true
         _ -> false
       end
     end
