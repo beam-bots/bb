@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.15.4](https://github.com/beam-bots/bb/compare/v0.15.3...v0.15.4) (2026-05-16)
+
+
+
+
+### Improvements:
+
+* `BB.Igniter` helpers for writing into the topology section (#87) by James Harton
+
 ## [v0.15.3](https://github.com/beam-bots/bb/compare/v0.15.2...v0.15.3) (2026-05-13)
 
 
