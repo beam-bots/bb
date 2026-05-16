@@ -122,6 +122,65 @@ defmodule BB.IgniterTest do
     end
   end
 
+  describe "add_topology_link/4" do
+    test "adds a new named link with the given body to the topology section" do
+      body = "joint :shoulder do\n  type(:revolute)\nend\n"
+
+      project_with_robot()
+      |> BB.Igniter.add_topology_link(Test.Robot, :pedestal, body)
+      |> assert_has_patch("lib/test/robot.ex", """
+      + |    link :pedestal do
+      + |      joint :shoulder do
+      + |        type(:revolute)
+      + |      end
+      + |    end
+      """)
+    end
+
+    test "is idempotent on link name" do
+      body = "joint :shoulder do\n  type(:revolute)\nend\n"
+
+      project_with_robot()
+      |> BB.Igniter.add_topology_link(Test.Robot, :pedestal, body)
+      |> apply_igniter!()
+      |> BB.Igniter.add_topology_link(Test.Robot, :pedestal, body)
+      |> assert_unchanged()
+    end
+  end
+
+  describe "populate_link/4" do
+    test "fills in an existing empty link's body" do
+      body = "joint :shoulder do\n  type(:revolute)\nend\n"
+
+      project_with_robot()
+      |> BB.Igniter.populate_link(Test.Robot, [:base_link], body)
+      |> assert_has_patch("lib/test/robot.ex", """
+      + |      joint :shoulder do
+      + |        type(:revolute)
+      + |      end
+      """)
+    end
+
+    test "is a no-op if the leaf link is already populated" do
+      first_body = "joint :shoulder do\n  type(:revolute)\nend\n"
+      second_body = "joint :elbow do\n  type(:revolute)\nend\n"
+
+      project_with_robot()
+      |> BB.Igniter.populate_link(Test.Robot, [:base_link], first_body)
+      |> apply_igniter!()
+      |> BB.Igniter.populate_link(Test.Robot, [:base_link], second_body)
+      |> assert_unchanged()
+    end
+
+    test "is a no-op if the link path doesn't exist" do
+      body = "joint :shoulder do\n  type(:revolute)\nend\n"
+
+      project_with_robot()
+      |> BB.Igniter.populate_link(Test.Robot, [:nonexistent_link], body)
+      |> assert_unchanged()
+    end
+  end
+
   defp put_options(igniter, options) do
     %{igniter | args: %{igniter.args | options: options}}
   end
