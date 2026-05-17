@@ -19,10 +19,10 @@ defmodule BB.Dsl.Limit do
   @type t :: %__MODULE__{
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
-          lower: nil | Cldr.Unit.t(),
-          upper: nil | Cldr.Unit.t(),
-          effort: Cldr.Unit.t(),
-          velocity: Cldr.Unit.t(),
-          acceleration: nil | Cldr.Unit.t()
+          lower: nil | Localize.Unit.t(),
+          upper: nil | Localize.Unit.t(),
+          effort: Localize.Unit.t(),
+          velocity: Localize.Unit.t(),
+          acceleration: nil | Localize.Unit.t()
         }
 end

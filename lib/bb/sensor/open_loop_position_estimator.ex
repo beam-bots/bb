@@ -85,7 +85,6 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
   import BB.Unit
   import BB.Unit.Option
 
-  alias BB.Cldr.Unit, as: CldrUnit
   alias BB.Message
   alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Sensor.JointState
@@ -134,13 +133,13 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
 
     publish_interval_ms =
       publish_rate
-      |> CldrUnit.convert!(:hertz)
+      |> Localize.Unit.convert!("hertz")
       |> Units.extract_float()
       |> then(&round(1000 / &1))
 
     max_silence_ms =
       max_silence
-      |> CldrUnit.convert!(:second)
+      |> Localize.Unit.convert!("second")
       |> Units.extract_float()
       |> then(&round(&1 * 1000))
 

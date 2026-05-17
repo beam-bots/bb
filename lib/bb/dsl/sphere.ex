@@ -10,7 +10,7 @@ defmodule BB.Dsl.Sphere do
             __spark_metadata__: nil,
             radius: nil
 
-  alias Cldr.Unit
+  alias Localize.Unit
   alias Spark.Dsl.Entity
 
   @type t :: %__MODULE__{

@@ -7,8 +7,8 @@ defmodule BB.Dsl.TopologyTransformer do
   Validate and transform links as required.
   """
   use Spark.Dsl.Transformer
-  alias BB.Cldr.Unit
   alias BB.Dsl.{Axis, Dynamics, Info, Joint, Limit, Link, ParamRef}
+  alias BB.Unit
   alias Spark.{Dsl.Transformer, Error.DslError}
 
   @doc false

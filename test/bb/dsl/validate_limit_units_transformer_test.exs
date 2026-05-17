@@ -60,7 +60,7 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformerTest do
 
     test "rejects linear acceleration on a revolute joint" do
       assert_raise Spark.Error.DslError,
-                   ~r/`meter_per_square_second`.*not compatible with a `revolute`/sm,
+                   ~r/`meter-per-square-second`.*not compatible with a `revolute`/sm,
                    fn ->
                      defmodule RevoluteLinearAccel do
                        use BB
@@ -114,7 +114,7 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformerTest do
 
     test "rejects angular acceleration on a prismatic joint" do
       assert_raise Spark.Error.DslError,
-                   ~r/`degree_per_square_second`.*not compatible with a `prismatic`/sm,
+                   ~r/`degree-per-square-second`.*not compatible with a `prismatic`/sm,
                    fn ->
                      defmodule PrismaticAngularAccel do
                        use BB
