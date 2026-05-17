@@ -909,7 +909,8 @@ System-wide settings
 | [`registry_options`](#settings-registry_options){: #settings-registry_options } | `keyword` |  | Options passed to Registry.start_link/1. Defaults to `[partitions: System.schedulers_online()]` at runtime. |
 | [`supervisor_module`](#settings-supervisor_module){: #settings-supervisor_module } | `module` | `Supervisor` | The supervisor module to use |
 | [`parameter_store`](#settings-parameter_store){: #settings-parameter_store } | `module \| {module, keyword}` |  | Optional parameter persistence backend. Use a module or `{Module, opts}` tuple. |
-| [`auto_disarm_on_error`](#settings-auto_disarm_on_error){: #settings-auto_disarm_on_error } | `boolean` | `true` | Automatically disarm the robot when a hardware error is reported. Defaults to true. |
+| [`topology_max_restarts`](#settings-topology_max_restarts){: #settings-topology_max_restarts } | `non_neg_integer` | `3` | Maximum restarts allowed in the topology supervisor before it gives up and the robot force-disarms. |
+| [`topology_max_seconds`](#settings-topology_max_seconds){: #settings-topology_max_seconds } | `pos_integer` | `5` | Time window (in seconds) over which `topology_max_restarts` is counted. |
 
 
 

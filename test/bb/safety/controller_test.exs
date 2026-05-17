@@ -267,38 +267,10 @@ defmodule BB.Safety.ControllerTest do
     end
   end
 
-  # Robot with default auto_disarm_on_error (true)
-  defmodule RobotWithAutoDisarm do
+  defmodule RobotForReporting do
     @moduledoc false
     use BB
     import BB.Unit
-
-    topology do
-      link :base do
-        joint :joint1 do
-          type :revolute
-          actuator :servo, BB.Test.MockActuator
-
-          limit do
-            effort(~u(10 newton_meter))
-            velocity(~u(100 degree_per_second))
-          end
-
-          link :child
-        end
-      end
-    end
-  end
-
-  # Robot with auto_disarm_on_error disabled
-  defmodule RobotWithoutAutoDisarm do
-    @moduledoc false
-    use BB
-    import BB.Unit
-
-    settings do
-      auto_disarm_on_error(false)
-    end
 
     topology do
       link :base do
@@ -318,13 +290,13 @@ defmodule BB.Safety.ControllerTest do
   end
 
   describe "report_error/3" do
-    test "publishes hardware error message" do
-      start_supervised!(RobotWithAutoDisarm)
+    test "publishes a hardware error message" do
+      start_supervised!(RobotForReporting)
 
-      BB.PubSub.subscribe(RobotWithAutoDisarm, [:safety, :error])
+      BB.PubSub.subscribe(RobotForReporting, [:safety, :error])
 
       BB.Safety.report_error(
-        RobotWithAutoDisarm,
+        RobotForReporting,
         [:controller, :servo_1],
         {:hardware_error, 0x04}
       )
@@ -338,62 +310,42 @@ defmodule BB.Safety.ControllerTest do
                       }}
     end
 
-    test "auto-disarms when auto_disarm_on_error is true and robot is armed" do
-      start_supervised!(RobotWithAutoDisarm)
-
-      :ok = BB.Safety.arm(RobotWithAutoDisarm)
-      assert BB.Safety.armed?(RobotWithAutoDisarm)
+    test "does not disarm an armed robot" do
+      start_supervised!(RobotForReporting)
+      :ok = BB.Safety.arm(RobotForReporting)
 
       BB.Safety.report_error(
-        RobotWithAutoDisarm,
-        [:controller, :servo_1],
-        {:hardware_error, 0x04}
-      )
-
-      # Give the async disarm time to complete
-      Process.sleep(100)
-
-      assert BB.Safety.state(RobotWithAutoDisarm) == :disarmed
-    end
-
-    test "does not disarm when robot is already disarmed" do
-      start_supervised!(RobotWithAutoDisarm)
-
-      assert BB.Safety.state(RobotWithAutoDisarm) == :disarmed
-
-      BB.Safety.report_error(
-        RobotWithAutoDisarm,
+        RobotForReporting,
         [:controller, :servo_1],
         {:hardware_error, 0x04}
       )
 
       Process.sleep(50)
 
-      assert BB.Safety.state(RobotWithAutoDisarm) == :disarmed
+      assert BB.Safety.armed?(RobotForReporting)
     end
+  end
 
-    test "does not auto-disarm when auto_disarm_on_error is false" do
-      start_supervised!(RobotWithoutAutoDisarm)
+  describe "topology supervisor failure" do
+    test "force-disarms and transitions to :error when topology supervisor stops" do
+      Process.flag(:trap_exit, true)
 
-      :ok = BB.Safety.arm(RobotWithoutAutoDisarm)
-      assert BB.Safety.armed?(RobotWithoutAutoDisarm)
+      start_supervised!(RobotForReporting)
+      :ok = BB.Safety.arm(RobotForReporting)
 
-      BB.PubSub.subscribe(RobotWithoutAutoDisarm, [:safety, :error])
+      BB.PubSub.subscribe(RobotForReporting, [:state_machine])
 
-      BB.Safety.report_error(
-        RobotWithoutAutoDisarm,
-        [:controller, :servo_1],
-        {:hardware_error, 0x04}
-      )
+      topology_pid =
+        BB.Process.whereis(RobotForReporting, BB.TopologySupervisor)
 
-      # Should still receive the error message
-      assert_receive {:bb, [:safety, :error], %BB.Message{}}
+      assert is_pid(topology_pid)
 
-      # Give async processing time
-      Process.sleep(100)
+      Process.exit(topology_pid, :kill)
 
-      # Should still be armed
-      assert BB.Safety.armed?(RobotWithoutAutoDisarm)
+      assert_receive {:bb, [:state_machine], %BB.Message{payload: %Transition{to: :error}}},
+                     1_000
+
+      assert BB.Safety.state(RobotForReporting) == :error
     end
   end
 end

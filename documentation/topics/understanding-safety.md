@@ -68,16 +68,20 @@ Disarm callbacks run concurrently with a 5-second timeout per callback. This des
 
 If any callback fails, times out, or raises, the robot transitions to `:error` rather than `:disarmed`.
 
-## Hardware Error Reporting
+## Hardware Error Reporting and Escalation
 
-Controllers and actuators can report hardware errors using `BB.Safety.report_error/3`. The default behaviour is automatic disarm, which is safe but conservative.
+Controllers and actuators can report hardware errors using `BB.Safety.report_error/3`. This publishes a `BB.Safety.HardwareError` message to `[:safety, :error]` for subscribers - it does not disarm the robot or change safety state.
 
-When to disable auto-disarm:
-- **Transient errors** - Brief communication glitches that self-resolve
-- **Partial failures** - One servo overheating shouldn't stop the whole robot
-- **Custom recovery** - You want to try recovery before disarming
+Escalation is the supervisor's job. When a process detects an unrecoverable hardware fault, it should crash (raise, exit, or return `{:stop, reason, state}` from a GenServer callback). The supervision tree then decides what happens:
 
-Disabling auto-disarm requires implementing your own error handling via PubSub subscription to `[:safety, :error]`.
+1. **Transient failure** - one crash, supervisor restarts the process, robot keeps running
+2. **Persistent failure** - repeated crashes exhaust the subtree's restart budget, the subtree dies
+3. **Topology failure** - if failures cascade up to the topology supervisor and exhaust *its* budget, the topology supervisor dies
+4. **Force-disarm** - the safety controller monitors the topology supervisor; when it stops, the robot is force-disarmed and transitioned to `:error` state
+
+This means there is no single "auto-disarm on error" switch. Instead, the restart budget on the topology supervisor (configurable via the `topology_max_restarts` and `topology_max_seconds` settings) controls how much failure the robot will tolerate before giving up.
+
+Subscribers to `[:safety, :error]` can implement custom monitoring or alerting without affecting the escalation path.
 
 ## The Safety Hierarchy
 
@@ -173,8 +177,9 @@ Always design physical systems assuming software may not execute cleanup.
 | Do disarm callbacks run concurrently? | Yes, with 5 second timeout |
 | Can commands execute while disarming? | No, rejected with `:disarming` error |
 | Are robots disarmed on shutdown? | Yes, best-effort during controller terminate |
-| What happens when a hardware error is reported? | Auto-disarm (default) or custom handling |
-| How do I disable auto-disarm on error? | Set `auto_disarm_on_error false` in settings |
+| What happens when a hardware error is reported? | Event is published to `[:safety, :error]`; no state change. Components escalate by crashing. |
+| How is the robot force-disarmed on persistent failure? | When the topology supervisor exhausts its restart budget and stops, the safety controller force-disarms and transitions to `:error`. |
+| How do I tune how much failure the robot tolerates? | Set `topology_max_restarts` and `topology_max_seconds` in settings. |
 
 ## Related Documentation
 

@@ -18,27 +18,30 @@ defmodule BB.Supervisor do
   ├── Task.Supervisor (for general async tasks)
   ├── DynamicSupervisor (for command GenServers, temporary restart)
   ├── Runtime (robot state, state machine, command execution)
-  ├── BB.SensorSupervisor (:one_for_one)
-  │   └── RobotSensor1, RobotSensor2...
-  ├── BB.ControllerSupervisor (:one_for_one)
-  │   └── Controller1, Controller2...
   ├── BB.BridgeSupervisor (:one_for_one)
   │   └── MavlinkBridge, PhoenixBridge...
-  └── BB.LinkSupervisor(:base_link, :one_for_one)
-      ├── LinkSensor (link sensors)
-      └── BB.JointSupervisor(:shoulder, :one_for_one)
-          ├── JointSensor
-          ├── JointActuator
-          └── BB.LinkSupervisor(:arm, :one_for_one)
-              └── ...
+  └── BB.TopologySupervisor (:one_for_one)
+      ├── BB.SensorSupervisor (:one_for_one)
+      │   └── RobotSensor1, RobotSensor2...
+      ├── BB.ControllerSupervisor (:one_for_one)
+      │   └── Controller1, Controller2...
+      └── BB.LinkSupervisor(:base_link, :one_for_one)
+          ├── LinkSensor (link sensors)
+          └── BB.JointSupervisor(:shoulder, :one_for_one)
+              ├── JointSensor
+              ├── JointActuator
+              └── BB.LinkSupervisor(:arm, :one_for_one)
+                  └── ...
   ```
 
   Each subsystem supervisor (sensors, controllers, bridges) has its own restart
   budget, so a flapping process in one won't exhaust the root supervisor's
-  budget and bring down the entire robot.
+  budget and bring down the entire robot. The topology supervisor groups all
+  hardware-facing subtrees so they share a restart budget; when that budget is
+  exhausted the safety controller force-disarms the robot.
   """
 
-  alias BB.Dsl.{Info, Link}
+  alias BB.Dsl.Info
 
   @doc """
   Starts the supervisor tree for a robot module.
@@ -97,19 +100,12 @@ defmodule BB.Supervisor do
     # Runtime manages robot state, state machine, and command execution
     runtime_child = {BB.Robot.Runtime, {robot_module, opts}}
 
-    # Subsystem supervisors for fault isolation
-    sensor_supervisor_child = {BB.SensorSupervisor, {robot_module, opts}}
-    controller_supervisor_child = {BB.ControllerSupervisor, {robot_module, opts}}
+    # External communication, not hardware - stays at root
     bridge_supervisor_child = {BB.BridgeSupervisor, {robot_module, opts}}
 
-    # Links remain as entities at robot level
-    link_children =
-      robot_module
-      |> Info.topology()
-      |> Enum.filter(&is_struct(&1, Link))
-      |> Enum.map(fn link ->
-        {BB.LinkSupervisor, {robot_module, link, [], opts}}
-      end)
+    # All hardware-facing subsystems share a restart budget under the
+    # topology supervisor; its death triggers safety force-disarm.
+    topology_supervisor_child = {BB.TopologySupervisor, {robot_module, opts}}
 
     [
       registry_child,
@@ -117,9 +113,8 @@ defmodule BB.Supervisor do
       task_supervisor_child,
       command_supervisor_child,
       runtime_child,
-      sensor_supervisor_child,
-      controller_supervisor_child,
-      bridge_supervisor_child
-    ] ++ link_children
+      bridge_supervisor_child,
+      topology_supervisor_child
+    ]
   end
 end

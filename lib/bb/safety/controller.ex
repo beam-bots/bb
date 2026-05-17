@@ -34,7 +34,6 @@ defmodule BB.Safety.Controller do
   use GenServer
   require Logger
 
-  alias BB.Dsl.Info
   alias BB.{Message, PubSub}
   alias BB.Safety.HardwareError
   alias BB.StateMachine.Transition
@@ -117,6 +116,18 @@ defmodule BB.Safety.Controller do
   @spec register_robot(module()) :: :ok | {:error, term()}
   def register_robot(robot_module) do
     GenServer.call(__MODULE__, {:register_robot, robot_module})
+  end
+
+  @doc """
+  Register a robot's topology supervisor.
+
+  Called by `BB.TopologySupervisor` during its own startup. When the topology
+  supervisor terminates (because its restart budget is exhausted) the safety
+  controller force-disarms the robot and transitions it to `:error` state.
+  """
+  @spec register_topology_supervisor(module()) :: :ok | {:error, :not_registered}
+  def register_topology_supervisor(robot_module) do
+    GenServer.call(__MODULE__, {:register_topology_supervisor, robot_module, self()})
   end
 
   @doc """
@@ -206,8 +217,10 @@ defmodule BB.Safety.Controller do
   @doc """
   Report a hardware error from a component.
 
-  Publishes a HardwareError message and optionally triggers disarm based on
-  the robot's `auto_disarm_on_error` setting.
+  Publishes a `BB.Safety.HardwareError` message to `[:safety, :error]`. Does
+  not affect safety state - components that need to escalate should crash so
+  the supervision tree can decide whether the topology supervisor's restart
+  budget is exhausted.
   """
   @spec report_error(module(), [atom()], term()) :: :ok
   def report_error(robot_module, path, error) do
@@ -228,7 +241,7 @@ defmodule BB.Safety.Controller do
     # {robot_module, module, path, opts, handler_pid}
     :ets.new(@handlers_table, [:named_table, :public, :bag, read_concurrency: true])
 
-    {:ok, %{}}
+    {:ok, %{handler_monitors: %{}, topology_monitors: %{}}}
   end
 
   @impl GenServer
@@ -242,6 +255,21 @@ defmodule BB.Safety.Controller do
 
       nil ->
         {:reply, {:error, :supervisor_not_found}, state}
+    end
+  end
+
+  def handle_call({:register_topology_supervisor, robot_module, pid}, _from, state) do
+    case :ets.lookup(@robots_table, robot_module) do
+      [{^robot_module, _safety_state, _ref}] ->
+        topology_ref = Process.monitor(pid)
+
+        new_state =
+          update_in(state.topology_monitors, &Map.put(&1, topology_ref, robot_module))
+
+        {:reply, :ok, new_state}
+
+      [] ->
+        {:reply, {:error, :not_registered}, state}
     end
   end
 
@@ -324,8 +352,8 @@ defmodule BB.Safety.Controller do
   def handle_cast({:monitor_handler, pid, robot}, state) do
     # Set up monitoring for cleanup on handler restart
     ref = Process.monitor(pid)
-    # Store mapping: ref -> {robot, pid} for cleanup lookup
-    {:noreply, Map.put(state, ref, {robot, pid})}
+    new_state = update_in(state.handler_monitors, &Map.put(&1, ref, {robot, pid}))
+    {:noreply, new_state}
   end
 
   def handle_cast({:report_error, robot_module, path, error}, state) do
@@ -333,63 +361,110 @@ defmodule BB.Safety.Controller do
       "Hardware error reported for #{inspect(robot_module)} at #{inspect(path)}: #{inspect(error)}"
     )
 
-    # Always publish the error event
     publish_hardware_error(robot_module, path, error)
-
-    # Check robot's auto_disarm_on_error setting
-    settings = Info.settings(robot_module)
-
-    if settings.auto_disarm_on_error and armed?(robot_module) do
-      Logger.warning(
-        "Auto-disarming #{inspect(robot_module)} due to hardware error (auto_disarm_on_error=true)"
-      )
-
-      # Trigger disarm - this is async so we use call to ensure it completes
-      spawn(fn -> disarm(robot_module) end)
-    end
 
     {:noreply, state}
   end
 
   @impl GenServer
   def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
-    # Check if it's a robot supervisor
-    case :ets.match(@robots_table, {:"$1", :_, ref}) do
-      [[robot_module]] ->
-        Logger.warning(
-          "Robot #{inspect(robot_module)} supervisor crashed, disarming all handlers"
+    cond do
+      Map.has_key?(state.topology_monitors, ref) ->
+        handle_topology_down(ref, state)
+
+      match?([[_]], :ets.match(@robots_table, {:"$1", :_, ref})) ->
+        handle_root_down(ref, state)
+
+      Map.has_key?(state.handler_monitors, ref) ->
+        handle_handler_down(ref, pid, state)
+
+      true ->
+        {:noreply, state}
+    end
+  end
+
+  defp handle_topology_down(ref, state) do
+    {robot_module, topology_monitors} = Map.pop(state.topology_monitors, ref)
+
+    if robot_shutting_down?(robot_module) do
+      Logger.debug(
+        "Topology supervisor for #{inspect(robot_module)} stopped during robot shutdown - ignoring"
+      )
+    else
+      force_disarm_for_topology_failure(robot_module)
+    end
+
+    {:noreply, %{state | topology_monitors: topology_monitors}}
+  end
+
+  defp force_disarm_for_topology_failure(robot_module) do
+    Logger.critical(
+      "Topology supervisor for #{inspect(robot_module)} has stopped - force-disarming"
+    )
+
+    previous_state = state(robot_module)
+
+    case disarm_all_handlers(robot_module, @default_disarm_timeout_ms) do
+      :ok ->
+        Logger.info(
+          "All disarm callbacks succeeded for #{inspect(robot_module)} after topology failure"
         )
 
-        # Robot crashed - disarm all handlers and clean up
-        case disarm_all_handlers(robot_module, @default_disarm_timeout_ms) do
-          :ok ->
-            Logger.info(
-              "All disarm callbacks succeeded for crashed robot #{inspect(robot_module)}"
-            )
+      {:error, failures} ->
+        Logger.critical(
+          "DISARM CALLBACKS FAILED for #{inspect(robot_module)} after topology failure: " <>
+            "#{length(failures)} handler(s) failed to disarm - HARDWARE MAY NOT BE SAFE"
+        )
+    end
 
-          {:error, failures} ->
-            Logger.critical(
-              "DISARM CALLBACKS FAILED for crashed robot #{inspect(robot_module)}: " <>
-                "#{length(failures)} handler(s) failed to disarm - HARDWARE MAY NOT BE SAFE"
-            )
-        end
-
-        :ets.delete(@robots_table, robot_module)
-        :ets.match_delete(@handlers_table, {robot_module, :_, :_, :_, :_})
-        {:noreply, state}
+    case :ets.lookup(@robots_table, robot_module) do
+      [{^robot_module, _state, sup_ref}] ->
+        :ets.insert(@robots_table, {robot_module, :error, sup_ref})
+        publish_transition(robot_module, previous_state, :error)
 
       [] ->
-        # It's a handler process - look up from state and remove
-        case Map.pop(state, ref) do
-          {{robot, ^pid}, new_state} ->
-            # Delete the specific handler row from bag table
-            :ets.match_delete(@handlers_table, {robot, :_, :_, :_, pid})
-            {:noreply, new_state}
-
-          {nil, _} ->
-            {:noreply, state}
-        end
+        :ok
     end
+  end
+
+  defp robot_shutting_down?(robot_module) do
+    case Process.whereis(BB.PubSub.registry_name(robot_module)) do
+      nil -> true
+      _pid -> false
+    end
+  end
+
+  defp handle_root_down(ref, state) do
+    [[robot_module]] = :ets.match(@robots_table, {:"$1", :_, ref})
+
+    Logger.warning("Robot #{inspect(robot_module)} supervisor crashed, disarming all handlers")
+
+    case disarm_all_handlers(robot_module, @default_disarm_timeout_ms) do
+      :ok ->
+        Logger.info("All disarm callbacks succeeded for crashed robot #{inspect(robot_module)}")
+
+      {:error, failures} ->
+        Logger.critical(
+          "DISARM CALLBACKS FAILED for crashed robot #{inspect(robot_module)}: " <>
+            "#{length(failures)} handler(s) failed to disarm - HARDWARE MAY NOT BE SAFE"
+        )
+    end
+
+    :ets.delete(@robots_table, robot_module)
+    :ets.match_delete(@handlers_table, {robot_module, :_, :_, :_, :_})
+
+    topology_monitors =
+      state.topology_monitors
+      |> Enum.reject(fn {_ref, robot} -> robot == robot_module end)
+      |> Map.new()
+
+    {:noreply, %{state | topology_monitors: topology_monitors}}
+  end
+
+  defp handle_handler_down(ref, pid, state) do
+    {{robot, ^pid}, handler_monitors} = Map.pop(state.handler_monitors, ref)
+    :ets.match_delete(@handlers_table, {robot, :_, :_, :_, pid})
+    {:noreply, %{state | handler_monitors: handler_monitors}}
   end
 
   # --- Private Functions ---
@@ -475,11 +550,17 @@ defmodule BB.Safety.Controller do
 
   defp publish_transition(robot_module, from, to) do
     message = Message.new!(Transition, :state_machine, from: from, to: to)
-    PubSub.publish(robot_module, [:state_machine], message)
+    safe_publish(robot_module, [:state_machine], message)
   end
 
   defp publish_hardware_error(robot_module, path, error) do
     message = Message.new!(HardwareError, :safety, path: path, error: error)
-    PubSub.publish(robot_module, [:safety, :error], message)
+    safe_publish(robot_module, [:safety, :error], message)
+  end
+
+  defp safe_publish(robot_module, path, message) do
+    PubSub.publish(robot_module, path, message)
+  rescue
+    ArgumentError -> :ok
   end
 end
