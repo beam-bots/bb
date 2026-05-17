@@ -101,10 +101,30 @@ jobs:
             git clone --depth 1 "https://github.com/beam-bots/${name}.git" "${name}"
           done
 
-      - uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
+      - id: beam
+        uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
         with:
           version-file: bb/.tool-versions
           version-type: strict
+
+      - name: Cache deps
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ matrix.project.name }}/deps
+          key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-deps-${{ hashFiles(format('{0}/mix.lock', matrix.project.name)) }}
+          restore-keys: |
+            ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-deps-
+
+      - name: Cache _build (compiled deps + PLT)
+        # Dialyxir's PLT lives in _build/<env>/, so this also caches the PLT
+        # across runs. Bust the cache when bb's mix.lock changes, since that
+        # reshuffles which bb transitive deps end up in _build.
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ matrix.project.name }}/_build
+          key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-${{ hashFiles(format('{0}/mix.lock', matrix.project.name), 'bb/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-
 
       - name: mix deps.get
         working-directory: ${{ matrix.project.name }}
