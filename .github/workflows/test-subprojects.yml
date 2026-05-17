@@ -1,0 +1,115 @@
+# SPDX-FileCopyrightText: 2026 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Test Subprojects
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    name: Discover downstream packages
+    runs-on: ubuntu-latest
+    if: github.repository == 'beam-bots/bb'
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+      siblings: ${{ steps.discover.outputs.siblings }}
+    steps:
+      - id: discover
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORG: beam-bots
+        run: |
+          set -euo pipefail
+          # Find every non-archived bb_* repo in the org. bb_workspace is the
+          # meta-workspace, not an Elixir package, so skip it.
+          repos=$(gh api -X GET "/orgs/${ORG}/repos" --paginate \
+            --jq '[.[]
+              | select(.archived == false)
+              | select(.name | startswith("bb_"))
+              | select(.name != "bb_workspace")
+              | .name]')
+
+          # Only include repos with a top-level mix.exs — bb_examples is a docs
+          # repo and would fail the test step.
+          mix_repos="[]"
+          for name in $(jq -r '.[]' <<<"$repos"); do
+            if gh api "/repos/${ORG}/${name}/contents/mix.exs" --silent >/dev/null 2>&1; then
+              mix_repos=$(jq --arg n "$name" '. + [$n]' <<<"$mix_repos")
+            else
+              echo "skip ${name} (no top-level mix.exs)"
+            fi
+          done
+
+          matrix=$(jq -c '{project: map({name: .})}' <<<"$mix_repos")
+          siblings=$(jq -c '.' <<<"$mix_repos")
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          echo "siblings=${siblings}" >> "$GITHUB_OUTPUT"
+          echo "Discovered $(jq 'length' <<<"$mix_repos") subprojects: ${siblings}"
+
+  test-subprojects:
+    name: ${{ matrix.project.name }}
+    needs: discover
+    runs-on: ubuntu-latest
+    if: needs.discover.outputs.matrix != '{"project":[]}'
+    # Downstream breakage shouldn't block a bb PR while this workflow is bedding
+    # in; surface the failure but don't fail the run. Tighten once we trust it.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    env:
+      BB_VERSION: local
+      MIX_ENV: test
+    steps:
+      - name: Check out bb at this ref
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: bb
+
+      - name: Check out ${{ matrix.project.name }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: beam-bots/${{ matrix.project.name }}
+          path: ${{ matrix.project.name }}
+
+      - name: Check out sibling bb_* packages
+        # `BB_VERSION=local` resolves every bb-family dep to `../<package>`, so
+        # any sibling a subproject depends on (e.g. bb_example_wx200 ->
+        # bb_liveview) needs to be checked out alongside.
+        env:
+          SIBLINGS: ${{ needs.discover.outputs.siblings }}
+          TARGET: ${{ matrix.project.name }}
+        run: |
+          set -euo pipefail
+          for name in $(jq -r '.[]' <<<"${SIBLINGS}"); do
+            if [ "${name}" = "${TARGET}" ]; then
+              continue
+            fi
+            git clone --depth 1 "https://github.com/beam-bots/${name}.git" "${name}"
+          done
+
+      - uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
+        with:
+          version-file: bb/.tool-versions
+          version-type: strict
+
+      - name: mix deps.get
+        working-directory: ${{ matrix.project.name }}
+        run: mix deps.get
+
+      - name: mix compile --force --warnings-as-errors
+        working-directory: ${{ matrix.project.name }}
+        run: mix compile --force --warnings-as-errors
+
+      - name: mix test
+        working-directory: ${{ matrix.project.name }}
+        run: mix test
