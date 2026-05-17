@@ -11,6 +11,27 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.16.0](https://github.com/beam-bots/bb/compare/v0.15.4...v0.16.0) (2026-05-17)
+### Breaking Changes:
+
+* migrate from `ex_cldr_units` to `localize` (#96) by James Harton
+
+* force-disarm via topology supervisor instead of `auto_disarm_on_error` (#95) by James Harton
+
+* store wall-clock time and originating node on `BB.Message` (#37) (#94) by James Harton
+
+
+
+### Bug Fixes:
+
+* cover tuple argument types in typespec and `:map` example (#93) by James Harton
+
+### Improvements:
+
+* identify the publishing robot in pubsub deliveries (#91) (#92) by James Harton
+
+* coerce command goal values to declared argument types (#88) by James Harton
+
 ## [v0.15.4](https://github.com/beam-bots/bb/compare/v0.15.3...v0.15.4) (2026-05-16)
 
 
