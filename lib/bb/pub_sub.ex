@@ -33,9 +33,12 @@ defmodule BB.PubSub do
 
   Subscribers receive messages as:
 
-      {:bb, source_path, %BB.Message{}}
+      {:bb, source_path, %BB.Message{robot: robot_module}}
 
-  Where `source_path` is the full path of the publisher.
+  Where `source_path` is the full path of the publisher and the
+  `:robot` field on the message identifies which robot published it
+  (filled in by `publish/3`). This lets a process subscribed to more
+  than one robot attribute each incoming message correctly.
 
   ## Message Type Filtering
 
@@ -111,6 +114,7 @@ defmodule BB.PubSub do
     settings = Info.settings(robot)
     registry_module = settings.registry_module
     registry = registry_name(robot)
+    message = %{message | robot: robot}
     message_module = message.payload.__struct__
 
     path

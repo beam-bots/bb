@@ -31,6 +31,27 @@ defmodule BB.PubSubTest do
     end
   end
 
+  defmodule OtherRobot do
+    @moduledoc false
+    use BB
+
+    topology do
+      link :base_link do
+        joint :shoulder do
+          type :revolute
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(100 degree_per_second))
+          end
+
+          link :arm do
+          end
+        end
+      end
+    end
+  end
+
   describe "ancestor_paths/1" do
     test "generates all ancestor paths including self and root" do
       paths = PubSub.ancestor_paths([:sensor, :base_link, :joint1, :imu])
@@ -72,6 +93,7 @@ defmodule BB.PubSubTest do
           linear_acceleration: Vec3.new(0, 0, 9.81)
         )
 
+      message = %{message | robot: TestRobot}
       PubSub.publish(TestRobot, path, message)
 
       assert_receive {:bb, ^path, ^message}
@@ -91,6 +113,7 @@ defmodule BB.PubSubTest do
           linear_acceleration: Vec3.new(0, 0, 9.81)
         )
 
+      message = %{message | robot: TestRobot}
       PubSub.publish(TestRobot, child_path, message)
 
       assert_receive {:bb, ^child_path, ^message}
@@ -109,6 +132,7 @@ defmodule BB.PubSubTest do
           linear_acceleration: Vec3.zero()
         )
 
+      message = %{message | robot: TestRobot}
       PubSub.publish(TestRobot, path, message)
 
       assert_receive {:bb, ^path, ^message}
@@ -130,6 +154,8 @@ defmodule BB.PubSubTest do
 
       {:ok, actuator_msg} = Pose.new(:motor, Vec3.zero(), Quaternion.identity())
 
+      sensor_msg = %{sensor_msg | robot: TestRobot}
+      actuator_msg = %{actuator_msg | robot: TestRobot}
       PubSub.publish(TestRobot, sensor_path, sensor_msg)
       PubSub.publish(TestRobot, actuator_path, actuator_msg)
 
@@ -171,10 +197,65 @@ defmodule BB.PubSubTest do
           linear_acceleration: Vec3.zero()
         )
 
+      message = %{message | robot: TestRobot}
       PubSub.publish(TestRobot, path, message)
 
       assert_receive {:subscriber1, ^message}
       assert_receive {:subscriber2, ^message}
+    end
+  end
+
+  describe "robot attribution" do
+    test "publish/3 stamps the message with the publishing robot" do
+      start_supervised!(TestRobot)
+      path = [:sensor, :base_link, :imu]
+      {:ok, _} = PubSub.subscribe(TestRobot, path)
+
+      {:ok, message} =
+        Imu.new(:imu,
+          orientation: Quaternion.identity(),
+          angular_velocity: Vec3.zero(),
+          linear_acceleration: Vec3.zero()
+        )
+
+      assert message.robot == nil
+      PubSub.publish(TestRobot, path, message)
+
+      assert_receive {:bb, ^path, delivered}
+      assert delivered.robot == TestRobot
+      assert delivered.payload == message.payload
+    end
+
+    test "subscriber to multiple robots can attribute each message" do
+      start_supervised!(TestRobot)
+      start_supervised!(OtherRobot)
+
+      path = [:sensor, :base_link, :imu]
+      {:ok, _} = PubSub.subscribe(TestRobot, path)
+      {:ok, _} = PubSub.subscribe(OtherRobot, path)
+
+      {:ok, from_test} =
+        Imu.new(:imu,
+          orientation: Quaternion.identity(),
+          angular_velocity: Vec3.zero(),
+          linear_acceleration: Vec3.new(0, 0, 9.81)
+        )
+
+      {:ok, from_other} =
+        Imu.new(:imu,
+          orientation: Quaternion.identity(),
+          angular_velocity: Vec3.new(1, 0, 0),
+          linear_acceleration: Vec3.zero()
+        )
+
+      PubSub.publish(TestRobot, path, from_test)
+      PubSub.publish(OtherRobot, path, from_other)
+
+      assert_receive {:bb, ^path, %{robot: TestRobot} = delivered_test}
+      assert_receive {:bb, ^path, %{robot: OtherRobot} = delivered_other}
+
+      assert delivered_test.payload == from_test.payload
+      assert delivered_other.payload == from_other.payload
     end
   end
 
@@ -196,6 +277,7 @@ defmodule BB.PubSubTest do
 
       {:ok, pose_msg} = Pose.new(:camera, Vec3.zero(), Quaternion.identity())
 
+      imu_msg = %{imu_msg | robot: TestRobot}
       PubSub.publish(TestRobot, imu_path, imu_msg)
       PubSub.publish(TestRobot, pose_path, pose_msg)
 
@@ -220,6 +302,8 @@ defmodule BB.PubSubTest do
 
       {:ok, pose_msg} = Pose.new(:camera, Vec3.zero(), Quaternion.identity())
 
+      imu_msg = %{imu_msg | robot: TestRobot}
+      pose_msg = %{pose_msg | robot: TestRobot}
       PubSub.publish(TestRobot, imu_path, imu_msg)
       PubSub.publish(TestRobot, pose_path, pose_msg)
 
@@ -241,6 +325,7 @@ defmodule BB.PubSubTest do
           linear_acceleration: Vec3.zero()
         )
 
+      imu_msg = %{imu_msg | robot: TestRobot}
       PubSub.publish(TestRobot, imu_path, imu_msg)
 
       assert_receive {:bb, ^imu_path, ^imu_msg}
@@ -263,6 +348,8 @@ defmodule BB.PubSubTest do
 
       {:ok, pose_msg} = Pose.new(:camera, Vec3.zero(), Quaternion.identity())
 
+      imu_msg = %{imu_msg | robot: TestRobot}
+      pose_msg = %{pose_msg | robot: TestRobot}
       PubSub.publish(TestRobot, imu_path, imu_msg)
       PubSub.publish(TestRobot, pose_path, pose_msg)
 
@@ -284,6 +371,7 @@ defmodule BB.PubSubTest do
           linear_acceleration: Vec3.zero()
         )
 
+      message1 = %{message1 | robot: TestRobot}
       PubSub.publish(TestRobot, path, message1)
       assert_receive {:bb, ^path, ^message1}
 

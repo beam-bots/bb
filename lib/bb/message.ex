@@ -9,6 +9,12 @@ defmodule BB.Message do
   Messages in BB are wrapped in a standard envelope containing timing,
   coordinate frame, and payload data.
 
+  The `:robot` field identifies the publishing robot module and is filled
+  in automatically by `BB.PubSub.publish/3` just before dispatch. It is
+  `nil` on freshly-constructed messages that have not yet been published,
+  and lets subscribers that listen to more than one robot attribute each
+  delivered message to its source.
+
   ## Usage
 
   Use the `use BB.Message` macro to define a payload type:
@@ -32,12 +38,13 @@ defmodule BB.Message do
   Note: `defstruct` must be defined before `use BB.Message`.
   """
 
-  defstruct [:timestamp, :frame_id, :payload]
+  defstruct [:timestamp, :frame_id, :payload, :robot]
 
   @type t :: %__MODULE__{
           timestamp: integer(),
           frame_id: atom(),
-          payload: struct()
+          payload: struct(),
+          robot: module() | nil
         }
 
   @doc "Returns a compiled Spark.Options schema for this payload type"
