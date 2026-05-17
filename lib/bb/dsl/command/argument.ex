@@ -23,7 +23,7 @@ defmodule BB.Dsl.Command.Argument do
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
           name: atom,
-          type: atom | module,
+          type: atom | module | tuple,
           required: boolean,
           default: any,
           doc: String.t() | nil

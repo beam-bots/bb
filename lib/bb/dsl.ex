@@ -727,7 +727,7 @@ defmodule BB.Dsl do
 
     - Simple types: `:float`, `:integer`, `:boolean`, `:atom`, `:string`
     - Enums: `{:in, [:value1, :value2]}`
-    - Maps: `{:map, [x: :float, y: :float, z: :float]}`
+    - Maps: `{:map, [x: [type: :float, required: true]]}`
     - Modules: `MyModule`
     """,
     schema: [
