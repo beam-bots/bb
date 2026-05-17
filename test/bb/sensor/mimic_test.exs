@@ -185,7 +185,9 @@ defmodule BB.Sensor.MimicTest do
       test_pid = self()
 
       other_message = %Message{
-        timestamp: System.monotonic_time(:nanosecond),
+        monotonic_time: System.monotonic_time(:nanosecond),
+        wall_time: System.system_time(:nanosecond),
+        node: Node.self(),
         frame_id: :gripper,
         payload: %{__struct__: SomeOtherType, value: 42}
       }

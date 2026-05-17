@@ -72,8 +72,10 @@ All messages are wrapped in `BB.Message`:
 ```elixir
 %BB.Message{
   payload: %BB.Message.Sensor.JointState{...},
-  timestamp: ~U[2025-01-18 12:00:00Z],
-  frame_id: "shoulder"
+  monotonic_time: -576_460_748_776_542,
+  wall_time: 1_737_201_600_000_000_000,
+  node: :nonode@nohost,
+  frame_id: :shoulder
 }
 ```
 

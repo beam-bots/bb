@@ -184,7 +184,9 @@ Messages have a standard envelope structure:
 
 ```elixir
 %BB.Message{
-  timestamp: -576460748776542,  # monotonic nanoseconds
+  monotonic_time: -576460748776542,         # monotonic nanoseconds
+  wall_time: 1_737_201_600_000_000_000,     # system nanoseconds (UTC epoch)
+  node: :nonode@nohost,
   frame_id: :imu,
   payload: %BB.Message.Sensor.Imu{
     orientation: {:quaternion, 0.0, 0.0, 0.0, 1.0},
@@ -194,9 +196,11 @@ Messages have a standard envelope structure:
 }
 ```
 
-- `timestamp` - Monotonic time in nanoseconds (from `System.monotonic_time/1`)
-- `frame_id` - Coordinate frame for the data (typically the sensor name)
-- `payload` - The actual sensor data struct (type depends on message type)
+- `monotonic_time` - Monotonic time in nanoseconds (from `System.monotonic_time/1`). Use for ordering and durations within a node.
+- `wall_time` - System time in nanoseconds (from `System.system_time/1`). Use for correlation with real-world time, logging, and recording/playback.
+- `node` - The BEAM node that produced the message. Useful in distributed deployments.
+- `frame_id` - Coordinate frame for the data (typically the sensor name).
+- `payload` - The actual sensor data struct (type depends on message type).
 
 ## Available Message Types
 
