@@ -17,13 +17,24 @@ defmodule Mix.Tasks.Bb.AddNxBackendTest do
       """)
     end
 
-    test "writes the default_backend config" do
+    test "writes the default_backend config to runtime.exs" do
       igniter =
         test_project()
         |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "exla"])
 
-      {_, source} = Rewrite.source(igniter.rewrite, "config/config.exs")
+      {_, source} = Rewrite.source(igniter.rewrite, "config/runtime.exs")
       assert source.content =~ "config :nx, default_backend: EXLA.Backend"
+    end
+
+    test "does not write to config.exs (compile-time backend would crash BB transformers)" do
+      igniter =
+        test_project()
+        |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "exla"])
+
+      case Rewrite.source(igniter.rewrite, "config/config.exs") do
+        {:ok, source} -> refute source.content =~ "default_backend"
+        {:error, _} -> :ok
+      end
     end
   end
 
@@ -36,12 +47,12 @@ defmodule Mix.Tasks.Bb.AddNxBackendTest do
       """)
     end
 
-    test "writes the default_backend config" do
+    test "writes the default_backend config to runtime.exs" do
       igniter =
         test_project()
         |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "torchx"])
 
-      {_, source} = Rewrite.source(igniter.rewrite, "config/config.exs")
+      {_, source} = Rewrite.source(igniter.rewrite, "config/runtime.exs")
       assert source.content =~ "config :nx, default_backend: Torchx.Backend"
     end
   end
@@ -65,7 +76,21 @@ defmodule Mix.Tasks.Bb.AddNxBackendTest do
   end
 
   describe "skipping" do
-    test "skips when :nx is already configured" do
+    test "skips when :nx is already configured in runtime.exs" do
+      test_project(
+        files: %{
+          "config/runtime.exs" => """
+          import Config
+
+          config :nx, default_backend: Some.Other.Backend
+          """
+        }
+      )
+      |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "exla"])
+      |> assert_unchanged()
+    end
+
+    test "skips when :nx is already configured in config.exs" do
       test_project(
         files: %{
           "config/config.exs" => """

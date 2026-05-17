@@ -14,8 +14,13 @@ if Code.ensure_loaded?(Igniter) do
     This task prompts the user to pick a backend and applies the dep + config
     changes.
 
-    Skips itself entirely if `:nx` is already configured, or if `:exla` /
-    `:torchx` is already declared in `mix.exs`.
+    The `config :nx, default_backend: …` line is written to `config/runtime.exs`,
+    not `config/config.exs`. BB performs compile-time tensor operations in
+    its Spark transformer chain, and EXLA/Torchx aren't started during
+    compilation — so a compile-time default crashes the robot module compile.
+
+    Skips itself entirely if `:nx` is already configured in `runtime.exs` or
+    `config.exs`, or if `:exla` / `:torchx` is already declared in `mix.exs`.
 
     ## Examples
 
@@ -81,7 +86,8 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp already_configured?(igniter) do
-      Config.configures_root_key?(igniter, "config.exs", :nx) or
+      Config.configures_root_key?(igniter, "runtime.exs", :nx) or
+        Config.configures_root_key?(igniter, "config.exs", :nx) or
         has_dep?(igniter, :exla) or
         has_dep?(igniter, :torchx)
     end
@@ -130,29 +136,35 @@ if Code.ensure_loaded?(Igniter) do
     defp apply_backend(igniter, :exla) do
       igniter
       |> Deps.add_dep({:exla, @nx_version}, on_exists: :skip)
-      |> Config.configure(
-        "config.exs",
-        :nx,
-        [:default_backend],
-        {:code, Sourceror.parse_string!("EXLA.Backend")}
-      )
+      |> set_default_backend("EXLA.Backend")
     end
 
     defp apply_backend(igniter, :torchx) do
       igniter
       |> Deps.add_dep({:torchx, @nx_version}, on_exists: :skip)
-      |> Config.configure(
-        "config.exs",
-        :nx,
-        [:default_backend],
-        {:code, Sourceror.parse_string!("Torchx.Backend")}
-      )
+      |> set_default_backend("Torchx.Backend")
     end
 
     defp apply_backend(igniter, :binary) do
       Igniter.add_notice(
         igniter,
         "Nx will use the default BinaryBackend (pure Elixir). Performance will be limited; switch to EXLA or Torchx for serious workloads."
+      )
+    end
+
+    # Writes `config :nx, default_backend: <Backend>` to `config/runtime.exs`,
+    # not `config/config.exs`. BB performs compile-time tensor operations in
+    # its Spark transformer chain (BB.Robot.Builder); the EXLA/Torchx backend
+    # processes aren't started during compilation, so a compile-time default
+    # crashes the user's robot-module compile with a `no process: EXLA.Client`
+    # error.
+    defp set_default_backend(igniter, backend_module) do
+      Config.configure(
+        igniter,
+        "runtime.exs",
+        :nx,
+        [:default_backend],
+        {:code, Sourceror.parse_string!(backend_module)}
       )
     end
   end
