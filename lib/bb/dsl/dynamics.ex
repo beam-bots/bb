@@ -16,7 +16,7 @@ defmodule BB.Dsl.Dynamics do
   @type t :: %__MODULE__{
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
-          damping: nil | Cldr.Unit.t(),
-          friction: nil | Cldr.Unit.t()
+          damping: nil | Localize.Unit.t(),
+          friction: nil | Localize.Unit.t()
         }
 end

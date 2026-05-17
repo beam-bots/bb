@@ -273,16 +273,16 @@ defmodule BB.Dsl.ParameterTest do
       {[:motion, :max_speed], default} =
         Enum.find(defaults, fn {path, _} -> path == [:motion, :max_speed] end)
 
-      assert %Cldr.Unit{} = default
-      assert default.unit == :meter_per_second
+      assert %Localize.Unit{} = default
+      assert default.name == "meter-per-second"
     end
 
     test "unit params are registered at runtime" do
       start_supervised!(RobotWithUnitParams)
 
       assert {:ok, value} = Parameter.get(RobotWithUnitParams, [:motion, :max_speed])
-      assert %Cldr.Unit{} = value
-      assert value.unit == :meter_per_second
+      assert %Localize.Unit{} = value
+      assert value.name == "meter-per-second"
     end
 
     test "unit params can be set with compatible units" do
@@ -293,7 +293,7 @@ defmodule BB.Dsl.ParameterTest do
                Parameter.set(RobotWithUnitParams, [:motion, :max_speed], ~u(2.0 meter_per_second))
 
       assert {:ok, value} = Parameter.get(RobotWithUnitParams, [:motion, :max_speed])
-      assert Cldr.Unit.compare(value, ~u(2.0 meter_per_second)) == :eq
+      assert Localize.Unit.compare(value, ~u(2.0 meter_per_second)) == :eq
 
       # Set with compatible unit (should work - kilometer_per_hour is compatible with meter_per_second)
       assert :ok =
@@ -304,7 +304,7 @@ defmodule BB.Dsl.ParameterTest do
                )
 
       assert {:ok, value} = Parameter.get(RobotWithUnitParams, [:motion, :max_speed])
-      assert Cldr.Unit.compare(value, ~u(10 meter_per_second)) == :eq
+      assert Localize.Unit.compare(value, ~u(10 meter_per_second)) == :eq
     end
 
     test "unit params reject incompatible units" do
@@ -406,7 +406,7 @@ defmodule BB.Dsl.ParameterTest do
       )
 
       assert {:ok, value} = Parameter.get(RobotWithUnitParams, [:motion, :max_speed])
-      assert Cldr.Unit.compare(value, ~u(3.0 meter_per_second)) == :eq
+      assert Localize.Unit.compare(value, ~u(3.0 meter_per_second)) == :eq
     end
 
     test "unit params with incompatible units cause startup failure" do

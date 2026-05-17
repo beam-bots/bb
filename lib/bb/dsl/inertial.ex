@@ -15,7 +15,7 @@ defmodule BB.Dsl.Inertial do
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
           origin: nil | Origin.t(),
-          mass: Cldr.Unit.t(),
+          mass: Localize.Unit.t(),
           inertia: Inertia.t()
         }
 end

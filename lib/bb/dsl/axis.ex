@@ -41,8 +41,8 @@ defmodule BB.Dsl.Axis do
   @type t :: %__MODULE__{
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
-          roll: Cldr.Unit.t(),
-          pitch: Cldr.Unit.t(),
-          yaw: Cldr.Unit.t()
+          roll: Localize.Unit.t(),
+          pitch: Localize.Unit.t(),
+          yaw: Localize.Unit.t()
         }
 end

@@ -4,10 +4,12 @@
 
 defmodule BB.Robot.Units do
   @moduledoc """
-  Unit conversion functions for transforming Cldr.Unit values into base SI floats.
+  Unit conversion functions for transforming `Localize.Unit` values into base
+  SI floats.
 
-  All functions in this module convert from `Cldr.Unit.t()` structs to native
-  floats in SI base units, suitable for efficient numerical computation.
+  All functions in this module convert from `Localize.Unit.t()` structs to
+  native floats in SI base units, suitable for efficient numerical
+  computation.
   """
 
   @doc """
@@ -23,10 +25,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_meters(~u(1.5 meter))
       1.5
   """
-  @spec to_meters(Cldr.Unit.t()) :: float()
-  def to_meters(%Cldr.Unit{} = unit) do
+  @spec to_meters(Localize.Unit.t()) :: float()
+  def to_meters(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:meter)
+    |> Localize.Unit.convert!("meter")
     |> extract_float()
   end
 
@@ -43,10 +45,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_radians(~u(0 degree))
       0.0
   """
-  @spec to_radians(Cldr.Unit.t()) :: float()
-  def to_radians(%Cldr.Unit{} = unit) do
+  @spec to_radians(Localize.Unit.t()) :: float()
+  def to_radians(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:radian)
+    |> Localize.Unit.convert!("radian")
     |> extract_float()
   end
 
@@ -63,10 +65,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_kilograms(~u(2.5 kilogram))
       2.5
   """
-  @spec to_kilograms(Cldr.Unit.t()) :: float()
-  def to_kilograms(%Cldr.Unit{} = unit) do
+  @spec to_kilograms(Localize.Unit.t()) :: float()
+  def to_kilograms(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:kilogram)
+    |> Localize.Unit.convert!("kilogram")
     |> extract_float()
   end
 
@@ -79,10 +81,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_kilogram_square_meters(~u(0.5 kilogram_square_meter))
       0.5
   """
-  @spec to_kilogram_square_meters(Cldr.Unit.t()) :: float()
-  def to_kilogram_square_meters(%Cldr.Unit{} = unit) do
+  @spec to_kilogram_square_meters(Localize.Unit.t()) :: float()
+  def to_kilogram_square_meters(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:kilogram_square_meter)
+    |> Localize.Unit.convert!("kilogram-square-meter")
     |> extract_float()
   end
 
@@ -95,10 +97,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_newtons(~u(10 newton))
       10.0
   """
-  @spec to_newtons(Cldr.Unit.t()) :: float()
-  def to_newtons(%Cldr.Unit{} = unit) do
+  @spec to_newtons(Localize.Unit.t()) :: float()
+  def to_newtons(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:newton)
+    |> Localize.Unit.convert!("newton")
     |> extract_float()
   end
 
@@ -111,10 +113,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_newton(~u(5 newton))
       5.0
   """
-  @spec to_newton(Cldr.Unit.t()) :: float()
-  def to_newton(%Cldr.Unit{} = unit) do
+  @spec to_newton(Localize.Unit.t()) :: float()
+  def to_newton(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:newton)
+    |> Localize.Unit.convert!("newton")
     |> extract_float()
   end
 
@@ -127,10 +129,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_newton_meters(~u(5 newton_meter))
       5.0
   """
-  @spec to_newton_meters(Cldr.Unit.t()) :: float()
-  def to_newton_meters(%Cldr.Unit{} = unit) do
+  @spec to_newton_meters(Localize.Unit.t()) :: float()
+  def to_newton_meters(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:newton_meter)
+    |> Localize.Unit.convert!("newton-meter")
     |> extract_float()
   end
 
@@ -143,10 +145,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_meters_per_second(~u(10 meter_per_second))
       10.0
   """
-  @spec to_meters_per_second(Cldr.Unit.t()) :: float()
-  def to_meters_per_second(%Cldr.Unit{} = unit) do
+  @spec to_meters_per_second(Localize.Unit.t()) :: float()
+  def to_meters_per_second(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:meter_per_second)
+    |> Localize.Unit.convert!("meter-per-second")
     |> extract_float()
   end
 
@@ -159,10 +161,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_radians_per_second(~u(180 degree_per_second))
       :math.pi()
   """
-  @spec to_radians_per_second(Cldr.Unit.t()) :: float()
-  def to_radians_per_second(%Cldr.Unit{} = unit) do
+  @spec to_radians_per_second(Localize.Unit.t()) :: float()
+  def to_radians_per_second(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:radian_per_second)
+    |> Localize.Unit.convert!("radian-per-second")
     |> extract_float()
   end
 
@@ -175,10 +177,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_meters_per_square_second(~u(9.81 meter_per_square_second))
       9.81
   """
-  @spec to_meters_per_square_second(Cldr.Unit.t()) :: float()
-  def to_meters_per_square_second(%Cldr.Unit{} = unit) do
+  @spec to_meters_per_square_second(Localize.Unit.t()) :: float()
+  def to_meters_per_square_second(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:meter_per_square_second)
+    |> Localize.Unit.convert!("meter-per-square-second")
     |> extract_float()
   end
 
@@ -191,10 +193,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_radians_per_square_second(~u(360 degree_per_square_second))
       :math.pi() * 2
   """
-  @spec to_radians_per_square_second(Cldr.Unit.t()) :: float()
-  def to_radians_per_square_second(%Cldr.Unit{} = unit) do
+  @spec to_radians_per_square_second(Localize.Unit.t()) :: float()
+  def to_radians_per_square_second(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:radian_per_square_second)
+    |> Localize.Unit.convert!("radian-per-square-second")
     |> extract_float()
   end
 
@@ -207,10 +209,10 @@ defmodule BB.Robot.Units do
       iex> BB.Robot.Units.to_linear_damping(~u(1.5 newton_second_per_meter))
       1.5
   """
-  @spec to_linear_damping(Cldr.Unit.t()) :: float()
-  def to_linear_damping(%Cldr.Unit{} = unit) do
+  @spec to_linear_damping(Localize.Unit.t()) :: float()
+  def to_linear_damping(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:newton_second_per_meter)
+    |> Localize.Unit.convert!("newton-second-per-meter")
     |> extract_float()
   end
 
@@ -220,79 +222,79 @@ defmodule BB.Robot.Units do
   Note: The DSL uses `newton_meter_second_per_degree` but we convert
   to radians for consistency with other angular quantities.
   """
-  @spec to_rotational_damping(Cldr.Unit.t()) :: float()
-  def to_rotational_damping(%Cldr.Unit{} = unit) do
+  @spec to_rotational_damping(Localize.Unit.t()) :: float()
+  def to_rotational_damping(%Localize.Unit{} = unit) do
     unit
-    |> Cldr.Unit.convert!(:newton_meter_second_per_radian)
+    |> Localize.Unit.convert!("newton-meter-second-per-radian")
     |> extract_float()
   end
 
   @doc """
-  Extract the numeric value from a Cldr.Unit as a float.
+  Extract the numeric value from a `Localize.Unit` as a float.
 
-  Handles both integer and Decimal values.
+  Handles integer, float, and `Decimal` values.
   """
-  @spec extract_float(Cldr.Unit.t()) :: float()
-  def extract_float(%Cldr.Unit{value: value}) when is_integer(value) do
+  @spec extract_float(Localize.Unit.t()) :: float()
+  def extract_float(%Localize.Unit{value: value}) when is_integer(value) do
     value / 1
   end
 
-  def extract_float(%Cldr.Unit{value: value}) when is_float(value) do
+  def extract_float(%Localize.Unit{value: value}) when is_float(value) do
     value
   end
 
-  def extract_float(%Cldr.Unit{value: %Decimal{} = value}) do
+  def extract_float(%Localize.Unit{value: %Decimal{} = value}) do
     Decimal.to_float(value)
   end
 
   @doc """
   Convert an optional unit value to its base SI float, or return nil.
   """
-  @spec to_meters_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_meters_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_meters_or_nil(nil), do: nil
   def to_meters_or_nil(unit), do: to_meters(unit)
 
-  @spec to_radians_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_radians_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_radians_or_nil(nil), do: nil
   def to_radians_or_nil(unit), do: to_radians(unit)
 
-  @spec to_kilograms_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_kilograms_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_kilograms_or_nil(nil), do: nil
   def to_kilograms_or_nil(unit), do: to_kilograms(unit)
 
-  @spec to_kilogram_square_meters_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_kilogram_square_meters_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_kilogram_square_meters_or_nil(nil), do: nil
   def to_kilogram_square_meters_or_nil(unit), do: to_kilogram_square_meters(unit)
 
-  @spec to_newtons_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_newtons_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_newtons_or_nil(nil), do: nil
   def to_newtons_or_nil(unit), do: to_newtons(unit)
 
-  @spec to_newton_meters_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_newton_meters_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_newton_meters_or_nil(nil), do: nil
   def to_newton_meters_or_nil(unit), do: to_newton_meters(unit)
 
-  @spec to_meters_per_second_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_meters_per_second_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_meters_per_second_or_nil(nil), do: nil
   def to_meters_per_second_or_nil(unit), do: to_meters_per_second(unit)
 
-  @spec to_radians_per_second_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_radians_per_second_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_radians_per_second_or_nil(nil), do: nil
   def to_radians_per_second_or_nil(unit), do: to_radians_per_second(unit)
 
-  @spec to_meters_per_square_second_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_meters_per_square_second_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_meters_per_square_second_or_nil(nil), do: nil
   def to_meters_per_square_second_or_nil(unit), do: to_meters_per_square_second(unit)
 
-  @spec to_radians_per_square_second_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_radians_per_square_second_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_radians_per_square_second_or_nil(nil), do: nil
   def to_radians_per_square_second_or_nil(unit), do: to_radians_per_square_second(unit)
 
-  @spec to_linear_damping_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_linear_damping_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_linear_damping_or_nil(nil), do: nil
   def to_linear_damping_or_nil(unit), do: to_linear_damping(unit)
 
-  @spec to_rotational_damping_or_nil(Cldr.Unit.t() | nil) :: float() | nil
+  @spec to_rotational_damping_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_rotational_damping_or_nil(nil), do: nil
   def to_rotational_damping_or_nil(unit), do: to_rotational_damping(unit)
 end

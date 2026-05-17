@@ -116,17 +116,17 @@ defmodule BB.Robot.UnitsTest do
 
   describe "extract_float/1" do
     test "extracts integer value" do
-      unit = Cldr.Unit.new!(:meter, 5)
+      unit = Localize.Unit.new!(5, "meter")
       assert Units.extract_float(unit) == 5.0
     end
 
     test "extracts float value" do
-      unit = Cldr.Unit.new!(:meter, 2.5)
+      unit = Localize.Unit.new!(2.5, "meter")
       assert Units.extract_float(unit) == 2.5
     end
 
     test "extracts decimal value" do
-      unit = Cldr.Unit.new!(:meter, Decimal.new("1.5"))
+      unit = Localize.Unit.new!(Decimal.new("1.5"), "meter")
       assert Units.extract_float(unit) == 1.5
     end
   end
