@@ -73,7 +73,6 @@ jobs:
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     env:
       BB_VERSION: local
-      MIX_ENV: test
     steps:
       - name: Check out bb at this ref
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -111,10 +110,6 @@ jobs:
         working-directory: ${{ matrix.project.name }}
         run: mix deps.get
 
-      - name: mix compile --force --warnings-as-errors
+      - name: mix check --no-retry
         working-directory: ${{ matrix.project.name }}
-        run: mix compile --force --warnings-as-errors
-
-      - name: mix test
-        working-directory: ${{ matrix.project.name }}
-        run: mix test
+        run: mix check --no-retry
