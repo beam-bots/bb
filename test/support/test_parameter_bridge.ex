@@ -198,7 +198,9 @@ defmodule BB.Test.ParameterBridge do
       param_atom = if is_atom(param_id), do: param_id, else: String.to_atom(param_id)
 
       message = %BB.Message{
-        timestamp: System.monotonic_time(:nanosecond),
+        monotonic_time: System.monotonic_time(:nanosecond),
+        wall_time: System.system_time(:nanosecond),
+        node: Node.self(),
         frame_id: :remote,
         payload: %RemoteParamValue{value: value}
       }

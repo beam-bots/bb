@@ -57,7 +57,7 @@ defmodule BB.Controller.ActionTest do
     test "invokes command on robot module" do
       action = %Command{command: :disarm, args: []}
       context = %Context{robot_module: TestRobot}
-      message = %BB.Message{timestamp: 0, frame_id: :test, payload: %{}}
+      message = %BB.Message{monotonic_time: 0, frame_id: :test, payload: %{}}
 
       result = Action.execute(action, message, context)
 
@@ -68,7 +68,7 @@ defmodule BB.Controller.ActionTest do
     test "passes args as map to command" do
       action = %Command{command: :move_to, args: [target: :home]}
       context = %Context{robot_module: TestRobot}
-      message = %BB.Message{timestamp: 0, frame_id: :test, payload: %{}}
+      message = %BB.Message{monotonic_time: 0, frame_id: :test, payload: %{}}
 
       result = Action.execute(action, message, context)
 
@@ -88,7 +88,7 @@ defmodule BB.Controller.ActionTest do
 
       action = %Callback{handler: handler}
       context = %Context{robot_module: SomeRobot, controller_name: :test_controller}
-      message = %BB.Message{timestamp: 123, frame_id: :test, payload: %{value: 42}}
+      message = %BB.Message{monotonic_time: 123, frame_id: :test, payload: %{value: 42}}
 
       result = Action.execute(action, message, context)
 

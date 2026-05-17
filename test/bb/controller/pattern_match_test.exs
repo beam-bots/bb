@@ -41,7 +41,9 @@ defmodule BB.Controller.PatternMatchTest do
 
   defp build_message(payload) do
     %BB.Message{
-      timestamp: System.monotonic_time(:nanosecond),
+      monotonic_time: System.monotonic_time(:nanosecond),
+      wall_time: System.system_time(:nanosecond),
+      node: Node.self(),
       frame_id: :sensor,
       payload: payload
     }

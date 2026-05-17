@@ -11,11 +11,13 @@ defmodule BB.MessageTest do
   alias BB.Message.Geometry.Pose
 
   describe "Message envelope" do
-    test "new/3 creates a message with timestamp, frame_id, and payload" do
+    test "new/3 creates a message with timing, origin, frame_id, and payload" do
       {:ok, msg} = Pose.new(:base_link, Vec3.new(1, 2, 3), Quaternion.identity())
 
       assert %Message{} = msg
-      assert is_integer(msg.timestamp)
+      assert is_integer(msg.monotonic_time)
+      assert is_integer(msg.wall_time)
+      assert msg.node == Node.self()
       assert msg.frame_id == :base_link
       assert %Pose{} = msg.payload
     end

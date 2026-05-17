@@ -38,10 +38,12 @@ defmodule BB.Message do
   Note: `defstruct` must be defined before `use BB.Message`.
   """
 
-  defstruct [:timestamp, :frame_id, :payload, :robot]
+  defstruct [:monotonic_time, :wall_time, :node, :frame_id, :payload, :robot]
 
   @type t :: %__MODULE__{
-          timestamp: integer(),
+          monotonic_time: integer(),
+          wall_time: integer(),
+          node: node(),
           frame_id: atom(),
           payload: struct(),
           robot: module() | nil
@@ -73,7 +75,9 @@ defmodule BB.Message do
   Create a new message with validated payload.
 
   Validates the attributes against the payload module's schema, then wraps
-  the resulting struct in a message envelope with a fresh timestamp.
+  the resulting struct in a message envelope. The envelope is stamped with
+  the current monotonic time, wall-clock time, and the local node name,
+  so messages remain interpretable across nodes and after recording.
 
   ## Examples
 
@@ -91,7 +95,9 @@ defmodule BB.Message do
       {:ok, validated} ->
         {:ok,
          %__MODULE__{
-           timestamp: System.monotonic_time(:nanosecond),
+           monotonic_time: System.monotonic_time(:nanosecond),
+           wall_time: System.system_time(:nanosecond),
+           node: Node.self(),
            frame_id: frame_id,
            payload: struct(payload_module, validated)
          }}

@@ -10,16 +10,18 @@ All message payloads in BB PubSub. Messages are wrapped in `BB.Message`:
 
 ```elixir
 %BB.Message{
-  timestamp: integer(),   # System.monotonic_time(:nanosecond)
-  frame_id: atom(),       # Coordinate frame (typically joint/link name)
-  payload: struct()       # One of the message types below
+  monotonic_time: integer(),  # System.monotonic_time(:nanosecond)
+  wall_time: integer(),       # System.system_time(:nanosecond)
+  node: node(),               # Node that produced the message
+  frame_id: atom(),           # Coordinate frame (typically joint/link name)
+  payload: struct()           # One of the message types below
 }
 ```
 
-**Note on timestamps:** The timestamp is monotonic time in nanoseconds (`System.monotonic_time(:nanosecond)`), not wall-clock time. This means:
-- Timestamps are suitable for ordering events and measuring durations
-- They cannot be converted to wall-clock/UTC time
-- They are only meaningful within a single BEAM VM instance
+**Note on timing fields:**
+- `monotonic_time` is monotonic nanoseconds from `System.monotonic_time/1`. Use it for ordering events and measuring durations within a single node. It is **not** comparable across nodes or BEAM restarts.
+- `wall_time` is system time in nanoseconds from `System.system_time/1`. Use it for correlation with real-world time, log alignment, and recording/playback. Subject to NTP jumps.
+- `node` is the originating BEAM node, useful for disambiguating messages in distributed deployments.
 
 ## Sensor Messages
 
@@ -358,8 +360,10 @@ Messages are wrapped in `BB.Message`:
 ```elixir
 %BB.Message{
   payload: %JointState{...},
-  timestamp: ~U[2025-01-18 12:00:00Z],
-  frame_id: "shoulder"
+  monotonic_time: -576_460_748_776_542,
+  wall_time: 1_737_201_600_000_000_000,
+  node: :nonode@nohost,
+  frame_id: :shoulder
 }
 ```
 
