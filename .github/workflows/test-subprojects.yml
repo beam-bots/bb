@@ -29,31 +29,36 @@ jobs:
           ORG: beam-bots
         run: |
           set -euo pipefail
-          # Find every non-archived bb_* repo in the org. bb_workspace is the
-          # meta-workspace, not an Elixir package, so skip it.
-          repos=$(gh api -X GET "/orgs/${ORG}/repos" --paginate \
+          # Every non-archived repo in the org, except bb itself (checked out
+          # separately) and bb_workspace (the meta-workspace, not a package).
+          candidates=$(gh api -X GET "/orgs/${ORG}/repos" --paginate \
             --jq '[.[]
               | select(.archived == false)
-              | select(.name | startswith("bb_"))
+              | select(.name != "bb")
               | select(.name != "bb_workspace")
               | .name]')
 
-          # Only include repos with a top-level mix.exs — bb_examples is a docs
-          # repo and would fail the test step.
-          mix_repos="[]"
-          for name in $(jq -r '.[]' <<<"$repos"); do
+          # Keep only repos with a top-level mix.exs. These are the "siblings"
+          # we clone alongside the project under test so cross-package deps
+          # resolve under BB_VERSION=local (e.g. bb_so101 -> feetech).
+          siblings_array="[]"
+          for name in $(jq -r '.[]' <<<"$candidates"); do
             if gh api "/repos/${ORG}/${name}/contents/mix.exs" --silent >/dev/null 2>&1; then
-              mix_repos=$(jq --arg n "$name" '. + [$n]' <<<"$mix_repos")
+              siblings_array=$(jq --arg n "$name" '. + [$n]' <<<"$siblings_array")
             else
               echo "skip ${name} (no top-level mix.exs)"
             fi
           done
 
-          matrix=$(jq -c '{project: map({name: .})}' <<<"$mix_repos")
-          siblings=$(jq -c '.' <<<"$mix_repos")
+          # The matrix (packages we actually test) is the bb_* subset. Non-bb_
+          # siblings like feetech are libraries we depend on, not bb subprojects.
+          matrix=$(jq -c '{project: [.[] | select(startswith("bb_")) | {name: .}]}' \
+            <<<"$siblings_array")
+          siblings=$(jq -c '.' <<<"$siblings_array")
           echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
           echo "siblings=${siblings}" >> "$GITHUB_OUTPUT"
-          echo "Discovered $(jq 'length' <<<"$mix_repos") subprojects: ${siblings}"
+          echo "Siblings: ${siblings}"
+          echo "Matrix:   ${matrix}"
 
   test-subprojects:
     name: ${{ matrix.project.name }}
