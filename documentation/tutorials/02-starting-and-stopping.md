@@ -33,14 +33,15 @@ BB.Supervisor (MyRobot.Robot)
 ├── PubSub Registry       - Message routing
 ├── Task.Supervisor       - Command execution
 ├── Runtime               - State machine & robot state
-├── SensorSupervisor      - Robot-level sensors
-├── ControllerSupervisor  - Robot-level controllers
-├── BridgeSupervisor      - Parameter bridges
-└── LinkSupervisor (:base_link)
-    └── JointSupervisor (:pan_joint)
-        └── LinkSupervisor (:pan_link)
-            └── JointSupervisor (:tilt_joint)
-                └── LinkSupervisor (:camera_link)
+├── BridgeSupervisor      - External communication (not hardware)
+└── TopologySupervisor    - Hardware-facing subtree (its own restart budget)
+    ├── SensorSupervisor      - Robot-level sensors
+    ├── ControllerSupervisor  - Robot-level controllers
+    └── LinkSupervisor (:base_link)
+        └── JointSupervisor (:pan_joint)
+            └── LinkSupervisor (:pan_link)
+                └── JointSupervisor (:tilt_joint)
+                    └── LinkSupervisor (:camera_link)
 ```
 
 Each link and joint in your robot definition becomes a supervisor in the process tree.
@@ -64,6 +65,8 @@ If the camera link's supervisor itself fails repeatedly:
 3. The pan joint and base continue operating
 
 This mirrors how physical robot failures propagate - a broken wrist doesn't stop the shoulder from working.
+
+If failures cascade all the way up and exhaust the topology supervisor's own restart budget (configurable via `topology_max_restarts` and `topology_max_seconds`), the safety controller force-disarms the robot and transitions it to `:error`. Infrastructure (Runtime, PubSub, bridges) keeps running so external systems can observe the failure and acknowledge with `BB.Safety.force_disarm/1`.
 
 ## Viewing the Process Tree
 

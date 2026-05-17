@@ -315,4 +315,4 @@ Before deploying your actuator:
 ## Next Steps
 
 - Understand the full safety system in [Understanding Safety](../topics/understanding-safety.md)
-- Learn about [Hardware Error Reporting](../topics/understanding-safety.md#hardware-error-reporting)
+- Learn about [Hardware Error Reporting and Escalation](../topics/understanding-safety.md#hardware-error-reporting-and-escalation)
