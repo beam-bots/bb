@@ -118,7 +118,7 @@ defmodule MyRobot.Robot do
 end
 ```
 
-Robot-level processes are supervised directly under the main robot supervisor, parallel to the topology subtree.
+Robot-level sensors and controllers are grouped under their own subsystem supervisors (`SensorSupervisor`, `ControllerSupervisor`) which sit under the topology supervisor alongside the link tree.
 
 ## The Runtime Process
 
@@ -127,19 +127,25 @@ Robot-level processes are supervised directly under the main robot supervisor, p
 - Manages operational state (disarmed, idle, executing)
 - Subscribes to sensor messages and updates joint positions
 - Spawns and monitors command processes
-- Lives at the root level, sibling to the topology
+- Lives at the root level, parallel to the topology supervisor
 
 ```
-RobotSupervisor
+RobotSupervisor (root)
+├── Registry
+├── PubSub Registry
+├── Task.Supervisor
+├── CommandSupervisor   (DynamicSupervisor for command processes)
 ├── Runtime
-├── SafetyController  (if safety enabled)
-├── PCA9685Controller (robot-level controller)
-├── BatteryMonitor    (robot-level sensor)
-└── TopologySupervisor
-    └── ...
+├── BridgeSupervisor    (external comms - not hardware-critical)
+└── TopologySupervisor  (hardware-facing - has its own restart budget)
+    ├── SensorSupervisor       (robot-level sensors)
+    ├── ControllerSupervisor   (robot-level controllers)
+    └── LinkSupervisor(...)    (the joint/actuator/link tree)
 ```
 
-If the Runtime crashes, it doesn't take down the topology. Hardware processes keep running while Runtime restarts and resubscribes.
+`BB.Safety.Controller` is part of the BB application's own supervision tree, not per-robot. It monitors each robot's root supervisor and topology supervisor: when the topology supervisor stops (because its restart budget is exhausted), the safety controller force-disarms the robot and transitions it to `:error`.
+
+If the Runtime crashes, it doesn't take down the topology. Hardware processes keep running while Runtime restarts and resubscribes. Likewise, if the topology supervisor gives up, Runtime and the bridge subsystem keep running so external systems can still observe the failure and call `BB.Safety.force_disarm/1`.
 
 ## Process Registration
 

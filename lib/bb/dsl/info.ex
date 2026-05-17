@@ -27,7 +27,8 @@ defmodule BB.Dsl.Info do
           registry_options: keyword,
           supervisor_module: module,
           parameter_store: module | {module, keyword} | nil,
-          auto_disarm_on_error: boolean
+          topology_max_restarts: non_neg_integer,
+          topology_max_seconds: pos_integer
         }
   def settings(robot_module) do
     registry_options =
@@ -40,8 +41,9 @@ defmodule BB.Dsl.Info do
       supervisor_module:
         Extension.get_opt(robot_module, [:settings], :supervisor_module, Supervisor),
       parameter_store: Extension.get_opt(robot_module, [:settings], :parameter_store),
-      auto_disarm_on_error:
-        Extension.get_opt(robot_module, [:settings], :auto_disarm_on_error, true)
+      topology_max_restarts:
+        Extension.get_opt(robot_module, [:settings], :topology_max_restarts, 3),
+      topology_max_seconds: Extension.get_opt(robot_module, [:settings], :topology_max_seconds, 5)
     }
   end
 

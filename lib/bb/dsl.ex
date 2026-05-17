@@ -663,12 +663,18 @@ defmodule BB.Dsl do
         doc: "Optional parameter persistence backend. Use a module or `{Module, opts}` tuple.",
         required: false
       ],
-      auto_disarm_on_error: [
-        type: :boolean,
+      topology_max_restarts: [
+        type: :non_neg_integer,
         doc:
-          "Automatically disarm the robot when a hardware error is reported. Defaults to true.",
+          "Maximum restarts allowed in the topology supervisor before it gives up and the robot force-disarms.",
         required: false,
-        default: true
+        default: 3
+      ],
+      topology_max_seconds: [
+        type: :pos_integer,
+        doc: "Time window (in seconds) over which `topology_max_restarts` is counted.",
+        required: false,
+        default: 5
       ]
     ]
   }

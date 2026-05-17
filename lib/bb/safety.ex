@@ -166,15 +166,16 @@ defmodule BB.Safety do
   @doc """
   Report a hardware error from a component.
 
-  This function should be called by controllers, actuators, or sensors when
-  they detect a hardware error condition. The behaviour depends on the robot's
-  `auto_disarm_on_error` setting:
+  Publishes a `BB.Safety.HardwareError` message to `[:safety, :error]` for
+  subscribers to handle. This is a pure notification - it does not disarm the
+  robot or change safety state.
 
-  - If `true` (default): The robot is automatically disarmed
-  - If `false`: The error is published but no automatic action is taken
-
-  In both cases, a `BB.Safety.HardwareError` message is published to
-  `[:safety, :error]` for subscribers to handle.
+  Components that detect an unrecoverable hardware fault should `raise` or
+  exit instead of (or in addition to) calling this function. The supervisor
+  will restart the offending process; if the restart budget on the topology
+  supervisor is exhausted, the safety controller will force-disarm the robot.
+  This is the OTP-native way to signal hardware failure: let it crash, and
+  let supervision escalate.
 
   ## Parameters
 
@@ -184,23 +185,10 @@ defmodule BB.Safety do
 
   ## Example
 
-      # In a controller detecting servo overheating:
+      # In a controller detecting servo overheating - publish for observers,
+      # then crash so the supervisor decides whether to escalate:
       BB.Safety.report_error(MyRobot, [:dynamixel, :servo_1], {:hardware_error, 0x04})
-
-  ## Customising Error Handling
-
-  To implement custom error handling instead of auto-disarm:
-
-      defmodule MyRobot do
-        use BB
-
-        settings do
-          auto_disarm_on_error false
-        end
-      end
-
-      # Then subscribe to error events:
-      BB.subscribe(MyRobot, [:safety, :error])
+      raise BB.Error.Hardware.Overheat, servo: 1
   """
   defdelegate report_error(robot_module, path, error), to: BB.Safety.Controller
 end

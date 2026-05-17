@@ -312,18 +312,23 @@ def handle_info(:poll, state) do
       new_errors = state.errors + 1
 
       if new_errors >= 3 do
-        # Report persistent error
+        # Publish to [:safety, :error] for subscribers, then crash so
+        # the supervisor decides whether to escalate.
         BB.Safety.report_error(
           state.bb.robot_module,
           state.bb.path,
           {:sensor_failure, reason}
         )
-      end
 
-      {:noreply, %{state | errors: new_errors}}
+        {:stop, {:sensor_failure, reason}, state}
+      else
+        {:noreply, %{state | errors: new_errors}}
+      end
   end
 end
 ```
+
+`BB.Safety.report_error/3` is a notification only - it publishes a `BB.Safety.HardwareError` event but does not change safety state. Escalation happens through the supervision tree: if your process crashes often enough to exhaust the topology supervisor's restart budget, the safety controller will force-disarm the robot.
 
 ## Common Issues
 
