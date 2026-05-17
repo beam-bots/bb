@@ -10,7 +10,7 @@ defmodule BB.Parameter.Type do
   like `{:unit, :meter}`.
   """
 
-  alias BB.Cldr.Unit
+  alias BB.Unit
 
   @simple_types [:float, :integer, :boolean, :string, :atom]
 
@@ -40,7 +40,7 @@ defmodule BB.Parameter.Type do
 
   def validate({:unit, unit_type}) when is_atom(unit_type) do
     case Unit.validate_unit(unit_type) do
-      {:ok, _, _} -> {:ok, {:unit, unit_type}}
+      {:ok, _} -> {:ok, {:unit, unit_type}}
       {:error, _} -> {:error, "Invalid unit type: #{inspect(unit_type)}"}
     end
   end

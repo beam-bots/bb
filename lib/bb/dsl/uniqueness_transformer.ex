@@ -69,6 +69,11 @@ defmodule BB.Dsl.UniquenessTransformer do
     end
   end
 
+  # `Localize.Unit` and `Decimal` structs carry a `:name` field that is not a
+  # DSL entity identifier — skip them so they aren't treated as named entities.
+  defp retrieve_names(%Localize.Unit{}, _path, names), do: names
+  defp retrieve_names(%Decimal{}, _path, names), do: names
+
   defp retrieve_names(entity, path, names) when is_map_key(entity, :name) do
     names =
       names

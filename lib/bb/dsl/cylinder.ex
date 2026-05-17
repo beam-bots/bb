@@ -11,7 +11,7 @@ defmodule BB.Dsl.Cylinder do
             radius: nil,
             height: nil
 
-  alias Cldr.Unit
+  alias Localize.Unit
   alias Spark.Dsl.Entity
 
   @type t :: %__MODULE__{

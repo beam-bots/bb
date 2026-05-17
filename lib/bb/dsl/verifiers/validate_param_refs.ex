@@ -13,8 +13,8 @@ defmodule BB.Dsl.Verifiers.ValidateParamRefs do
 
   use Spark.Dsl.Verifier
 
-  alias BB.Cldr.Unit
   alias BB.Dsl.{Axis, Dynamics, Inertia, Inertial, Joint, Limit, Link, Origin, ParamRef}
+  alias BB.Unit
   alias Spark.Dsl.Verifier
   alias Spark.Error.DslError
 

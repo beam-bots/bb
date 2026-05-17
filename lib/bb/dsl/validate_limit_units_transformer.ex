@@ -23,8 +23,8 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
 
   use Spark.Dsl.Transformer
 
-  alias BB.Cldr.Unit
   alias BB.Dsl.{Joint, Limit, Link, ParamRef}
+  alias BB.Unit
   alias Spark.Dsl.Transformer
   alias Spark.Error.DslError
 
@@ -114,7 +114,7 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
   defp check_field(%ParamRef{}, _field, _expected_unit, _path, _module, _joint_type),
     do: {:cont, :ok}
 
-  defp check_field(%Cldr.Unit{} = value, field, expected_unit, path, module, joint_type) do
+  defp check_field(%Localize.Unit{} = value, field, expected_unit, path, module, joint_type) do
     if Unit.compatible?(value, expected_unit) do
       {:cont, :ok}
     else
@@ -129,7 +129,7 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
       module: module,
       path: path ++ [:limit, field],
       message: """
-      The unit `#{value.unit}` provided for `#{field}` is not compatible with a `#{joint_type}` joint.
+      The unit `#{value.name}` provided for `#{field}` is not compatible with a `#{joint_type}` joint.
 
       Expected a unit compatible with `#{expected_unit}`.
       """

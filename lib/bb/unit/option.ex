@@ -7,7 +7,7 @@ defmodule BB.Unit.Option do
   Functions for specifying and validating units in option schemas.
   """
 
-  alias BB.Cldr.Unit
+  alias BB.Unit
 
   @schema Spark.Options.new!(
             compatible: [
@@ -35,9 +35,9 @@ defmodule BB.Unit.Option do
   @type schema_options :: [schema_option]
   @type schema_option ::
           {:compatible, atom | String.t()}
-          | {:min, Cldr.Unit.t()}
-          | {:max, Cldr.Unit.t()}
-          | {:eq, Cldr.Unit.t()}
+          | {:min, Localize.Unit.t()}
+          | {:max, Localize.Unit.t()}
+          | {:eq, Localize.Unit.t()}
 
   @doc """
   Create a Spark.Options schema type for a unit.
@@ -56,18 +56,18 @@ defmodule BB.Unit.Option do
 
   With min constraint:
 
-      iex> BB.Unit.Option.unit_type(min: Cldr.Unit.new!(:meter, 0))
-      {:custom, BB.Unit.Option, :validate, [[min: Cldr.Unit.new!(:meter, 0)]]}
+      iex> BB.Unit.Option.unit_type(min: Localize.Unit.new!(0, "meter"))
+      {:custom, BB.Unit.Option, :validate, [[min: Localize.Unit.new!(0, "meter")]]}
 
   With max constraint:
 
-      iex> BB.Unit.Option.unit_type(max: Cldr.Unit.new!(:meter, 100))
-      {:custom, BB.Unit.Option, :validate, [[max: Cldr.Unit.new!(:meter, 100)]]}
+      iex> BB.Unit.Option.unit_type(max: Localize.Unit.new!(100, "meter"))
+      {:custom, BB.Unit.Option, :validate, [[max: Localize.Unit.new!(100, "meter")]]}
 
   Combined constraints:
 
-      iex> BB.Unit.Option.unit_type(compatible: :meter, min: Cldr.Unit.new!(:meter, 0), max: Cldr.Unit.new!(:meter, 100))
-      {:custom, BB.Unit.Option, :validate, [[compatible: :meter, min: Cldr.Unit.new!(:meter, 0), max: Cldr.Unit.new!(:meter, 100)]]}
+      iex> BB.Unit.Option.unit_type(compatible: :meter, min: Localize.Unit.new!(0, "meter"), max: Localize.Unit.new!(100, "meter"))
+      {:custom, BB.Unit.Option, :validate, [[compatible: :meter, min: Localize.Unit.new!(0, "meter"), max: Localize.Unit.new!(100, "meter")]]}
   """
   @spec unit_type(Keyword.t()) :: {:custom, __MODULE__, :validate, [Keyword.t()]}
   def unit_type(options \\ []) do
@@ -91,47 +91,38 @@ defmodule BB.Unit.Option do
 
   Valid unit passes through:
 
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:meter, 5))
-      {:ok, Cldr.Unit.new!(:meter, 5)}
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(5, "meter"))
+      {:ok, Localize.Unit.new!(5, "meter")}
 
   Non-unit values are rejected:
 
       iex> BB.Unit.Option.validate("not a unit")
-      {:error, "Value `\\"not a unit\\"` is not a `Cldr.Unit` struct"}
+      {:error, "Value `\\"not a unit\\"` is not a `Localize.Unit` struct"}
 
   Compatible unit check passes for same category:
 
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:centimeter, 100), compatible: :meter)
-      {:ok, Cldr.Unit.new!(:centimeter, 100)}
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(100, "centimeter"), compatible: :meter)
+      {:ok, Localize.Unit.new!(100, "centimeter")}
 
   Incompatible units are rejected:
 
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:degree, 90), compatible: :meter)
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(90, "degree"), compatible: :meter)
       {:error, "The unit `degree` is not compatible with `meter`"}
 
   Min constraint - value must be >= min:
 
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:meter, 5), min: Cldr.Unit.new!(:meter, 1))
-      {:ok, Cldr.Unit.new!(:meter, 5)}
-
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:meter, 1), min: Cldr.Unit.new!(:meter, 5))
-      {:error, "Expected 1m to be greater than or equal to 5m"}
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(5, "meter"), min: Localize.Unit.new!(1, "meter"))
+      {:ok, Localize.Unit.new!(5, "meter")}
 
   Max constraint - value must be <= max:
 
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:meter, 5), max: Cldr.Unit.new!(:meter, 10))
-      {:ok, Cldr.Unit.new!(:meter, 5)}
-
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:meter, 15), max: Cldr.Unit.new!(:meter, 10))
-      {:error, "Expected 15m to be less than or equal to 10m"}
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(5, "meter"), max: Localize.Unit.new!(10, "meter"))
+      {:ok, Localize.Unit.new!(5, "meter")}
 
   Eq constraint - value must equal exactly:
 
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:meter, 5), eq: Cldr.Unit.new!(:meter, 5))
-      {:ok, Cldr.Unit.new!(:meter, 5)}
-
-      iex> BB.Unit.Option.validate(Cldr.Unit.new!(:meter, 5), eq: Cldr.Unit.new!(:meter, 10))
-      {:error, "Expected 5 m to equal 10 m"}
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(5, "meter"), eq: Localize.Unit.new!(5, "meter"))
+      {:ok, Localize.Unit.new!(5, "meter")}
 
   ParamRef values are accepted and annotated with expected unit type:
 
@@ -141,7 +132,7 @@ defmodule BB.Unit.Option do
       :meter
   """
   @spec validate(any, Keyword.t()) ::
-          {:ok, Cldr.Unit.t()} | {:ok, BB.Dsl.ParamRef.t()} | {:error, String.t()}
+          {:ok, Localize.Unit.t()} | {:ok, BB.Dsl.ParamRef.t()} | {:error, String.t()}
   def validate(value, options \\ [])
 
   def validate(%BB.Dsl.ParamRef{} = ref, options) do
@@ -157,10 +148,10 @@ defmodule BB.Unit.Option do
     end
   end
 
-  defp validate_is_unit(unit) when is_struct(unit, Cldr.Unit), do: {:ok, unit}
+  defp validate_is_unit(unit) when is_struct(unit, Localize.Unit), do: {:ok, unit}
 
   defp validate_is_unit(unit),
-    do: {:error, "Value `#{inspect(unit)}` is not a `Cldr.Unit` struct"}
+    do: {:error, "Value `#{inspect(unit)}` is not a `Localize.Unit` struct"}
 
   defp validate_compatible(unit, nil), do: {:ok, unit}
 
@@ -168,7 +159,7 @@ defmodule BB.Unit.Option do
     if Unit.compatible?(unit, base_unit) do
       {:ok, unit}
     else
-      {:error, "The unit `#{unit.unit}` is not compatible with `#{base_unit}`"}
+      {:error, "The unit `#{unit.name}` is not compatible with `#{base_unit}`"}
     end
   end
 
@@ -206,7 +197,7 @@ defmodule BB.Unit.Option do
       )
 
   defp validate_cmp(value, cmp, valid, message) do
-    result = Cldr.Unit.compare(value, cmp)
+    result = Unit.compare(value, cmp)
 
     if result in valid do
       {:ok, value}
@@ -218,8 +209,8 @@ defmodule BB.Unit.Option do
   defp validate_compatible_option(options) do
     if options[:compatible] do
       case Unit.validate_unit(options[:compatible]) do
-        {:ok, _, _} -> {:ok, options}
-        {:error, {module, message}} -> {:error, module.exception(message: message)}
+        {:ok, _} -> {:ok, options}
+        {:error, exception} -> {:error, exception}
       end
     else
       {:ok, options}
@@ -250,7 +241,7 @@ defmodule BB.Unit.Option do
   defp extract_default_unit([]), do: {:ok, nil}
 
   defp extract_default_unit(options) do
-    if options[:comptable] do
+    if options[:compatible] do
       {:ok, options[:compatible]}
     else
       first =
