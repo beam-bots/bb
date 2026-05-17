@@ -42,7 +42,17 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp create_robot_module(igniter, module) do
-      contents = """
+      case Module.module_exists(igniter, module) do
+        {true, igniter} ->
+          igniter
+
+        {false, igniter} ->
+          Module.create_module(igniter, module, robot_module_contents())
+      end
+    end
+
+    defp robot_module_contents do
+      """
       use BB
 
       commands do
@@ -62,8 +72,6 @@ if Code.ensure_loaded?(Igniter) do
         end
       end
       """
-
-      Module.create_module(igniter, module, contents)
     end
 
     defp add_to_supervision_tree(igniter, robot_module) do

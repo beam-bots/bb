@@ -59,4 +59,17 @@ defmodule Mix.Tasks.Bb.AddRobotTest do
     |> Igniter.compose_task("bb.add_robot", ["--robot", "Test.Robot2"])
     |> assert_creates("lib/test/robot2.ex")
   end
+
+  test "running twice for the same robot is a no-op (no `File already exists` issue)" do
+    igniter =
+      test_project()
+      |> Igniter.compose_task("bb.add_robot")
+      |> apply_igniter!()
+      |> Igniter.compose_task("bb.add_robot")
+
+    assert igniter.issues == [],
+           "expected no issues on a re-run, got: #{inspect(igniter.issues)}"
+
+    assert_unchanged(igniter)
+  end
 end
