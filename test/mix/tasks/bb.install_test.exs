@@ -61,4 +61,17 @@ defmodule Mix.Tasks.Bb.InstallTest do
     |> Igniter.compose_task("bb.install")
     |> assert_unchanged()
   end
+
+  test "configures the chosen Nx backend in runtime.exs" do
+    igniter =
+      test_project()
+      |> Igniter.compose_task("bb.install", ["--backend", "exla"])
+
+    {_, source} = Rewrite.source(igniter.rewrite, "config/runtime.exs")
+    assert source.content =~ "config :nx, default_backend: EXLA.Backend"
+
+    assert_has_patch(igniter, "mix.exs", """
+    + |      {:exla, "~> 0.10"}
+    """)
+  end
 end
