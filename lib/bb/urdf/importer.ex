@@ -50,20 +50,11 @@ if Code.ensure_loaded?(Sourceror) do
     @spec to_quoted(Parser.robot(), module) ::
             {:ok, Macro.t(), [String.t()]} | {:error, term}
     def to_quoted(robot, module_name) when is_atom(module_name) do
-      robot =
-        robot
-        |> drop_world_anchor_joints()
-        |> dedupe_joint_names()
-        |> dedupe_material_names()
+      with {:ok, prepared} <- prepare(robot) do
+        topology =
+          render_topology(prepared.root, prepared.links_by_name, prepared.joints_by_parent)
 
-      links_by_name = Map.new(robot.links, &{&1.name, &1})
-      joints_by_parent = Enum.group_by(robot.joints, & &1.parent)
-      child_links = MapSet.new(robot.joints, & &1.child)
-
-      with :ok <- validate_referenced_links(robot.joints, links_by_name),
-           {:ok, root} <- roots(robot.links, child_links) do
-        topology = render_topology(root, links_by_name, joints_by_parent)
-        settings = render_settings(robot.name)
+        settings = render_settings(prepared.name)
 
         body =
           block([
@@ -77,7 +68,49 @@ if Code.ensure_loaded?(Sourceror) do
 
         ast = {:defmodule, [], [module_alias, [do: body]]}
 
-        {:ok, ast, robot.warnings}
+        {:ok, ast, prepared.warnings}
+      end
+    end
+
+    @doc """
+    Build the quoted form of just the `topology do ... end` block.
+
+    Used when merging an imported URDF into an existing BB module — only the
+    topology gets replaced, leaving `settings`, sensors, controllers, commands
+    and other hand-written content alone.
+    """
+    @spec to_topology_quoted(Parser.robot()) ::
+            {:ok, Macro.t(), [String.t()]} | {:error, term}
+    def to_topology_quoted(robot) do
+      with {:ok, prepared} <- prepare(robot) do
+        topology =
+          render_topology(prepared.root, prepared.links_by_name, prepared.joints_by_parent)
+
+        {:ok, topology, prepared.warnings}
+      end
+    end
+
+    defp prepare(robot) do
+      robot =
+        robot
+        |> drop_world_anchor_joints()
+        |> dedupe_joint_names()
+        |> dedupe_material_names()
+
+      links_by_name = Map.new(robot.links, &{&1.name, &1})
+      joints_by_parent = Enum.group_by(robot.joints, & &1.parent)
+      child_links = MapSet.new(robot.joints, & &1.child)
+
+      with :ok <- validate_referenced_links(robot.joints, links_by_name),
+           {:ok, root} <- roots(robot.links, child_links) do
+        {:ok,
+         %{
+           root: root,
+           links_by_name: links_by_name,
+           joints_by_parent: joints_by_parent,
+           name: robot.name,
+           warnings: robot.warnings
+         }}
       end
     end
 
