@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<robot name="collision_bot">
+  <link name="base"/>
+  <link name="gripper"/>
+  <link name="finger"/>
+
+  <joint name="gripper" type="revolute">
+    <parent link="base"/>
+    <child link="gripper"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1" upper="1" effort="1" velocity="1"/>
+  </joint>
+
+  <joint name="finger_joint" type="prismatic">
+    <parent link="gripper"/>
+    <child link="finger"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="0.05" effort="1" velocity="0.1"/>
+    <mimic joint="gripper" multiplier="0.5"/>
+  </joint>
+</robot>

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<robot name="anchored_bot">
+  <link name="base_link"/>
+  <link name="arm"/>
+
+  <joint name="world_anchor" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+  </joint>
+
+  <joint name="shoulder" type="revolute">
+    <parent link="base_link"/>
+    <child link="arm"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1" upper="1" effort="1" velocity="1"/>
+  </joint>
+</robot>
