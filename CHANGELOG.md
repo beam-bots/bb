@@ -11,6 +11,19 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.17.0](https://github.com/beam-bots/bb/compare/v0.16.0...v0.17.0) (2026-05-18)
+
+
+
+
+### Features:
+
+* prompt for Nx backend during `mix igniter.install bb` (#103) by James Harton
+
+### Improvements:
+
+* add `test-subprojects` CI workflow (#102) by James Harton
+
 ## [v0.16.0](https://github.com/beam-bots/bb/compare/v0.15.4...v0.16.0) (2026-05-17)
 ### Breaking Changes:
 
