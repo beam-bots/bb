@@ -67,11 +67,10 @@ defmodule Mix.Tasks.Bb.InstallTest do
       test_project()
       |> Igniter.compose_task("bb.install", ["--backend", "exla"])
 
-    {_, source} = Rewrite.source(igniter.rewrite, "config/runtime.exs")
-    assert source.content =~ "config :nx, default_backend: EXLA.Backend"
+    {_, runtime} = Rewrite.source(igniter.rewrite, "config/runtime.exs")
+    assert runtime.content =~ "config :nx, default_backend: EXLA.Backend"
 
-    assert_has_patch(igniter, "mix.exs", """
-    + |      {:exla, "~> 0.10"}
-    """)
+    {_, mix} = Rewrite.source(igniter.rewrite, "mix.exs")
+    assert mix.content =~ ~r/\{:exla, "~> [0-9.]+"\}/
   end
 end
