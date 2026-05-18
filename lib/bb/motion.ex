@@ -137,7 +137,6 @@ defmodule BB.Motion do
           {:ok, positions, meta} ->
             RobotState.set_positions(robot_state, positions)
             send_positions_to_actuators(robot_module, robot, positions, delivery)
-            publish_joint_state(robot_module, positions)
 
             result = {:ok, meta}
 
@@ -264,7 +263,6 @@ defmodule BB.Motion do
         all_positions = merge_all_positions(results)
         RobotState.set_positions(robot_state, all_positions)
         send_positions_to_actuators(robot_module, robot, all_positions, delivery)
-        publish_joint_state(robot_module, all_positions)
 
         {:ok, results}
 
@@ -364,7 +362,6 @@ defmodule BB.Motion do
       fn ->
         RobotState.set_positions(robot_state, positions)
         send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
-        publish_joint_state(robot_module, positions)
         {:ok, %{}}
       end
     )
@@ -442,21 +439,4 @@ defmodule BB.Motion do
         end
     end
   end
-
-  defp publish_joint_state(robot_module, positions) when map_size(positions) > 0 do
-    {names, values} = positions |> Enum.unzip()
-    count = length(names)
-
-    {:ok, msg} =
-      BB.Message.new(BB.Message.Sensor.JointState, :motion,
-        names: names,
-        positions: Enum.map(values, &(&1 * 1.0)),
-        velocities: List.duplicate(0.0, count),
-        efforts: List.duplicate(0.0, count)
-      )
-
-    BB.publish(robot_module, [:sensor, :motion], msg)
-  end
-
-  defp publish_joint_state(_robot_module, _positions), do: :ok
 end
