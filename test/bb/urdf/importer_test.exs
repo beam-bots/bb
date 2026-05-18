@@ -95,6 +95,26 @@ defmodule BB.Urdf.ImporterTest do
       assert Enum.any?(warnings, &(&1 =~ "<transmission>"))
     end
 
+    test "dedupes named materials so multiple visuals can share a URDF material" do
+      {source, _warnings} = import_fixture("shared_materials.urdf", MyApp.SharedGen)
+
+      # First visual keeps the URDF material name…
+      assert Regex.match?(
+               ~r/link :base_link do.*?material do\s*name :grey/s,
+               source
+             )
+
+      # …and the resulting module compiles (would fail if the name leaked
+      # into later visuals — the DSL rejects duplicate entity names).
+      assert [{MyApp.SharedGen, _}] = Code.compile_string(source)
+    end
+
+    test "emits mesh scale as a float (the default integer trips the URDF exporter)" do
+      {source, _warnings} = import_fixture("shared_materials.urdf")
+
+      assert source =~ ~r/mesh do\s*filename "package:\/\/meshes\/arm\.stl"\s*scale 1\.0/
+    end
+
     test "errors out on multiple root links" do
       xml = """
       <?xml version="1.0"?>

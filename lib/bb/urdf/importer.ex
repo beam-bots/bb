@@ -50,6 +50,7 @@ if Code.ensure_loaded?(Sourceror) do
     @spec to_quoted(Parser.robot(), module) ::
             {:ok, Macro.t(), [String.t()]} | {:error, term}
     def to_quoted(robot, module_name) when is_atom(module_name) do
+      robot = dedupe_material_names(robot)
       links_by_name = Map.new(robot.links, &{&1.name, &1})
       joints_by_parent = Enum.group_by(robot.joints, & &1.parent)
       child_links = MapSet.new(robot.joints, & &1.child)
@@ -73,6 +74,31 @@ if Code.ensure_loaded?(Sourceror) do
 
         {:ok, ast, robot.warnings}
       end
+    end
+
+    # URDF lets many visuals reference a single named material; BB's DSL
+    # requires globally-unique entity names. Keep the URDF name on the first
+    # visual that uses each material and strip it on later occurrences (BB
+    # auto-generates a unique identifier when `name` is absent).
+    defp dedupe_material_names(robot) do
+      {links, _seen} = Enum.map_reduce(robot.links, MapSet.new(), &dedupe_link_material/2)
+      %{robot | links: links}
+    end
+
+    defp dedupe_link_material(%{visual: %{material: %{name: name}}} = link, seen)
+         when is_binary(name) do
+      if MapSet.member?(seen, name) do
+        {strip_material_name(link), seen}
+      else
+        {link, MapSet.put(seen, name)}
+      end
+    end
+
+    defp dedupe_link_material(link, seen), do: {link, seen}
+
+    defp strip_material_name(link) do
+      visual = %{link.visual | material: %{link.visual.material | name: nil}}
+      %{link | visual: visual}
     end
 
     defp validate_referenced_links(joints, links_by_name) do
@@ -186,11 +212,10 @@ if Code.ensure_loaded?(Sourceror) do
     end
 
     defp render_geometry({:mesh, %{filename: filename, scale: scale}}) do
-      children =
-        [call(:filename, [filename])] ++
-          if scale == 1.0, do: [], else: [call(:scale, [scale])]
-
-      call(:mesh, [], children)
+      call(:mesh, [], [
+        call(:filename, [filename]),
+        call(:scale, [scale * 1.0])
+      ])
     end
 
     defp render_material(material) do
