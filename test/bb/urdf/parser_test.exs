@@ -45,10 +45,16 @@ defmodule BB.Urdf.ParserTest do
     test "collects warnings for unsupported features" do
       {:ok, robot} = Parser.parse_file(Path.join(@fixture_dir, "mimic_and_transmission.urdf"))
 
-      assert Enum.any?(robot.warnings, &(&1 =~ "<mimic>"))
       assert Enum.any?(robot.warnings, &(&1 =~ "<safety_controller>"))
       assert Enum.any?(robot.warnings, &(&1 =~ "<transmission>"))
       assert Enum.any?(robot.warnings, &(&1 =~ "<gazebo>"))
+    end
+
+    test "parses <mimic> into a per-joint mimic struct" do
+      {:ok, robot} = Parser.parse_file(Path.join(@fixture_dir, "mimic_and_transmission.urdf"))
+
+      right = Enum.find(robot.joints, &(&1.name == "right_finger_joint"))
+      assert right.mimic == %{joint: "left_finger_joint", multiplier: -1.0, offset: 0.0}
     end
 
     test "resolves top-level material references inside visuals" do

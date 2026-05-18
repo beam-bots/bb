@@ -90,9 +90,49 @@ defmodule BB.Urdf.ImporterTest do
     test "passes through parser warnings" do
       {_source, warnings} = import_fixture("mimic_and_transmission.urdf")
 
-      assert Enum.any?(warnings, &(&1 =~ "<mimic>"))
       assert Enum.any?(warnings, &(&1 =~ "<safety_controller>"))
       assert Enum.any?(warnings, &(&1 =~ "<transmission>"))
+    end
+
+    test "emits a BB.Sensor.Mimic for URDF <mimic> joints" do
+      {source, _warnings} = import_fixture("mimic_and_transmission.urdf", MyApp.MimicGen)
+
+      assert source =~ "sensor :right_finger_joint_mimic"
+      assert source =~ "BB.Sensor.Mimic"
+      assert source =~ "source: :left_finger_joint"
+      assert source =~ "multiplier: -1.0"
+      assert [{MyApp.MimicGen, _}] = Code.compile_string(source)
+    end
+
+    test "omits default multiplier and offset on emitted mimic sensors" do
+      xml = """
+      <?xml version="1.0"?>
+      <robot name="t">
+        <link name="a"/>
+        <link name="b"/>
+        <link name="c"/>
+        <joint name="j1" type="prismatic">
+          <parent link="a"/>
+          <child link="b"/>
+          <axis xyz="1 0 0"/>
+          <limit lower="0" upper="1" effort="1" velocity="1"/>
+        </joint>
+        <joint name="j2" type="prismatic">
+          <parent link="b"/>
+          <child link="c"/>
+          <axis xyz="1 0 0"/>
+          <limit lower="0" upper="1" effort="1" velocity="1"/>
+          <mimic joint="j1"/>
+        </joint>
+      </robot>
+      """
+
+      {:ok, parsed} = Parser.parse_string(xml)
+      {:ok, source, _} = Importer.to_source(parsed, MyApp.DefaultMimic)
+
+      assert source =~ ~r/source: :j1[^,}]*\}/
+      refute source =~ "multiplier:"
+      refute source =~ "offset:"
     end
 
     test "dedupes named materials so multiple visuals can share a URDF material" do

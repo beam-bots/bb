@@ -249,10 +249,30 @@ if Code.ensure_loaded?(Sourceror) do
           render_axis(joint) ++
           render_limit(joint) ++
           render_dynamics(joint.dynamics) ++
+          render_mimic(joint) ++
           [render_link(child_link, links_by_name, joints_by_parent)]
 
       call(:joint, [atom_name(joint.name)], body)
     end
+
+    defp render_mimic(%{mimic: nil}), do: []
+
+    defp render_mimic(%{name: joint_name, mimic: mimic}) do
+      sensor_name = String.to_atom("#{joint_name}_mimic")
+
+      opts =
+        [source: atom_name(mimic.joint)]
+        |> append_if(mimic.multiplier != 1.0, multiplier: mimic.multiplier)
+        |> append_if(mimic.offset != 0.0, offset: mimic.offset)
+
+      mimic_module = {:__aliases__, [], [:BB, :Sensor, :Mimic]}
+      child_spec = {mimic_module, opts}
+
+      [call(:sensor, [sensor_name, child_spec])]
+    end
+
+    defp append_if(list, false, _kv), do: list
+    defp append_if(list, true, kv), do: list ++ kv
 
     defp render_axis(%{type: :fixed}), do: []
     defp render_axis(%{axis: nil}), do: []
@@ -462,6 +482,8 @@ if Code.ensure_loaded?(Sourceror) do
         red: 1,
         roll: 1,
         scale: 1,
+        sensor: 2,
+        sensor: 3,
         settings: 1,
         sphere: 0,
         sphere: 1,

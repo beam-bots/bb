@@ -23,12 +23,15 @@ if Code.ensure_loaded?(Igniter) do
       * `--module`, `-m` - The module name for the generated robot.
         Defaults to `{AppPrefix}.Robot`.
 
-    ## Limitations
+    ## URDF feature support
 
-    Some URDF features have no direct BB equivalent and are skipped with a
+    `<mimic>` joints are emitted as a `BB.Sensor.Mimic` attached to the
+    mimicking joint — BB's sensor implements the same
+    `position * multiplier + offset` semantics as URDF.
+
+    These URDF features have no direct BB equivalent and are skipped with a
     warning rather than failing the import:
 
-      * `<mimic>` joints
       * `<safety_controller>` blocks
       * `<transmission>` blocks
       * `<gazebo>` extensions

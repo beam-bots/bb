@@ -325,7 +325,7 @@ defmodule BB.Urdf.Parser do
     axis = parse_axis(first_by_name(children, :axis))
     limit = parse_limit(first_by_name(children, :limit))
     dynamics = parse_dynamics(first_by_name(children, :dynamics))
-    {mimic, mimic_warnings} = parse_mimic(first_by_name(children, :mimic), to_string(name))
+    mimic = parse_mimic(first_by_name(children, :mimic))
 
     safety_warnings =
       case first_by_name(children, :safety_controller) do
@@ -343,7 +343,7 @@ defmodule BB.Urdf.Parser do
        limit: limit,
        dynamics: dynamics,
        mimic: mimic
-     }, mimic_warnings ++ safety_warnings}
+     }, safety_warnings}
   end
 
   defp parse_origin(nil), do: nil
@@ -380,19 +380,14 @@ defmodule BB.Urdf.Parser do
     }
   end
 
-  defp parse_mimic(nil, _joint_name), do: {nil, []}
+  defp parse_mimic(nil), do: nil
 
-  defp parse_mimic(xml_element() = element, joint_name) do
-    mimic = %{
+  defp parse_mimic(xml_element() = element) do
+    %{
       joint: element |> attr(:joint) |> to_string(),
       multiplier: element |> attr(:multiplier, "1") |> parse_float(),
       offset: element |> attr(:offset, "0") |> parse_float()
     }
-
-    warning =
-      "joint #{inspect(joint_name)}: <mimic> is not supported by bb (mirrors #{inspect(mimic.joint)})"
-
-    {mimic, [warning]}
   end
 
   defp parse_geometry(nil), do: nil

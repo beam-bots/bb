@@ -38,7 +38,7 @@ defmodule Mix.Tasks.Bb.FromUrdfTest do
       test_project()
       |> Igniter.compose_task("bb.from_urdf", [urdf, "--module", "Test.Robot"])
 
-    assert Enum.any?(igniter.warnings, &(&1 =~ "<mimic>"))
+    assert Enum.any?(igniter.warnings, &(&1 =~ "<safety_controller>"))
     assert Enum.any?(igniter.warnings, &(&1 =~ "<transmission>"))
   end
 
