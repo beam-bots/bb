@@ -1085,6 +1085,8 @@ the robot's state machine to control when they can run.
 | [`allowed_states`](#commands-command-allowed_states){: #commands-command-allowed_states } | `atom \| list(atom)` | `[:idle]` | Robot states in which this command can run. Use `:*` for all states (except `:disarmed`). Use `:disarmed` explicitly if the command should run when disarmed. |
 | [`category`](#commands-command-category){: #commands-command-category } | `atom` | `:default` | The command category for concurrency control. Commands in the same category are limited by that category's concurrency_limit. |
 | [`cancel`](#commands-command-cancel){: #commands-command-cancel } | `atom \| list(atom)` | `[]` | Categories of commands this command can cancel when starting. Use `:*` to cancel all running commands, or a list of specific categories. Empty list (default) means the command will error if its category is at capacity. |
+| [`arm`](#commands-command-arm){: #commands-command-arm } | `boolean` | `false` | If `true`, this command becomes the canonical arming command — `BB.Safety.arm/1` dispatches it via the runtime instead of flipping state directly. Only one command per robot may set this flag. Implicit for commands using `BB.Command.Arm` as the handler. |
+| [`disarm`](#commands-command-disarm){: #commands-command-disarm } | `boolean` | `false` | If `true`, this command becomes the canonical disarming command — `BB.Safety.disarm/2` dispatches it via the runtime instead of flipping state directly. Only one command per robot may set this flag. Implicit for commands using `BB.Command.Disarm` as the handler. |
 
 
 ### commands.command.argument

@@ -234,7 +234,64 @@ def result(%{result: {:ok, value}, next_state: next_state}) do
 end
 ```
 
-This is how `BB.Command.Arm` and `BB.Command.Disarm` work - they set `next_state` to `:idle` and `:disarmed` respectively.
+This is how `BB.Command.Arm` and `BB.Command.Disarm` work - they set `next_state` to the robot's `initial_state` and `:disarmed` respectively.
+
+## Custom Arm / Disarm Commands
+
+If your robot needs to do work as part of arming or disarming (e.g. moving
+to a home pose before disarming), define a command and flag it with
+`arm true` or `disarm true`:
+
+```elixir
+commands do
+  command :home_and_arm do
+    handler MyRobot.HomeAndArmCommand
+    arm true
+    allowed_states [:disarmed]
+  end
+end
+```
+
+When set, `BB.Safety.arm/1` (and `BB.Safety.disarm/2`) dispatch the
+flagged command via the runtime instead of flipping safety state
+directly — every caller (LiveView button, MCP client, external operator)
+goes through the same sequence.
+
+Inside the handler, call `BB.Safety.Controller.arm/1` /
+`BB.Safety.Controller.disarm/2` to perform the actual state flip
+(these bypass the routing layer to avoid recursion):
+
+```elixir
+defmodule MyRobot.HomeAndArmCommand do
+  use BB.Command
+
+  alias BB.Safety.Controller
+
+  @impl BB.Command
+  def handle_command(_goal, context, state) do
+    :ok = move_to_home(context.robot_module)
+
+    case Controller.arm(context.robot_module) do
+      :ok ->
+        {:stop, :normal, %{state | result: {:ok, :armed}, next_state: :idle}}
+
+      {:error, reason} ->
+        {:stop, :normal, %{state | result: {:error, reason}}}
+    end
+  end
+
+  @impl BB.Command
+  def result(%{result: {:ok, value}, next_state: ns}), do: {:ok, value, next_state: ns}
+  def result(%{result: result}), do: result
+end
+```
+
+At most one command can have `arm true` and one can have `disarm true`.
+The built-in `BB.Command.Arm` and `BB.Command.Disarm` are implicitly
+flagged.
+
+If a disarm command fails before flipping safety state, the robot is
+escalated to `:error` and requires `force_disarm/1` to recover.
 
 ## Structured Errors
 

@@ -63,6 +63,11 @@ defmodule BB.Safety do
   See the Safety documentation topic for detailed recommendations.
   """
 
+  alias BB.Dsl.Command, as: DslCommand
+  alias BB.Dsl.Info
+  alias BB.Robot.Runtime
+  alias BB.Safety.Controller
+
   # --- API (delegates to Controller) ---
 
   @doc """
@@ -102,28 +107,131 @@ defmodule BB.Safety do
   @doc """
   Arm the robot.
 
-  Goes through the safety controller GenServer to ensure proper state transitions.
-  Cannot arm if robot is in `:error` state - must call `force_disarm/1` first.
+  If the robot's DSL declares a command with `arm true` (set explicitly, or
+  implicitly when the handler is `BB.Command.Arm`), this function dispatches
+  that command via `BB.Robot.Runtime.execute/3` and awaits its result. The
+  command is responsible for performing whatever work the user wants done
+  on arming (e.g. moving joints to a home pose) and for flipping safety state
+  via `BB.Safety.Controller.arm/1`.
 
-  Returns `:ok` or `{:error, :already_armed | :in_error | :not_registered}`.
+  If no `arm`-flagged command is defined, this function falls through to the
+  safety controller's direct state-flip behaviour — the historical default.
+
+  Cannot arm if the robot is in `:error` state; call `force_disarm/1` first.
+
+  Returns `:ok` or `{:error, :already_armed | :in_error | :not_registered |
+  term()}`. When routed through a command, the error reason is whatever the
+  command returned (typically a `BB.Error.State` exception or a
+  `:command_failed` tuple).
   """
-  defdelegate arm(robot_module), to: BB.Safety.Controller
+  @spec arm(module()) :: :ok | {:error, term()}
+  def arm(robot_module) do
+    case routed_command(robot_module, :__bb_arm_command__) do
+      nil -> Controller.arm(robot_module)
+      command_name -> route_arm(robot_module, command_name)
+    end
+  end
 
   @doc """
   Disarm the robot.
 
-  Goes through the safety controller GenServer. Calls all registered `disarm/1`
-  callbacks before updating state. If any callback fails, the robot transitions
-  to `:error` state instead of `:disarmed`.
+  If the robot's DSL declares a command with `disarm true` (set explicitly, or
+  implicitly when the handler is `BB.Command.Disarm`), this function
+  dispatches that command via `BB.Robot.Runtime.execute/3` and awaits its
+  result. The command is responsible for any pre-disarm work and for flipping
+  safety state via `BB.Safety.Controller.disarm/2`. If the command returns
+  successfully, the robot is in whatever state the command left it in
+  (typically `:disarmed`). If the command returns an error before the safety
+  state has been flipped, the robot is escalated to `:error` — by the issue's
+  failure semantics, an incomplete disarm sequence means hardware may not be
+  in a safe state.
+
+  If no `disarm`-flagged command is defined, this function falls through to
+  the safety controller's direct disarm behaviour — the historical default.
 
   ## Options
 
-    * `:timeout` - timeout in milliseconds for each disarm callback.
-      Defaults to 5000ms.
+    * `:timeout` - timeout in milliseconds for each disarm callback. Defaults
+      to 5000ms. Only applicable when no `disarm`-flagged command is defined;
+      otherwise the command's own `:timeout` is used.
 
-  Returns `:ok` or `{:error, :already_disarmed | {:disarm_failed, failures}}`.
+  Returns `:ok` or `{:error, :already_disarmed | {:disarm_failed, failures} |
+  {:disarm_command_failed, reason} | term()}`.
   """
-  defdelegate disarm(robot_module, opts \\ []), to: BB.Safety.Controller
+  @spec disarm(module(), keyword()) :: :ok | {:error, term()}
+  def disarm(robot_module, opts \\ []) do
+    case routed_command(robot_module, :__bb_disarm_command__) do
+      nil -> Controller.disarm(robot_module, opts)
+      command_name -> route_disarm(robot_module, command_name)
+    end
+  end
+
+  defp routed_command(robot_module, fun) do
+    if function_exported?(robot_module, fun, 0) do
+      apply(robot_module, fun, [])
+    end
+  end
+
+  defp route_arm(robot_module, command_name) do
+    case Runtime.execute(robot_module, command_name, %{}) do
+      {:ok, pid} ->
+        case BB.Command.await(pid, await_timeout(robot_module, command_name)) do
+          {:ok, _} -> :ok
+          {:ok, _, _opts} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp route_disarm(robot_module, command_name) do
+    case Runtime.execute(robot_module, command_name, %{}) do
+      {:ok, pid} ->
+        result = BB.Command.await(pid, await_timeout(robot_module, command_name))
+        handle_disarm_result(robot_module, result)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp handle_disarm_result(_robot_module, {:ok, _}), do: :ok
+  defp handle_disarm_result(_robot_module, {:ok, _, _opts}), do: :ok
+
+  defp handle_disarm_result(robot_module, {:error, reason}) do
+    case Controller.state(robot_module) do
+      state when state in [:armed, :disarming] ->
+        # Disarm command failed before safety state reached a terminal value —
+        # park the robot in :error so the operator has to acknowledge it.
+        :ok = Controller.transition_to_error(robot_module)
+        {:error, {:disarm_command_failed, reason}}
+
+      _ ->
+        {:error, reason}
+    end
+  end
+
+  # The await timeout must accommodate the command's own timeout (if set),
+  # plus some headroom for the command server's terminate sequence. If the
+  # command sets `:infinity`, we use `:infinity` here too.
+  defp await_timeout(robot_module, command_name) do
+    case command_timeout(robot_module, command_name) do
+      :infinity -> :infinity
+      ms when is_integer(ms) -> ms + 5_000
+      _ -> :infinity
+    end
+  end
+
+  defp command_timeout(robot_module, command_name) do
+    robot_module
+    |> Info.commands()
+    |> Enum.find_value(:infinity, fn
+      %DslCommand{name: ^command_name, timeout: timeout} -> timeout
+      _ -> false
+    end)
+  end
 
   @doc """
   Force disarm from error state.

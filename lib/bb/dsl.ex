@@ -818,6 +818,20 @@ defmodule BB.Dsl do
         default: [],
         doc:
           "Categories of commands this command can cancel when starting. Use `:*` to cancel all running commands, or a list of specific categories. Empty list (default) means the command will error if its category is at capacity."
+      ],
+      arm: [
+        type: :boolean,
+        required: false,
+        default: false,
+        doc:
+          "If `true`, this command becomes the canonical arming command — `BB.Safety.arm/1` dispatches it via the runtime instead of flipping state directly. Only one command per robot may set this flag. Implicit for commands using `BB.Command.Arm` as the handler."
+      ],
+      disarm: [
+        type: :boolean,
+        required: false,
+        default: false,
+        doc:
+          "If `true`, this command becomes the canonical disarming command — `BB.Safety.disarm/2` dispatches it via the runtime instead of flipping state directly. Only one command per robot may set this flag. Implicit for commands using `BB.Command.Disarm` as the handler."
       ]
     ]
   }

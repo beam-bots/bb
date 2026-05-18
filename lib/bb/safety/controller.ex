@@ -215,6 +215,27 @@ defmodule BB.Safety.Controller do
   def force_disarm(robot_module), do: GenServer.call(__MODULE__, {:force_disarm, robot_module})
 
   @doc """
+  Transition the robot to `:error` state.
+
+  Used by `BB.Safety.disarm/2`'s command-routing layer when a user-defined
+  disarm command fails before it can complete the actual hardware-safe
+  disarm sequence. By the issue's failure semantics, an incomplete disarm
+  means hardware may not be in a safe state, so the robot is parked in
+  `:error` and requires `force_disarm/1` to recover.
+
+  Returns `:ok` even if the robot is already in `:error` (idempotent).
+  Returns `{:error, :not_registered}` if the robot is unknown.
+  Returns `{:error, :already_disarmed}` if the robot is already disarmed —
+  no escalation is needed because the disarm command did, in fact, succeed
+  at flipping state before returning its error.
+  """
+  @spec transition_to_error(module()) ::
+          :ok | {:error, :already_disarmed | :not_registered}
+  def transition_to_error(robot_module) do
+    GenServer.call(__MODULE__, {:transition_to_error, robot_module})
+  end
+
+  @doc """
   Report a hardware error from a component.
 
   Publishes a `BB.Safety.HardwareError` message to `[:safety, :error]`. Does
@@ -322,6 +343,30 @@ defmodule BB.Safety.Controller do
             publish_transition(robot_module, :disarming, :error)
             {:reply, {:error, {:disarm_failed, failures}}, state}
         end
+
+      [] ->
+        {:reply, {:error, :not_registered}, state}
+    end
+  end
+
+  def handle_call({:transition_to_error, robot_module}, _from, state) do
+    case :ets.lookup(@robots_table, robot_module) do
+      [{^robot_module, :disarmed, _}] ->
+        {:reply, {:error, :already_disarmed}, state}
+
+      [{^robot_module, :error, _}] ->
+        # Idempotent — already in error
+        {:reply, :ok, state}
+
+      [{^robot_module, current, ref}] ->
+        Logger.critical(
+          "Transitioning #{inspect(robot_module)} to :error - " <>
+            "disarm command failed to complete safely from #{current}"
+        )
+
+        :ets.insert(@robots_table, {robot_module, :error, ref})
+        publish_transition(robot_module, current, :error)
+        {:reply, :ok, state}
 
       [] ->
         {:reply, {:error, :not_registered}, state}
