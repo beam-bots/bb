@@ -152,6 +152,64 @@ Add hardware-level safety for:
 
 **Dual-channel enable**: Both software command AND heartbeat required to enable actuators. Defense in depth.
 
+## Bridging Arm/Disarm to User Commands
+
+`BB.Safety.arm/1` and `BB.Safety.disarm/2` are the public entry points for
+flipping safety state. By default they call straight into the safety
+controller. If your robot needs to do work as part of arming or disarming
+(e.g. moving joints to a home pose before disarming, running a self-check
+before arming) you can mark a command as the canonical arm or disarm
+command:
+
+```elixir
+commands do
+  command :home_and_arm do
+    handler MyApp.Commands.HomeAndArm
+    arm true                  # ← this command IS arming
+    allowed_states [:disarmed]
+  end
+
+  command :soft_disarm do
+    handler MyApp.Commands.SoftDisarm
+    disarm true               # ← this command IS disarming
+    allowed_states [:idle]
+  end
+end
+```
+
+When set, `BB.Safety.arm/1` dispatches the flagged command via the runtime
+(equivalent to calling `MyRobot.home_and_arm()`) and waits for its result.
+The intent of "arm this robot" lives in one place regardless of whether
+the caller is the safety API, an MCP client, or a Phoenix LiveView button.
+
+Inside your command handler, call `BB.Safety.Controller.arm/1` or
+`BB.Safety.Controller.disarm/2` to perform the actual state flip — these
+bypass the routing layer to avoid recursion.
+
+The built-in `BB.Command.Arm` and `BB.Command.Disarm` are implicitly
+flagged, so robots using them automatically route through the command
+pipeline. Default behaviour is preserved.
+
+### Failure semantics
+
+- **Arm command fails before flipping state** — the robot stays
+  `:disarmed`. The caller receives the error.
+- **Disarm command fails before flipping state** — the robot is
+  escalated to `:error`. By the time a disarm sequence has been started,
+  any partial completion may have left hardware in an unsafe state, so
+  the operator must call `force_disarm/1` to acknowledge.
+- **Disarm command flipped state then errored** — whatever state the
+  controller left the robot in is preserved; the error is returned.
+
+### DSL validation
+
+The DSL transformer rejects:
+
+- two commands with `arm true` (or `disarm true`),
+- a single command with both flags set,
+- arm-flagged commands whose `allowed_states` doesn't include `:disarmed`,
+- disarm-flagged commands not reachable from any armed state.
+
 ## Shutdown Behaviour
 
 When the safety controller terminates (e.g., during application shutdown), it attempts to disarm all armed robots. This is best-effort:

@@ -297,7 +297,32 @@ def result(%{result: {:ok, value}}) do
 end
 ```
 
-This is how `BB.Command.Arm` works - it returns `{:ok, :armed, next_state: :idle}`.
+This is how `BB.Command.Arm` works - it returns `{:ok, :armed, next_state: <initial_state>}`.
+
+### Canonical Arm/Disarm Commands
+
+Commands can be flagged as the canonical arming or disarming command for
+the robot:
+
+```elixir
+commands do
+  command :home_and_arm do
+    handler MyApp.Commands.HomeAndArm
+    arm true                  # ← flagged
+    allowed_states [:disarmed]
+  end
+end
+```
+
+When set, `BB.Safety.arm/1` and `BB.Safety.disarm/2` dispatch the flagged
+command via the runtime instead of flipping safety state directly. This
+lets you insert work (e.g. moving to home) into the arm/disarm sequence
+without forcing callers to know which API to use. The built-in
+`BB.Command.Arm` and `BB.Command.Disarm` are implicitly flagged, so
+default behaviour is unchanged.
+
+See [Understanding Safety](understanding-safety.md#bridging-armdisarm-to-user-commands)
+for the full design and failure semantics.
 
 ## Safety Integration
 

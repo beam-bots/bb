@@ -21,6 +21,8 @@ defmodule BB.Dsl.Command do
             allowed_states: [:idle],
             category: nil,
             cancel: [],
+            arm: false,
+            disarm: false,
             arguments: []
 
   alias Spark.Dsl.Entity
@@ -34,6 +36,8 @@ defmodule BB.Dsl.Command do
           allowed_states: [atom],
           category: atom | nil,
           cancel: [atom],
+          arm: boolean,
+          disarm: boolean,
           arguments: [BB.Dsl.Command.Argument.t()]
         }
 end
