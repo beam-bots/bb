@@ -50,7 +50,12 @@ if Code.ensure_loaded?(Sourceror) do
     @spec to_quoted(Parser.robot(), module) ::
             {:ok, Macro.t(), [String.t()]} | {:error, term}
     def to_quoted(robot, module_name) when is_atom(module_name) do
-      robot = dedupe_material_names(robot)
+      robot =
+        robot
+        |> drop_world_anchor_joints()
+        |> dedupe_joint_names()
+        |> dedupe_material_names()
+
       links_by_name = Map.new(robot.links, &{&1.name, &1})
       joints_by_parent = Enum.group_by(robot.joints, & &1.parent)
       child_links = MapSet.new(robot.joints, & &1.child)
@@ -74,6 +79,76 @@ if Code.ensure_loaded?(Sourceror) do
 
         {:ok, ast, robot.warnings}
       end
+    end
+
+    # URDF commonly anchors a robot to the world with a fixed joint whose
+    # parent is a synthetic link (`world`, `map`, etc.) that's never defined
+    # in the file. BB has no concept of a world frame — the topology root is
+    # the robot. Drop joints whose parent link isn't defined; their child
+    # then becomes an unparented link, which the root-finder picks up
+    # naturally.
+    defp drop_world_anchor_joints(robot) do
+      link_names = MapSet.new(robot.links, & &1.name)
+
+      {joints, dropped} =
+        Enum.split_with(robot.joints, &MapSet.member?(link_names, &1.parent))
+
+      warnings =
+        Enum.map(dropped, fn joint ->
+          "dropped joint #{inspect(joint.name)}: parent link #{inspect(joint.parent)} is not defined (URDF world anchor?)"
+        end)
+
+      %{robot | joints: joints, warnings: robot.warnings ++ warnings}
+    end
+
+    # URDF has separate namespaces for link and joint names; BB requires
+    # global uniqueness across both. Rename any joint whose name collides
+    # with a link (or with another joint) and rewrite `<mimic>` source
+    # references to match.
+    defp dedupe_joint_names(robot) do
+      link_names = MapSet.new(robot.links, & &1.name)
+      {joints, _used, renames} = rename_colliding_joints(robot.joints, link_names)
+      joints = rewrite_mimic_sources(joints, renames)
+      %{robot | joints: joints}
+    end
+
+    defp rename_colliding_joints(joints, link_names) do
+      Enum.reduce(joints, {[], link_names, %{}}, fn joint, {acc, used, renames} ->
+        if MapSet.member?(used, joint.name) do
+          new_name = unique_name(joint.name <> "_joint", used)
+
+          {[%{joint | name: new_name} | acc], MapSet.put(used, new_name),
+           Map.put(renames, joint.name, new_name)}
+        else
+          {[joint | acc], MapSet.put(used, joint.name), renames}
+        end
+      end)
+      |> then(fn {joints, used, renames} -> {Enum.reverse(joints), used, renames} end)
+    end
+
+    defp unique_name(base, used) do
+      if MapSet.member?(used, base) do
+        Enum.find_value(Stream.iterate(2, &(&1 + 1)), &numbered_candidate(base, &1, used))
+      else
+        base
+      end
+    end
+
+    defp numbered_candidate(base, n, used) do
+      candidate = "#{base}_#{n}"
+      if MapSet.member?(used, candidate), do: nil, else: candidate
+    end
+
+    defp rewrite_mimic_sources(joints, renames) when map_size(renames) == 0, do: joints
+
+    defp rewrite_mimic_sources(joints, renames) do
+      Enum.map(joints, fn
+        %{mimic: %{joint: source} = mimic} = joint ->
+          %{joint | mimic: %{mimic | joint: Map.get(renames, source, source)}}
+
+        joint ->
+          joint
+      end)
     end
 
     # URDF lets many visuals reference a single named material; BB's DSL

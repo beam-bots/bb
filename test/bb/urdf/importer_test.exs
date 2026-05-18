@@ -155,6 +155,26 @@ defmodule BB.Urdf.ImporterTest do
       assert source =~ ~r/mesh do\s*filename "package:\/\/meshes\/arm\.stl"\s*scale 1\.0/
     end
 
+    test "drops joints whose parent link is undefined (URDF world anchor)" do
+      {source, warnings} = import_fixture("world_anchor.urdf", MyApp.WorldGen)
+
+      refute source =~ "joint :world_anchor"
+      assert source =~ "joint :shoulder"
+      assert Enum.any?(warnings, &(&1 =~ "dropped joint \"world_anchor\""))
+      assert [{MyApp.WorldGen, _}] = Code.compile_string(source)
+    end
+
+    test "renames joints that collide with link names and rewrites mimic refs" do
+      {source, _warnings} = import_fixture("name_collision.urdf", MyApp.CollideGen)
+
+      # `gripper` is a link; the homonymous joint gets renamed.
+      assert source =~ "link :gripper"
+      assert source =~ "joint :gripper_joint"
+      # The mimic source on `finger_joint` points to the renamed joint.
+      assert source =~ "source: :gripper_joint"
+      assert [{MyApp.CollideGen, _}] = Code.compile_string(source)
+    end
+
     test "errors out on multiple root links" do
       xml = """
       <?xml version="1.0"?>
