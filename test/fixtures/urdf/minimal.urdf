@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<robot name="minimal_bot">
+  <link name="base_link"/>
+</robot>

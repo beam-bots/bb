@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<robot name="two_link_arm">
+  <material name="red">
+    <color rgba="1 0 0 1"/>
+  </material>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.2 0.2 0.05"/>
+      </geometry>
+      <material name="red"/>
+    </visual>
+    <collision name="base_col">
+      <geometry>
+        <sphere radius="0.1"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.5"/>
+      <inertia ixx="0.01" iyy="0.01" izz="0.02" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <link name="upper_arm">
+    <visual>
+      <geometry>
+        <cylinder radius="0.05" length="0.3"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <link name="forearm"/>
+
+  <joint name="shoulder" type="revolute">
+    <parent link="base_link"/>
+    <child link="upper_arm"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.57" upper="1.57" effort="50" velocity="2"/>
+    <dynamics damping="0.5" friction="0.1"/>
+  </joint>
+
+  <joint name="elbow" type="continuous">
+    <parent link="upper_arm"/>
+    <child link="forearm"/>
+    <origin xyz="0 0 0.3" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="20" velocity="3"/>
+  </joint>
+
+  <link name="gripper"/>
+
+  <joint name="wrist" type="fixed">
+    <parent link="forearm"/>
+    <child link="gripper"/>
+    <origin xyz="0 0 0.25" rpy="0 0 0"/>
+  </joint>
+</robot>
