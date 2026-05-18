@@ -20,7 +20,8 @@ if Code.ensure_loaded?(Igniter) do
     compilation — so a compile-time default crashes the robot module compile.
 
     Skips itself entirely if `:nx` is already configured in `runtime.exs` or
-    `config.exs`, or if `:exla` / `:torchx` is already declared in `mix.exs`.
+    `config.exs`, or if `:exla` / `:torchx` / `:nx_eigen` is already declared
+    in `mix.exs`.
 
     ## Examples
 
@@ -34,12 +35,13 @@ if Code.ensure_loaded?(Igniter) do
     # Explicit choice
     mix bb.add_nx_backend --backend exla
     mix bb.add_nx_backend --backend torchx
+    mix bb.add_nx_backend --backend eigen
     mix bb.add_nx_backend --backend binary
     ```
 
     ## Options
 
-    * `--backend` - One of `exla`, `torchx`, or `binary`. Skips the prompt.
+    * `--backend` - One of `exla`, `torchx`, `eigen`, or `binary`. Skips the prompt.
     """
 
     use Igniter.Mix.Task
@@ -48,13 +50,18 @@ if Code.ensure_loaded?(Igniter) do
     alias Igniter.Project.Deps
     alias Igniter.Util.IO, as: IgniterIO
 
-    @nx_version "~> 0.10"
-
     @backends [
       {"EXLA (recommended — JIT-compiled native CPU/GPU)", :exla},
       {"Torchx (libtorch — useful if you'll integrate with PyTorch models)", :torchx},
+      {"Eigen (Eigen C++ — great on embedded targets like the UNO Q or Raspberry Pi)", :eigen},
       {"Binary (pure Elixir, slow, no extra dependencies)", :binary}
     ]
+
+    @packages %{
+      exla: {"exla", "EXLA.Backend"},
+      torchx: {"torchx", "Torchx.Backend"},
+      eigen: {"nx_eigen", "NxEigen.Backend"}
+    }
 
     @impl Igniter.Mix.Task
     def info(_argv, _parent) do
@@ -89,7 +96,8 @@ if Code.ensure_loaded?(Igniter) do
       Config.configures_root_key?(igniter, "runtime.exs", :nx) or
         Config.configures_root_key?(igniter, "config.exs", :nx) or
         has_dep?(igniter, :exla) or
-        has_dep?(igniter, :torchx)
+        has_dep?(igniter, :torchx) or
+        has_dep?(igniter, :nx_eigen)
     end
 
     defp has_dep?(igniter, name) do
@@ -115,11 +123,16 @@ if Code.ensure_loaded?(Igniter) do
         "torchx" ->
           :torchx
 
+        "eigen" ->
+          :eigen
+
         "binary" ->
           :binary
 
         other ->
-          Mix.raise("Unknown Nx backend: #{inspect(other)}. Expected exla, torchx, or binary.")
+          Mix.raise(
+            "Unknown Nx backend: #{inspect(other)}. Expected exla, torchx, eigen, or binary."
+          )
       end
     end
 
@@ -133,23 +146,19 @@ if Code.ensure_loaded?(Igniter) do
       |> elem(1)
     end
 
-    defp apply_backend(igniter, :exla) do
-      igniter
-      |> Deps.add_dep({:exla, @nx_version}, on_exists: :skip)
-      |> set_default_backend("EXLA.Backend")
-    end
-
-    defp apply_backend(igniter, :torchx) do
-      igniter
-      |> Deps.add_dep({:torchx, @nx_version}, on_exists: :skip)
-      |> set_default_backend("Torchx.Backend")
-    end
-
     defp apply_backend(igniter, :binary) do
       Igniter.add_notice(
         igniter,
-        "Nx will use the default BinaryBackend (pure Elixir). Performance will be limited; switch to EXLA or Torchx for serious workloads."
+        "Nx will use the default BinaryBackend (pure Elixir). Performance will be limited; switch to EXLA, Torchx, or Eigen for serious workloads."
       )
+    end
+
+    defp apply_backend(igniter, backend) do
+      {package, backend_module} = Map.fetch!(@packages, backend)
+
+      igniter
+      |> Deps.add_dep(Deps.determine_dep_type_and_version!(package), on_exists: :skip)
+      |> set_default_backend(backend_module)
     end
 
     # Writes `config :nx, default_backend: <Backend>` to `config/runtime.exs`,

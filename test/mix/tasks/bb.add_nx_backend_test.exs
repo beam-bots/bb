@@ -8,13 +8,18 @@ defmodule Mix.Tasks.Bb.AddNxBackendTest do
 
   @moduletag :igniter
 
+  defp assert_dep_added(igniter, package) do
+    {_, source} = Rewrite.source(igniter.rewrite, "mix.exs")
+
+    assert source.content =~ ~r/\{:#{package}, "~> [0-9.]+"\}/,
+           "expected mix.exs to declare a :#{package} dependency, got:\n#{source.content}"
+  end
+
   describe "--backend exla" do
     test "adds the exla dep" do
       test_project()
       |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "exla"])
-      |> assert_has_patch("mix.exs", """
-      + |      {:exla, "~> 0.10"}
-      """)
+      |> assert_dep_added("exla")
     end
 
     test "writes the default_backend config to runtime.exs" do
@@ -42,9 +47,7 @@ defmodule Mix.Tasks.Bb.AddNxBackendTest do
     test "adds the torchx dep" do
       test_project()
       |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "torchx"])
-      |> assert_has_patch("mix.exs", """
-      + |      {:torchx, "~> 0.10"}
-      """)
+      |> assert_dep_added("torchx")
     end
 
     test "writes the default_backend config to runtime.exs" do
@@ -54,6 +57,23 @@ defmodule Mix.Tasks.Bb.AddNxBackendTest do
 
       {_, source} = Rewrite.source(igniter.rewrite, "config/runtime.exs")
       assert source.content =~ "config :nx, default_backend: Torchx.Backend"
+    end
+  end
+
+  describe "--backend eigen" do
+    test "adds the nx_eigen dep" do
+      test_project()
+      |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "eigen"])
+      |> assert_dep_added("nx_eigen")
+    end
+
+    test "writes the default_backend config to runtime.exs" do
+      igniter =
+        test_project()
+        |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "eigen"])
+
+      {_, source} = Rewrite.source(igniter.rewrite, "config/runtime.exs")
+      assert source.content =~ "config :nx, default_backend: NxEigen.Backend"
     end
   end
 
@@ -69,9 +89,7 @@ defmodule Mix.Tasks.Bb.AddNxBackendTest do
     test "with --yes defaults to exla" do
       test_project()
       |> Igniter.compose_task("bb.add_nx_backend", ["--yes"])
-      |> assert_has_patch("mix.exs", """
-      + |      {:exla, "~> 0.10"}
-      """)
+      |> assert_dep_added("exla")
     end
   end
 
@@ -131,6 +149,23 @@ defmodule Mix.Tasks.Bb.AddNxBackendTest do
         |> String.replace(
           ~r/(defp deps do\s*\n\s*\[)/,
           "\\1\n      {:torchx, \"~> 0.10\"},"
+        )
+
+      test_project(files: %{"mix.exs" => mix_exs})
+      |> Igniter.compose_task("bb.add_nx_backend", ["--backend", "exla"])
+      |> assert_unchanged()
+    end
+
+    test "skips when :nx_eigen is already a dep" do
+      project = test_project()
+
+      mix_exs =
+        project.rewrite
+        |> Rewrite.source!("mix.exs")
+        |> Rewrite.Source.get(:content)
+        |> String.replace(
+          ~r/(defp deps do\s*\n\s*\[)/,
+          "\\1\n      {:nx_eigen, \"~> 0.1\"},"
         )
 
       test_project(files: %{"mix.exs" => mix_exs})
