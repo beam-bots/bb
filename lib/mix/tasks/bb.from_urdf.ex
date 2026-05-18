@@ -49,6 +49,7 @@ if Code.ensure_loaded?(Igniter) do
     use Igniter.Mix.Task
 
     alias BB.Urdf.{Importer, Parser}
+    alias Igniter.Code.{Common, Function}
 
     @impl Igniter.Mix.Task
     def info(_argv, _parent) do
@@ -104,12 +105,12 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp replace_or_insert_topology(zipper, topology_ast) do
-      case Igniter.Code.Function.move_to_function_call_in_current_scope(zipper, :topology, 1) do
+      case Function.move_to_function_call_in_current_scope(zipper, :topology, 1) do
         {:ok, found} ->
-          {:ok, Igniter.Code.Common.replace_code(found, topology_ast)}
+          {:ok, Common.replace_code(found, topology_ast)}
 
         :error ->
-          {:ok, Igniter.Code.Common.add_code(zipper, topology_ast)}
+          {:ok, Common.add_code(zipper, topology_ast)}
       end
     end
 
