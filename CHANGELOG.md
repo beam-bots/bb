@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.17.1](https://github.com/beam-bots/bb/compare/v0.17.0...v0.17.1) (2026-05-18)
+
+
+
+
+### Bug Fixes:
+
+* stop publishing synthetic target `JointState` from `BB.Motion` (#104) by James Harton
+
 ## [v0.17.0](https://github.com/beam-bots/bb/compare/v0.16.0...v0.17.0) (2026-05-18)
 
 
