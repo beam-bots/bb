@@ -12,6 +12,11 @@ if Code.ensure_loaded?(Igniter) do
     Reads a URDF XML file and writes a `defmodule` that uses `BB` with an
     equivalent topology to your project.
 
+    If the target module already exists, only its `topology do ... end` block
+    is replaced — `settings`, sensors, controllers, commands and any other
+    hand-written content are left in place. If the existing module has no
+    `topology` block, one is appended.
+
     ## Example
 
     ```bash
@@ -44,6 +49,7 @@ if Code.ensure_loaded?(Igniter) do
     use Igniter.Mix.Task
 
     alias BB.Urdf.{Importer, Parser}
+    alias Igniter.Code.{Common, Function}
 
     @impl Igniter.Mix.Task
     def info(_argv, _parent) do
@@ -76,26 +82,36 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp generate(igniter, parsed, module_name) do
-      case Importer.to_source(parsed, module_name) do
-        {:ok, source, warnings} ->
-          igniter
-          |> create_or_replace_module(module_name, source)
-          |> add_warnings(warnings)
-
+      with {:ok, source, warnings} <- Importer.to_source(parsed, module_name),
+           {:ok, topology_ast, _} <- Importer.to_topology_quoted(parsed) do
+        igniter
+        |> find_and_update_or_create_module(module_name, source, topology_ast)
+        |> add_warnings(warnings)
+      else
         {:error, reason} ->
           Igniter.add_issue(igniter, "Could not generate BB module: #{inspect(reason)}")
       end
     end
 
-    defp create_or_replace_module(igniter, module_name, source) do
+    defp find_and_update_or_create_module(igniter, module_name, source, topology_ast) do
       body = strip_defmodule(source, module_name)
 
-      Igniter.Project.Module.create_module(
+      Igniter.Project.Module.find_and_update_or_create_module(
         igniter,
         module_name,
         body,
-        on_exists: :overwrite
+        fn zipper -> replace_or_insert_topology(zipper, topology_ast) end
       )
+    end
+
+    defp replace_or_insert_topology(zipper, topology_ast) do
+      case Function.move_to_function_call_in_current_scope(zipper, :topology, 1) do
+        {:ok, found} ->
+          {:ok, Common.replace_code(found, topology_ast)}
+
+        :error ->
+          {:ok, Common.add_code(zipper, topology_ast)}
+      end
     end
 
     defp strip_defmodule(source, module_name) do
