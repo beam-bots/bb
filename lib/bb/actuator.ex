@@ -292,6 +292,44 @@ defmodule BB.Actuator do
   alias BB.Message.Actuator.Command
 
   # ----------------------------------------------------------------------------
+  # Transmission access
+  # ----------------------------------------------------------------------------
+
+  @doc """
+  Returns the joint's resolved transmission, or `nil` if the joint has no
+  transmission block.
+
+  Only valid from inside an actuator callback (i.e. running in the
+  wrapper's process). The wrapper resolves the transmission at init,
+  stores it in the process dictionary, and updates it on parameter
+  changes. Callbacks that publish JointState in joint-space should use
+  this to unapply the transmission to motor-space readings.
+
+      defmodule MyDriver do
+        use BB.Actuator
+
+        def init(opts), do: {:ok, ...}
+
+        def handle_info(:tick, state) do
+          motor_radians = read_hardware(state)
+          joint_radians =
+            case BB.Actuator.current_transmission() do
+              nil -> motor_radians
+              t -> BB.Transmission.unapply_position(motor_radians, t)
+            end
+
+          publish_joint_state(joint_radians)
+          {:noreply, state}
+        end
+      end
+
+  Controllers and other processes outside the wrapper should use
+  `BB.Transmission.Resolver.resolve_and_subscribe/2` directly.
+  """
+  @spec current_transmission() :: BB.Transmission.t() | nil
+  def current_transmission, do: Process.get(:bb_transmission)
+
+  # ----------------------------------------------------------------------------
   # Position Commands
   # ----------------------------------------------------------------------------
 

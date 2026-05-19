@@ -32,6 +32,7 @@ defmodule BB.Sim.Actuator do
   alias BB.Message.Actuator.Command
   alias BB.PubSub
   alias BB.Robot
+  alias BB.Transmission
 
   defstruct [
     :bb,
@@ -72,7 +73,7 @@ defmodule BB.Sim.Actuator do
 
   @impl BB.Actuator
   def handle_info({:bb, _path, %Message{payload: %Command.Position{} = cmd}}, state) do
-    {:noreply, do_set_position(cmd.position, cmd.command_id, state)}
+    {:noreply, do_set_position(joint_position(cmd.position), cmd.command_id, state)}
   end
 
   def handle_info({:bb, _path, %Message{payload: %Command.Stop{}}}, state) do
@@ -89,7 +90,7 @@ defmodule BB.Sim.Actuator do
 
   @impl BB.Actuator
   def handle_cast({:command, %Message{payload: %Command.Position{} = cmd}}, state) do
-    {:noreply, do_set_position(cmd.position, cmd.command_id, state)}
+    {:noreply, do_set_position(joint_position(cmd.position), cmd.command_id, state)}
   end
 
   def handle_cast({:command, _message}, state) do
@@ -98,7 +99,7 @@ defmodule BB.Sim.Actuator do
 
   @impl BB.Actuator
   def handle_call({:command, %Message{payload: %Command.Position{} = cmd}}, _from, state) do
-    new_state = do_set_position(cmd.position, cmd.command_id, state)
+    new_state = do_set_position(joint_position(cmd.position), cmd.command_id, state)
     {:reply, {:ok, :accepted}, new_state}
   end
 
@@ -316,4 +317,14 @@ defmodule BB.Sim.Actuator do
 
   defp clamp_upper(position, nil), do: position
   defp clamp_upper(position, upper), do: min(position, upper)
+
+  # Recover joint-space from the motor-space command the wrapper handed us.
+  # When the joint has no transmission, the wrapper passes the value through
+  # unchanged and there is nothing to undo.
+  defp joint_position(motor_position) do
+    case BB.Actuator.current_transmission() do
+      nil -> motor_position
+      transmission -> Transmission.unapply_position(motor_position, transmission)
+    end
+  end
 end

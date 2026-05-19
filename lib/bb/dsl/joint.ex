@@ -15,10 +15,11 @@ defmodule BB.Dsl.Joint do
             link: nil,
             dynamics: nil,
             limit: nil,
+            transmission: nil,
             sensors: [],
             actuators: []
 
-  alias BB.Dsl.{Actuator, Axis, Dynamics, Limit, Link, Origin, Sensor}
+  alias BB.Dsl.{Actuator, Axis, Dynamics, Limit, Link, Origin, Sensor, Transmission}
   alias Spark.Dsl.Entity
 
   @type t :: %__MODULE__{
@@ -31,6 +32,7 @@ defmodule BB.Dsl.Joint do
           link: Link.t(),
           dynamics: nil | Dynamics.t(),
           limit: nil | Limit.t(),
+          transmission: nil | Transmission.t(),
           sensors: [Sensor.t()],
           actuators: [Actuator.t()]
         }

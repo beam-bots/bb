@@ -206,6 +206,42 @@ defmodule BB.Dsl do
     ]
   }
 
+  @transmission %Entity{
+    name: :transmission,
+    describe: """
+    A mechanical transmission between the joint and its actuator(s).
+
+    Captures the relationship between joint-space command and motor-space
+    command: gear reduction, zero-offset, and polarity. The URDF equivalent
+    is `<transmission>`.
+    """,
+    target: BB.Dsl.Transmission,
+    identifier: {:auto, :unique_integer},
+    imports: [BB.Unit, BB.Dsl.ParamRef],
+    schema: [
+      reduction: [
+        type: {:or, [:float, {:struct, BB.Dsl.ParamRef}]},
+        doc:
+          "Gear ratio between actuator and joint. A reduction of `n` means the actuator rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference.",
+        required: false,
+        default: 1.0
+      ],
+      offset: [
+        type: {:or, [unit_type(compatible: :degree), unit_type(compatible: :meter)]},
+        doc:
+          "Zero-point offset between joint frame and actuator frame: the joint angle (or linear position) corresponding to the actuator's zero. May be a `param/1` reference.",
+        required: false
+      ],
+      reversed?: [
+        type: {:or, [:boolean, {:struct, BB.Dsl.ParamRef}]},
+        doc:
+          "Whether actuator motion is reversed relative to joint motion. May be a `param/1` reference.",
+        required: false,
+        default: false
+      ]
+    ]
+  }
+
   @sensor %Entity{
     name: :sensor,
     describe: "A sensor attached to the robot, a link, or a joint.",
@@ -281,11 +317,12 @@ defmodule BB.Dsl do
       ],
       dynamics: [@dynamics],
       limit: [@limit],
+      transmission: [@transmission],
       sensors: [@sensor],
       actuators: [@actuator]
     ],
     recursive_as: :joints,
-    singleton_entity_keys: [:dynamics, :origin, :axis, :link, :limit],
+    singleton_entity_keys: [:dynamics, :origin, :axis, :link, :limit, :transmission],
     schema: [
       name: [
         type: :atom,

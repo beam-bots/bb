@@ -132,6 +132,9 @@ defmodule BB.Robot.Builder do
     {limits, limits_subs} = convert_limits(dsl_joint.limit, dsl_joint.type, joint_name)
     {dynamics, dynamics_subs} = convert_dynamics(dsl_joint.dynamics, dsl_joint.type, joint_name)
 
+    {transmission, transmission_subs} =
+      convert_transmission(dsl_joint.transmission, dsl_joint.type, joint_name)
+
     joint = %Joint{
       name: joint_name,
       type: dsl_joint.type,
@@ -141,13 +144,67 @@ defmodule BB.Robot.Builder do
       axis: axis,
       limits: limits,
       dynamics: dynamics,
+      transmission: transmission,
       sensors: Enum.map(dsl_joint.sensors, & &1.name),
       actuators: Enum.map(dsl_joint.actuators, & &1.name)
     }
 
-    param_subs = origin_subs ++ axis_subs ++ limits_subs ++ dynamics_subs
+    param_subs =
+      origin_subs ++ axis_subs ++ limits_subs ++ dynamics_subs ++ transmission_subs
+
     {joint, param_subs}
   end
+
+  defp convert_transmission(nil, _type, _joint_name), do: {nil, []}
+
+  defp convert_transmission(%Dsl.Transmission{} = transmission, type, joint_name) do
+    offset_converter = offset_converter_for(type)
+
+    {reduction, reduction_subs} =
+      convert_with_default(
+        transmission.reduction,
+        & &1,
+        1.0,
+        joint_name,
+        [:transmission, :reduction]
+      )
+
+    {offset, offset_subs} =
+      convert_with_default(
+        transmission.offset,
+        offset_converter,
+        0.0,
+        joint_name,
+        [:transmission, :offset]
+      )
+
+    {reversed?, reversed_subs} =
+      convert_with_default(
+        transmission.reversed?,
+        & &1,
+        false,
+        joint_name,
+        [:transmission, :reversed?]
+      )
+
+    converted = %{reduction: reduction, offset: offset, reversed?: reversed?}
+    {converted, reduction_subs ++ offset_subs ++ reversed_subs}
+  end
+
+  defp convert_with_default(nil, _converter, default, _joint_name, _field_path),
+    do: {default, []}
+
+  defp convert_with_default(%ParamRef{path: path}, _converter, _default, joint_name, field_path),
+    do: {nil, [{path, {:joint, joint_name, field_path}}]}
+
+  defp convert_with_default(value, converter, _default, _joint_name, _field_path),
+    do: {converter.(value), []}
+
+  defp offset_converter_for(type) when type in [:revolute, :continuous],
+    do: &Units.to_radians/1
+
+  defp offset_converter_for(:prismatic), do: &Units.to_meters/1
+  defp offset_converter_for(_), do: &Units.to_radians/1
 
   defp convert_mass(nil), do: nil
   defp convert_mass(%Dsl.Inertial{mass: nil}), do: nil

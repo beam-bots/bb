@@ -18,14 +18,20 @@ defmodule BB.Actuator.Server do
 
   use GenServer
 
+  alias BB.Message
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Server.ParamResolution
+  alias BB.Transmission
+  alias BB.Transmission.Resolver, as: TransmissionResolver
 
   defstruct [
     :callback_module,
     :resolved_opts,
     :raw_opts,
     :param_subscriptions,
+    :transmission,
+    :transmission_subscriptions,
+    :joint_name,
     :bb,
     :user_state
   ]
@@ -35,6 +41,9 @@ defmodule BB.Actuator.Server do
           resolved_opts: keyword(),
           raw_opts: keyword(),
           param_subscriptions: %{[atom()] => atom()},
+          transmission: Transmission.t() | nil,
+          transmission_subscriptions: %{atom() => [atom()]},
+          joint_name: atom() | nil,
           bb: %{robot: module(), path: [atom()]},
           user_state: term()
         }
@@ -58,28 +67,34 @@ defmodule BB.Actuator.Server do
     {param_subscriptions, resolved_opts} =
       ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
 
+    joint_name = joint_for_actuator(bb)
+
+    {transmission, transmission_subscriptions} =
+      if joint_name do
+        TransmissionResolver.resolve_and_subscribe(bb.robot, joint_name)
+      else
+        {nil, %{}}
+      end
+
+    Process.put(:bb_transmission, transmission)
+
+    base = %__MODULE__{
+      callback_module: callback_module,
+      resolved_opts: resolved_opts,
+      raw_opts: raw_opts,
+      param_subscriptions: param_subscriptions,
+      transmission: transmission,
+      transmission_subscriptions: transmission_subscriptions,
+      joint_name: joint_name,
+      bb: bb
+    }
+
     case callback_module.init(resolved_opts) do
       {:ok, user_state} ->
-        {:ok,
-         %__MODULE__{
-           callback_module: callback_module,
-           resolved_opts: resolved_opts,
-           raw_opts: raw_opts,
-           param_subscriptions: param_subscriptions,
-           bb: bb,
-           user_state: user_state
-         }}
+        {:ok, %{base | user_state: user_state}}
 
       {:ok, user_state, timeout_or_continue} ->
-        {:ok,
-         %__MODULE__{
-           callback_module: callback_module,
-           resolved_opts: resolved_opts,
-           raw_opts: raw_opts,
-           param_subscriptions: param_subscriptions,
-           bb: bb,
-           user_state: user_state
-         }, timeout_or_continue}
+        {:ok, %{base | user_state: user_state}, timeout_or_continue}
 
       {:stop, reason} ->
         {:stop, reason}
@@ -89,8 +104,34 @@ defmodule BB.Actuator.Server do
     end
   end
 
+  defp joint_for_actuator(%{robot: robot_module, path: path}) do
+    actuator_name = List.last(path)
+    robot = robot_module.robot()
+
+    case Map.get(robot.actuators, actuator_name) do
+      %{joint: joint_name} -> joint_name
+      _ -> nil
+    end
+  end
+
   @impl GenServer
   def handle_info({:bb, [:param | param_path], %{payload: %ParameterChanged{}}}, state) do
+    state =
+      case TransmissionResolver.handle_change(
+             param_path,
+             state.transmission,
+             state.transmission_subscriptions,
+             state.bb.robot,
+             state.joint_name
+           ) do
+        {:changed, new_transmission} ->
+          Process.put(:bb_transmission, new_transmission)
+          %{state | transmission: new_transmission}
+
+        :ignored ->
+          state
+      end
+
     case ParamResolution.handle_change(
            param_path,
            state.param_subscriptions,
@@ -111,7 +152,14 @@ defmodule BB.Actuator.Server do
     end
   end
 
-  def handle_info(msg, state) do
+  def handle_info({:bb, topic, %Message{} = message}, state) do
+    transformed = Transmission.apply_to_command(message, state.transmission)
+    delegate_handle_info({:bb, topic, transformed}, state)
+  end
+
+  def handle_info(msg, state), do: delegate_handle_info(msg, state)
+
+  defp delegate_handle_info(msg, state) do
     case state.callback_module.handle_info(msg, state.user_state) do
       {:noreply, new_user_state} ->
         {:noreply, %{state | user_state: new_user_state}}
@@ -125,7 +173,14 @@ defmodule BB.Actuator.Server do
   end
 
   @impl GenServer
-  def handle_call(request, from, state) do
+  def handle_call({:command, %Message{} = message}, from, state) do
+    transformed = Transmission.apply_to_command(message, state.transmission)
+    delegate_handle_call({:command, transformed}, from, state)
+  end
+
+  def handle_call(request, from, state), do: delegate_handle_call(request, from, state)
+
+  defp delegate_handle_call(request, from, state) do
     case state.callback_module.handle_call(request, from, state.user_state) do
       {:reply, reply, new_user_state} ->
         {:reply, reply, %{state | user_state: new_user_state}}
@@ -148,7 +203,14 @@ defmodule BB.Actuator.Server do
   end
 
   @impl GenServer
-  def handle_cast(request, state) do
+  def handle_cast({:command, %Message{} = message}, state) do
+    transformed = Transmission.apply_to_command(message, state.transmission)
+    delegate_handle_cast({:command, transformed}, state)
+  end
+
+  def handle_cast(request, state), do: delegate_handle_cast(request, state)
+
+  defp delegate_handle_cast(request, state) do
     case state.callback_module.handle_cast(request, state.user_state) do
       {:noreply, new_user_state} ->
         {:noreply, %{state | user_state: new_user_state}}
