@@ -52,7 +52,12 @@ if Code.ensure_loaded?(Sourceror) do
     def to_quoted(robot, module_name) when is_atom(module_name) do
       with {:ok, prepared} <- prepare(robot) do
         topology =
-          render_topology(prepared.root, prepared.links_by_name, prepared.joints_by_parent)
+          render_topology(
+            prepared.root,
+            prepared.links_by_name,
+            prepared.joints_by_parent,
+            prepared.transmissions
+          )
 
         settings = render_settings(prepared.name)
 
@@ -84,7 +89,12 @@ if Code.ensure_loaded?(Sourceror) do
     def to_topology_quoted(robot) do
       with {:ok, prepared} <- prepare(robot) do
         topology =
-          render_topology(prepared.root, prepared.links_by_name, prepared.joints_by_parent)
+          render_topology(
+            prepared.root,
+            prepared.links_by_name,
+            prepared.joints_by_parent,
+            prepared.transmissions
+          )
 
         {:ok, topology, prepared.warnings}
       end
@@ -108,6 +118,7 @@ if Code.ensure_loaded?(Sourceror) do
            root: root,
            links_by_name: links_by_name,
            joints_by_parent: joints_by_parent,
+           transmissions: Map.get(robot, :transmissions, %{}),
            name: robot.name,
            warnings: robot.warnings
          }}
@@ -242,17 +253,17 @@ if Code.ensure_loaded?(Sourceror) do
       call(:settings, [], [call(:name, [atom_name(name)])])
     end
 
-    defp render_topology(root, links_by_name, joints_by_parent) do
-      call(:topology, [], [render_link(root, links_by_name, joints_by_parent)])
+    defp render_topology(root, links_by_name, joints_by_parent, transmissions) do
+      call(:topology, [], [render_link(root, links_by_name, joints_by_parent, transmissions)])
     end
 
-    defp render_link(link, links_by_name, joints_by_parent) do
+    defp render_link(link, links_by_name, joints_by_parent, transmissions) do
       children =
         render_inertial(link.inertial) ++
           render_visual(link.visual) ++
           Enum.map(link.collisions, &render_collision/1) ++
           Enum.flat_map(Map.get(joints_by_parent, link.name, []), fn joint ->
-            [render_joint(joint, links_by_name, joints_by_parent)]
+            [render_joint(joint, links_by_name, joints_by_parent, transmissions)]
           end)
 
       call(:link, [atom_name(link.name)], children)
@@ -348,7 +359,7 @@ if Code.ensure_loaded?(Sourceror) do
       call(:texture, [], [call(:filename, [filename])])
     end
 
-    defp render_joint(joint, links_by_name, joints_by_parent) do
+    defp render_joint(joint, links_by_name, joints_by_parent, transmissions) do
       child_link = Map.fetch!(links_by_name, joint.child)
 
       body =
@@ -357,10 +368,19 @@ if Code.ensure_loaded?(Sourceror) do
           render_axis(joint) ++
           render_limit(joint) ++
           render_dynamics(joint.dynamics) ++
+          render_transmission(Map.get(transmissions, joint.name)) ++
           render_mimic(joint) ++
-          [render_link(child_link, links_by_name, joints_by_parent)]
+          [render_link(child_link, links_by_name, joints_by_parent, transmissions)]
 
       call(:joint, [atom_name(joint.name)], body)
+    end
+
+    defp render_transmission(nil), do: []
+
+    defp render_transmission(%{reduction: 1.0}), do: []
+
+    defp render_transmission(%{reduction: reduction}) do
+      [call(:transmission, [], [call(:reduction, [reduction * 1.0])])]
     end
 
     defp render_mimic(%{mimic: nil}), do: []
@@ -588,6 +608,8 @@ if Code.ensure_loaded?(Sourceror) do
         pitch: 1,
         radius: 1,
         red: 1,
+        reduction: 1,
+        reversed?: 1,
         roll: 1,
         scale: 1,
         sensor: 2,
@@ -598,6 +620,8 @@ if Code.ensure_loaded?(Sourceror) do
         texture: 0,
         texture: 1,
         topology: 1,
+        transmission: 0,
+        transmission: 1,
         type: 1,
         upper: 1,
         velocity: 1,

@@ -352,4 +352,72 @@ defmodule BB.Urdf.ExporterTest do
       assert xml =~ ~r/<robot name="[^"]+">.*<\/robot>/s
     end
   end
+
+  describe "transmission export" do
+    defmodule RobotWithTransmission do
+      use BB
+
+      topology do
+        link :base do
+          joint :shoulder do
+            type :revolute
+
+            transmission do
+              reduction 101.0
+            end
+
+            limit do
+              effort(~u(10 newton_meter))
+              velocity(~u(180 degree_per_second))
+            end
+
+            actuator :motor, BB.Test.MockActuator
+
+            link :arm
+          end
+        end
+      end
+    end
+
+    defmodule RobotWithoutGearReduction do
+      use BB
+
+      topology do
+        link :base do
+          joint :shoulder do
+            type :revolute
+
+            transmission do
+              reversed? true
+            end
+
+            limit do
+              effort(~u(10 newton_meter))
+              velocity(~u(180 degree_per_second))
+            end
+
+            actuator :motor, BB.Test.MockActuator
+
+            link :arm
+          end
+        end
+      end
+    end
+
+    test "emits a <transmission> block with mechanicalReduction" do
+      {:ok, xml} = Exporter.export(RobotWithTransmission)
+
+      assert xml =~ ~s(<transmission name="shoulder_trans">)
+      assert xml =~ ~s(<type>transmission_interface/SimpleTransmission</type>)
+      assert xml =~ ~s(<joint name="shoulder"/>)
+      assert xml =~ ~s(<actuator name="motor">)
+      assert xml =~ ~r{<mechanicalReduction>101(\.0)?</mechanicalReduction>}
+    end
+
+    test "skips <transmission> when reduction is 1.0 (URDF has no place for offset or reversed?)" do
+      {:ok, xml} = Exporter.export(RobotWithoutGearReduction)
+
+      refute xml =~ "<transmission"
+    end
+  end
 end
