@@ -299,6 +299,26 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
+  Translate a motor-space outbound message into joint-space using the
+  transmission of the joint above the actuator at `actuator_path`.
+
+  Convenient for callers that build a message in motor-space and then
+  publish it on a topic of their own choosing — e.g. a controller
+  publishing `JointState` on a sensor topic. Performs a fresh
+  transmission resolution against the current parameter store on every
+  call, so it stays correct across runtime parameter changes without
+  the caller needing to subscribe.
+
+  Returns the message unchanged when the joint has no transmission.
+  """
+  @spec to_joint_space(module(), [atom()], Message.t()) :: Message.t()
+  def to_joint_space(robot, actuator_path, %Message{} = motor_message) do
+    joint_name = joint_name_for_actuator(robot, actuator_path)
+    transmission = TransmissionResolver.resolve(robot, joint_name)
+    Transmission.unapply_to_payload(motor_message, transmission)
+  end
+
+  @doc """
   Publish a `BeginMotion` message for the actuator at `path`, converting
   the supplied motor-space values into joint-space before publishing.
 
@@ -317,10 +337,8 @@ defmodule BB.Actuator do
   @spec publish_begin_motion(module(), [atom()], keyword()) :: :ok
   def publish_begin_motion(robot, path, opts) do
     joint_name = joint_name_for_actuator(robot, path)
-    transmission = TransmissionResolver.resolve(robot, joint_name)
-
     {:ok, motor_message} = Message.new(BeginMotion, joint_name, opts)
-    joint_message = Transmission.unapply_to_payload(motor_message, transmission)
+    joint_message = to_joint_space(robot, path, motor_message)
     BB.publish(robot, [:actuator | path], joint_message)
   end
 
