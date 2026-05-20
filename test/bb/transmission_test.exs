@@ -109,4 +109,107 @@ defmodule BB.TransmissionTest do
       end
     end
   end
+
+  describe "unapply_to_payload/2" do
+    alias BB.Message
+    alias BB.Message.Actuator.BeginMotion
+    alias BB.Message.Sensor.JointState
+
+    @transmission %{reduction: 50.0, offset: 0.1, reversed?: true}
+
+    test "nil transmission returns the message unchanged" do
+      msg =
+        Message.new!(BeginMotion, :shoulder,
+          initial_position: 0.5,
+          target_position: 1.0,
+          expected_arrival: 0
+        )
+
+      assert Transmission.unapply_to_payload(msg, nil) == msg
+    end
+
+    test "BeginMotion positions are converted via unapply_position" do
+      motor =
+        Message.new!(BeginMotion, :shoulder,
+          initial_position: 5.0,
+          target_position: 10.0,
+          expected_arrival: 0
+        )
+
+      joint = Transmission.unapply_to_payload(motor, @transmission)
+
+      assert_in_delta joint.payload.initial_position,
+                      Transmission.unapply_position(5.0, @transmission),
+                      1.0e-9
+
+      assert_in_delta joint.payload.target_position,
+                      Transmission.unapply_position(10.0, @transmission),
+                      1.0e-9
+    end
+
+    test "BeginMotion peak_velocity and acceleration become joint-space magnitudes" do
+      motor =
+        Message.new!(BeginMotion, :shoulder,
+          initial_position: 0.0,
+          target_position: 1.0,
+          expected_arrival: 0,
+          peak_velocity: 5.0,
+          acceleration: 10.0
+        )
+
+      joint = Transmission.unapply_to_payload(motor, @transmission)
+
+      assert joint.payload.peak_velocity > 0.0
+      assert joint.payload.acceleration > 0.0
+
+      assert_in_delta joint.payload.peak_velocity,
+                      abs(Transmission.unapply_rate(5.0, @transmission)),
+                      1.0e-9
+    end
+
+    test "BeginMotion peak_velocity and acceleration left nil pass through" do
+      motor =
+        Message.new!(BeginMotion, :shoulder,
+          initial_position: 0.0,
+          target_position: 1.0,
+          expected_arrival: 0
+        )
+
+      joint = Transmission.unapply_to_payload(motor, @transmission)
+
+      assert joint.payload.peak_velocity == nil
+      assert joint.payload.acceleration == nil
+    end
+
+    test "JointState positions, velocities, efforts are converted pointwise" do
+      motor =
+        Message.new!(JointState, :shoulder,
+          names: [:shoulder],
+          positions: [5.0],
+          velocities: [2.0],
+          efforts: [0.4]
+        )
+
+      joint = Transmission.unapply_to_payload(motor, @transmission)
+
+      assert_in_delta hd(joint.payload.positions),
+                      Transmission.unapply_position(5.0, @transmission),
+                      1.0e-9
+
+      assert_in_delta hd(joint.payload.velocities),
+                      Transmission.unapply_rate(2.0, @transmission),
+                      1.0e-9
+
+      assert_in_delta hd(joint.payload.efforts),
+                      Transmission.unapply_effort(0.4, @transmission),
+                      1.0e-9
+    end
+
+    test "other payload types pass through unchanged" do
+      alias BB.Message.Actuator.Command
+
+      msg = Message.new!(Command.Hold, :motor, [])
+      assert Transmission.unapply_to_payload(msg, @transmission) == msg
+    end
+  end
 end

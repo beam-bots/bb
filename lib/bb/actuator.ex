@@ -289,45 +289,49 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   alias BB.Message
+  alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Actuator.Command
+  alias BB.Transmission
+  alias BB.Transmission.Resolver, as: TransmissionResolver
 
   # ----------------------------------------------------------------------------
-  # Transmission access
+  # Outbound publishing
   # ----------------------------------------------------------------------------
 
   @doc """
-  Returns the joint's resolved transmission, or `nil` if the joint has no
-  transmission block.
+  Publish a `BeginMotion` message for the actuator at `path`, converting
+  the supplied motor-space values into joint-space before publishing.
 
-  Only valid from inside an actuator callback (i.e. running in the
-  wrapper's process). The wrapper resolves the transmission at init,
-  stores it in the process dictionary, and updates it on parameter
-  changes. Callbacks that publish JointState in joint-space should use
-  this to unapply the transmission to motor-space readings.
+  The driver builds the message in motor-space (the only coordinate space
+  it knows about); this helper looks up the joint above the actuator,
+  resolves its transmission against the current parameter store, applies
+  `BB.Transmission.unapply_to_payload/2`, and publishes the joint-space
+  message to `[:actuator | path]`.
 
-      defmodule MyDriver do
-        use BB.Actuator
-
-        def init(opts), do: {:ok, ...}
-
-        def handle_info(:tick, state) do
-          motor_radians = read_hardware(state)
-          joint_radians =
-            case BB.Actuator.current_transmission() do
-              nil -> motor_radians
-              t -> BB.Transmission.unapply_position(motor_radians, t)
-            end
-
-          publish_joint_state(joint_radians)
-          {:noreply, state}
-        end
-      end
-
-  Controllers and other processes outside the wrapper should use
-  `BB.Transmission.Resolver.resolve_and_subscribe/2` directly.
+  `path` is the actuator's full path (i.e. the `:bb.path` injected into
+  driver opts). `opts` is the keyword list accepted by
+  `BB.Message.Actuator.BeginMotion`'s schema, with `:initial_position`,
+  `:target_position`, `:peak_velocity`, and `:acceleration` in
+  motor-space.
   """
-  @spec current_transmission() :: BB.Transmission.t() | nil
-  def current_transmission, do: Process.get(:bb_transmission)
+  @spec publish_begin_motion(module(), [atom()], keyword()) :: :ok
+  def publish_begin_motion(robot, path, opts) do
+    joint_name = joint_name_for_actuator(robot, path)
+    transmission = TransmissionResolver.resolve(robot, joint_name)
+
+    {:ok, motor_message} = Message.new(BeginMotion, joint_name, opts)
+    joint_message = Transmission.unapply_to_payload(motor_message, transmission)
+    BB.publish(robot, [:actuator | path], joint_message)
+  end
+
+  defp joint_name_for_actuator(robot, path) do
+    actuator_name = List.last(path)
+
+    case Map.get(robot.robot().actuators, actuator_name) do
+      %{joint: joint_name} -> joint_name
+      _ -> actuator_name
+    end
+  end
 
   # ----------------------------------------------------------------------------
   # Position Commands

@@ -23,6 +23,29 @@ defmodule BB.Transmission.Resolver do
   @type subscriptions :: %{field() => [atom()]}
 
   @doc """
+  Resolve a joint's transmission against the current parameter store
+  without subscribing to changes.
+
+  Suitable for one-shot lookups from helpers that don't run as a long-lived
+  process (e.g. `BB.Actuator.publish_begin_motion/3`). Returns the resolved
+  transmission, or `nil` if the joint has no transmission.
+  """
+  @spec resolve(module(), atom()) :: BB.Transmission.t() | nil
+  def resolve(robot_module, joint_name) do
+    robot = robot_module.robot()
+
+    case robot.joints[joint_name].transmission do
+      nil ->
+        nil
+
+      transmission ->
+        subscriptions = collect_subscriptions(robot.param_subscriptions, joint_name)
+        robot_state = Runtime.get_robot_state(robot_module)
+        resolve_fields(transmission, subscriptions, robot, joint_name, robot_state)
+    end
+  end
+
+  @doc """
   Resolve a joint's transmission for use by a server process and subscribe
   to parameter changes for any parameterised fields.
 

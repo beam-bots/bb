@@ -10,9 +10,17 @@ defmodule BB.Sim.Actuator do
   is started with `simulation: :kinematic`. It:
 
   - Receives position commands via pubsub, cast, and call
-  - Calculates motion timing from joint velocity limits
-  - Publishes `BeginMotion` messages for position estimation
-  - Clamps positions to joint limits
+  - Calculates motion timing from the motor profile's velocity and
+    acceleration limits
+  - Publishes `BeginMotion` messages (in joint-space, via
+    `BB.Actuator.publish_begin_motion/3`) for position estimation
+  - Clamps positions to the motor-space limits derived from the joint
+
+  Like every other driver, the sim operates purely in motor-space: the
+  wrapper transforms inbound commands joint→motor before they arrive here,
+  and the outbound publish helper transforms motor→joint on the way out.
+  When the joint has no transmission, motor-space and joint-space are
+  identical.
 
   Works with `BB.Sensor.OpenLoopPositionEstimator` for position feedback.
 
@@ -28,21 +36,17 @@ defmodule BB.Sim.Actuator do
   use BB.Actuator, options_schema: []
 
   alias BB.Message
-  alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Actuator.Command
-  alias BB.PubSub
-  alias BB.Robot
-  alias BB.Transmission
 
   defstruct [
     :bb,
-    :joint,
     :name,
     :joint_name,
-    # Stored trajectory segment so a new command can compute the joint's actual
-    # current position (vs. its last commanded target). When `segment` is nil
-    # the joint is stationary at `current_position`.
-    :current_position,
+    :motor_profile,
+    :current_motor_position,
+    # Trajectory segment used to compute the joint's actual current position
+    # (vs. its last commanded target) when a new command arrives. When
+    # `segment` is nil the joint is stationary at `current_motor_position`.
     :segment
   ]
 
@@ -52,28 +56,29 @@ defmodule BB.Sim.Actuator do
   @impl BB.Actuator
   def init(opts) do
     bb = Keyword.fetch!(opts, :bb)
+    motor_profile = Keyword.fetch!(opts, :motor_profile)
     [name, joint_name | _] = Enum.reverse(bb.path)
-    robot = bb.robot.robot()
-
-    joint = Robot.get_joint(robot, joint_name)
-
-    initial_position = calculate_initial_position(joint)
 
     state = %__MODULE__{
       bb: bb,
-      joint: joint,
-      current_position: initial_position,
-      segment: nil,
       name: name,
-      joint_name: joint_name
+      joint_name: joint_name,
+      motor_profile: motor_profile,
+      current_motor_position: motor_profile.motor_initial_position,
+      segment: nil
     }
 
     {:ok, state}
   end
 
   @impl BB.Actuator
+  def handle_options(new_opts, state) do
+    {:ok, %{state | motor_profile: Keyword.fetch!(new_opts, :motor_profile)}}
+  end
+
+  @impl BB.Actuator
   def handle_info({:bb, _path, %Message{payload: %Command.Position{} = cmd}}, state) do
-    {:noreply, do_set_position(joint_position(cmd.position), cmd.command_id, state)}
+    {:noreply, do_set_position(cmd.position, cmd.command_id, state)}
   end
 
   def handle_info({:bb, _path, %Message{payload: %Command.Stop{}}}, state) do
@@ -90,7 +95,7 @@ defmodule BB.Sim.Actuator do
 
   @impl BB.Actuator
   def handle_cast({:command, %Message{payload: %Command.Position{} = cmd}}, state) do
-    {:noreply, do_set_position(joint_position(cmd.position), cmd.command_id, state)}
+    {:noreply, do_set_position(cmd.position, cmd.command_id, state)}
   end
 
   def handle_cast({:command, _message}, state) do
@@ -99,7 +104,7 @@ defmodule BB.Sim.Actuator do
 
   @impl BB.Actuator
   def handle_call({:command, %Message{payload: %Command.Position{} = cmd}}, _from, state) do
-    new_state = do_set_position(joint_position(cmd.position), cmd.command_id, state)
+    new_state = do_set_position(cmd.position, cmd.command_id, state)
     {:reply, {:ok, :accepted}, new_state}
   end
 
@@ -107,12 +112,12 @@ defmodule BB.Sim.Actuator do
     {:reply, {:ok, :accepted}, state}
   end
 
-  defp do_set_position(target_position, command_id, state) do
+  defp do_set_position(target_motor_position, command_id, state) do
     now = System.monotonic_time(:millisecond)
     actual_current = position_at(state, now)
-    clamped = clamp_position(target_position, state.joint)
+    clamped = clamp_motor_position(target_motor_position, state.motor_profile)
 
-    profile = build_profile(actual_current, clamped, state.joint, now)
+    profile = build_profile(actual_current, clamped, state.motor_profile, now)
 
     message_opts = [
       initial_position: actual_current,
@@ -130,15 +135,14 @@ defmodule BB.Sim.Actuator do
         message_opts
       end
 
-    {:ok, message} = Message.new(BeginMotion, state.joint_name, message_opts)
-    PubSub.publish(state.bb.robot, [:actuator | state.bb.path], message)
+    BB.Actuator.publish_begin_motion(state.bb.robot, state.bb.path, message_opts)
 
-    %{state | current_position: clamped, segment: profile.segment}
+    %{state | current_motor_position: clamped, segment: profile.segment}
   end
 
-  # Returns the joint's actual current position, taking into account any
+  # Returns the actuator's actual current position, taking into account any
   # in-flight motion segment.
-  defp position_at(%{segment: nil, current_position: pos}, _now), do: pos
+  defp position_at(%{segment: nil, current_motor_position: pos}, _now), do: pos
 
   defp position_at(%{segment: segment}, now) do
     interpolate_segment(segment, now)
@@ -189,9 +193,9 @@ defmodule BB.Sim.Actuator do
     end
   end
 
-  defp build_profile(from, to, joint, now) do
-    velocity = velocity_limit(joint)
-    acceleration = acceleration_limit(joint)
+  defp build_profile(from, to, motor_profile, now) do
+    velocity = motor_profile.motor_velocity_limit
+    acceleration = motor_profile.motor_acceleration_limit
     distance = to - from
     abs_distance = abs(distance)
     direction = if distance >= 0, do: 1.0, else: -1.0
@@ -285,31 +289,12 @@ defmodule BB.Sim.Actuator do
     end
   end
 
-  defp velocity_limit(nil), do: nil
-  defp velocity_limit(%{limits: nil}), do: nil
-  defp velocity_limit(%{limits: %{velocity: v}}), do: v
+  defp clamp_motor_position(position, %{motor_lower: nil, motor_upper: nil}), do: position
 
-  defp acceleration_limit(nil), do: nil
-  defp acceleration_limit(%{limits: nil}), do: nil
-  defp acceleration_limit(%{limits: limits}), do: Map.get(limits, :acceleration)
-
-  defp calculate_initial_position(nil), do: 0.0
-
-  defp calculate_initial_position(%{limits: nil}), do: 0.0
-
-  defp calculate_initial_position(%{limits: limits}) do
-    lower = limits.lower || 0.0
-    upper = limits.upper || 0.0
-    (lower + upper) / 2
-  end
-
-  defp clamp_position(position, nil), do: position
-  defp clamp_position(position, %{limits: nil}), do: position
-
-  defp clamp_position(position, %{limits: limits}) do
+  defp clamp_motor_position(position, %{motor_lower: lower, motor_upper: upper}) do
     position
-    |> clamp_lower(limits.lower)
-    |> clamp_upper(limits.upper)
+    |> clamp_lower(lower)
+    |> clamp_upper(upper)
   end
 
   defp clamp_lower(position, nil), do: position
@@ -317,14 +302,4 @@ defmodule BB.Sim.Actuator do
 
   defp clamp_upper(position, nil), do: position
   defp clamp_upper(position, upper), do: min(position, upper)
-
-  # Recover joint-space from the motor-space command the wrapper handed us.
-  # When the joint has no transmission, the wrapper passes the value through
-  # unchanged and there is nothing to undo.
-  defp joint_position(motor_position) do
-    case BB.Actuator.current_transmission() do
-      nil -> motor_position
-      transmission -> Transmission.unapply_position(motor_position, transmission)
-    end
-  end
 end

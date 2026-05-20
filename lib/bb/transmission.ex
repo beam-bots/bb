@@ -89,7 +89,9 @@ defmodule BB.Transmission do
   # ----------------------------------------------------------------------------
 
   alias BB.Message
+  alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Actuator.Command
+  alias BB.Message.Sensor.JointState
 
   @doc """
   Apply a transmission to an actuator command message, returning a new
@@ -141,4 +143,50 @@ defmodule BB.Transmission do
 
   defp maybe_apply_rate(nil, _t), do: nil
   defp maybe_apply_rate(value, t), do: apply_rate(value, t)
+
+  @doc """
+  Unapply a transmission to a message published by an actuator, returning a
+  new message with motor-space values transformed back into joint-space.
+
+  `BeginMotion` and `JointState` payloads are supported. `JointState`
+  messages must be single-joint — the same transmission is applied to every
+  list element. Other payloads are returned unchanged.
+
+  `peak_velocity` and `acceleration` in `BeginMotion` are magnitudes, so
+  their joint-space values are taken as the absolute value of the unapplied
+  rate (a reversed transmission flips the sign but does not change the
+  magnitude).
+
+  When `transmission` is `nil`, the message is returned unchanged.
+  """
+  @spec unapply_to_payload(Message.t(), t() | nil) :: Message.t()
+  def unapply_to_payload(message, nil), do: message
+
+  def unapply_to_payload(%Message{payload: payload} = message, transmission) do
+    %{message | payload: unapply_payload(payload, transmission)}
+  end
+
+  defp unapply_payload(%BeginMotion{} = msg, t) do
+    %{
+      msg
+      | initial_position: unapply_position(msg.initial_position, t),
+        target_position: unapply_position(msg.target_position, t),
+        peak_velocity: maybe_unapply_rate_magnitude(msg.peak_velocity, t),
+        acceleration: maybe_unapply_rate_magnitude(msg.acceleration, t)
+    }
+  end
+
+  defp unapply_payload(%JointState{} = msg, t) do
+    %{
+      msg
+      | positions: Enum.map(msg.positions, &unapply_position(&1, t)),
+        velocities: Enum.map(msg.velocities, &unapply_rate(&1, t)),
+        efforts: Enum.map(msg.efforts, &unapply_effort(&1, t))
+    }
+  end
+
+  defp unapply_payload(other, _t), do: other
+
+  defp maybe_unapply_rate_magnitude(nil, _t), do: nil
+  defp maybe_unapply_rate_magnitude(value, t), do: abs(unapply_rate(value, t))
 end

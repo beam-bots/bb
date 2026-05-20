@@ -18,8 +18,10 @@ defmodule BB.Actuator.Server do
 
   use GenServer
 
+  alias BB.Actuator.MotorProfile
   alias BB.Message
   alias BB.Parameter.Changed, as: ParameterChanged
+  alias BB.Robot
   alias BB.Server.ParamResolution
   alias BB.Transmission
   alias BB.Transmission.Resolver, as: TransmissionResolver
@@ -31,6 +33,7 @@ defmodule BB.Actuator.Server do
     :param_subscriptions,
     :transmission,
     :transmission_subscriptions,
+    :joint,
     :joint_name,
     :bb,
     :user_state
@@ -43,6 +46,7 @@ defmodule BB.Actuator.Server do
           param_subscriptions: %{[atom()] => atom()},
           transmission: Transmission.t() | nil,
           transmission_subscriptions: %{atom() => [atom()]},
+          joint: map() | nil,
           joint_name: atom() | nil,
           bb: %{robot: module(), path: [atom()]},
           user_state: term()
@@ -67,7 +71,7 @@ defmodule BB.Actuator.Server do
     {param_subscriptions, resolved_opts} =
       ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
 
-    joint_name = joint_for_actuator(bb)
+    {joint, joint_name} = joint_for_actuator(bb)
 
     {transmission, transmission_subscriptions} =
       if joint_name do
@@ -76,7 +80,8 @@ defmodule BB.Actuator.Server do
         {nil, %{}}
       end
 
-    Process.put(:bb_transmission, transmission)
+    motor_profile = MotorProfile.from_joint(joint, transmission)
+    resolved_opts = Keyword.put(resolved_opts, :motor_profile, motor_profile)
 
     base = %__MODULE__{
       callback_module: callback_module,
@@ -85,6 +90,7 @@ defmodule BB.Actuator.Server do
       param_subscriptions: param_subscriptions,
       transmission: transmission,
       transmission_subscriptions: transmission_subscriptions,
+      joint: joint,
       joint_name: joint_name,
       bb: bb
     }
@@ -109,14 +115,14 @@ defmodule BB.Actuator.Server do
     robot = robot_module.robot()
 
     case Map.get(robot.actuators, actuator_name) do
-      %{joint: joint_name} -> joint_name
-      _ -> nil
+      %{joint: joint_name} -> {Robot.get_joint(robot, joint_name), joint_name}
+      _ -> {nil, nil}
     end
   end
 
   @impl GenServer
   def handle_info({:bb, [:param | param_path], %{payload: %ParameterChanged{}}}, state) do
-    state =
+    {transmission_changed?, state} =
       case TransmissionResolver.handle_change(
              param_path,
              state.transmission,
@@ -125,30 +131,43 @@ defmodule BB.Actuator.Server do
              state.joint_name
            ) do
         {:changed, new_transmission} ->
-          Process.put(:bb_transmission, new_transmission)
-          %{state | transmission: new_transmission}
+          {true, %{state | transmission: new_transmission}}
 
         :ignored ->
-          state
+          {false, state}
       end
 
-    case ParamResolution.handle_change(
-           param_path,
-           state.param_subscriptions,
-           state.raw_opts,
-           state.bb.robot
-         ) do
-      {:changed, new_resolved} ->
-        case state.callback_module.handle_options(new_resolved, state.user_state) do
-          {:ok, new_user_state} ->
-            {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+    param_result =
+      ParamResolution.handle_change(
+        param_path,
+        state.param_subscriptions,
+        state.raw_opts,
+        state.bb.robot
+      )
 
-          {:stop, reason} ->
-            {:stop, reason, state}
+    if transmission_changed? or match?({:changed, _}, param_result) do
+      base_opts =
+        case param_result do
+          {:changed, opts} -> opts
+          :ignored -> Keyword.delete(state.resolved_opts, :motor_profile)
         end
 
-      :ignored ->
-        {:noreply, state}
+      new_resolved =
+        Keyword.put(
+          base_opts,
+          :motor_profile,
+          MotorProfile.from_joint(state.joint, state.transmission)
+        )
+
+      case state.callback_module.handle_options(new_resolved, state.user_state) do
+        {:ok, new_user_state} ->
+          {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+
+        {:stop, reason} ->
+          {:stop, reason, state}
+      end
+    else
+      {:noreply, state}
     end
   end
 
