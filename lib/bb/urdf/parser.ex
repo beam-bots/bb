@@ -211,7 +211,12 @@ defmodule BB.Urdf.Parser do
       build_transmission(parsed)
     else
       {nil,
-       [skip_warning(parsed.name, "type #{inspect(type)} is not supported (only SimpleTransmission)")]}
+       [
+         skip_warning(
+           parsed.name,
+           "type #{inspect(type)} is not supported (only SimpleTransmission)"
+         )
+       ]}
     end
   end
 

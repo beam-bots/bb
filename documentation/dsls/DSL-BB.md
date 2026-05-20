@@ -37,6 +37,7 @@ Robot topology
    * axis
    * dynamics
    * limit
+   * transmission
    * sensor
    * actuator
 
@@ -697,6 +698,7 @@ A kinematic joint between a parent link and a child link.
  * [axis](#topology-joint-axis)
  * [dynamics](#topology-joint-dynamics)
  * [limit](#topology-joint-limit)
+ * [transmission](#topology-joint-transmission)
  * [sensor](#topology-joint-sensor)
  * [actuator](#topology-joint-actuator)
 
@@ -825,6 +827,37 @@ Limits applied to joint movement
 ### Introspection
 
 Target: `BB.Dsl.Limit`
+
+### topology.joint.transmission
+
+
+A mechanical transmission between the joint and its actuator(s).
+
+Captures the relationship between joint-space command and motor-space
+command: gear reduction, zero-offset, and polarity. The URDF equivalent
+is `<transmission>`.
+
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`reduction`](#topology-joint-transmission-reduction){: #topology-joint-transmission-reduction } | `float \| BB.Dsl.ParamRef` | `1.0` | Gear ratio between actuator and joint. A reduction of `n` means the actuator rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference. |
+| [`offset`](#topology-joint-transmission-offset){: #topology-joint-transmission-offset } | `any` |  | Zero-point offset between joint frame and actuator frame: the joint angle (or linear position) corresponding to the actuator's zero. May be a `param/1` reference. |
+| [`reversed?`](#topology-joint-transmission-reversed?){: #topology-joint-transmission-reversed? } | `boolean \| BB.Dsl.ParamRef` | `false` | Whether actuator motion is reversed relative to joint motion. May be a `param/1` reference. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Transmission`
 
 ### topology.joint.sensor
 ```elixir

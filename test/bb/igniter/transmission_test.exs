@@ -12,13 +12,14 @@ if Code.ensure_loaded?(Igniter) do
       @moduledoc false
     end
 
+    alias BB.Igniter.Transmission
     alias Rewrite.Source
 
     defp run(source, opts \\ []) do
       igniter =
         test_project()
         |> Igniter.create_new_file("lib/my_robot.ex", source)
-        |> BB.Igniter.Transmission.lift_reverse_question(FakeDriver, opts)
+        |> Transmission.lift_reverse_question(FakeDriver, opts)
 
       generated_source = Map.fetch!(igniter.rewrite.sources, "lib/my_robot.ex")
       Source.get(generated_source, :content)
