@@ -177,52 +177,67 @@ defmodule BB.Urdf.Parser do
   end
 
   defp parse_transmission(xml_element(name: :transmission) = element) do
-    name = attr(element, :name, nil)
-    children = children(element)
+    parsed = %{
+      name: attr(element, :name, nil),
+      children: children(element)
+    }
 
-    type =
-      case first_by_name(children, :type) do
-        nil -> nil
-        el -> el |> text_content() |> String.trim()
-      end
+    parsed
+    |> Map.merge(transmission_metadata(parsed.children))
+    |> classify_transmission()
+  end
 
-    joint_name =
-      case first_by_name(children, :joint) do
-        nil -> nil
-        el -> el |> attr(:name) |> to_string()
-      end
+  defp transmission_metadata(children) do
+    %{
+      type: transmission_type(first_by_name(children, :type)),
+      joint_name: transmission_joint(first_by_name(children, :joint)),
+      actuators: filter_by_name(children, :actuator)
+    }
+  end
 
-    actuators = filter_by_name(children, :actuator)
+  defp transmission_type(nil), do: nil
+  defp transmission_type(el), do: el |> text_content() |> String.trim()
 
-    cond do
-      joint_name == nil ->
-        {nil, ["skipping <transmission> #{inspect(to_string(name || ""))}: missing <joint>"]}
+  defp transmission_joint(nil), do: nil
+  defp transmission_joint(el), do: el |> attr(:name) |> to_string()
 
-      type != nil and not simple_transmission?(type) ->
-        {nil,
-         [
-           "skipping <transmission> #{inspect(to_string(name || ""))}: type #{inspect(type)} is not supported (only SimpleTransmission)"
-         ]}
+  defp classify_transmission(%{joint_name: nil} = parsed) do
+    {nil, [skip_warning(parsed.name, "missing <joint>")]}
+  end
 
-      length(actuators) > 1 ->
-        {nil,
-         [
-           "skipping <transmission> #{inspect(to_string(name || ""))}: coupled transmissions (multiple <actuator>) are not supported"
-         ]}
-
-      true ->
-        reduction =
-          case actuators do
-            [] -> 1.0
-            [actuator | _] -> extract_reduction(actuator)
-          end
-
-        {%{
-           name: name && to_string(name),
-           joint: joint_name,
-           reduction: reduction
-         }, []}
+  defp classify_transmission(%{type: type} = parsed)
+       when not is_nil(type) do
+    if simple_transmission?(type) do
+      build_transmission(parsed)
+    else
+      {nil,
+       [skip_warning(parsed.name, "type #{inspect(type)} is not supported (only SimpleTransmission)")]}
     end
+  end
+
+  defp classify_transmission(parsed), do: build_transmission(parsed)
+
+  defp build_transmission(%{actuators: actuators} = parsed) when length(actuators) > 1 do
+    {nil,
+     [skip_warning(parsed.name, "coupled transmissions (multiple <actuator>) are not supported")]}
+  end
+
+  defp build_transmission(parsed) do
+    reduction =
+      case parsed.actuators do
+        [] -> 1.0
+        [actuator | _] -> extract_reduction(actuator)
+      end
+
+    {%{
+       name: parsed.name && to_string(parsed.name),
+       joint: parsed.joint_name,
+       reduction: reduction
+     }, []}
+  end
+
+  defp skip_warning(name, reason) do
+    "skipping <transmission> #{inspect(to_string(name || ""))}: #{reason}"
   end
 
   defp simple_transmission?(type) do
@@ -237,12 +252,10 @@ defmodule BB.Urdf.Parser do
   end
 
   defp text_content(xml_element(content: content)) do
-    content
-    |> Enum.map(fn
+    Enum.map_join(content, "", fn
       {:xmlText, _, _, _, value, _} -> to_string(value)
       _ -> ""
     end)
-    |> Enum.join("")
   end
 
   defp parse_top_level_materials(children) do

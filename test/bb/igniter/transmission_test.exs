@@ -12,14 +12,16 @@ if Code.ensure_loaded?(Igniter) do
       @moduledoc false
     end
 
+    alias Rewrite.Source
+
     defp run(source, opts \\ []) do
       igniter =
         test_project()
         |> Igniter.create_new_file("lib/my_robot.ex", source)
         |> BB.Igniter.Transmission.lift_reverse_question(FakeDriver, opts)
 
-      source = Map.fetch!(igniter.rewrite.sources, "lib/my_robot.ex")
-      Rewrite.Source.get(source, :content)
+      generated_source = Map.fetch!(igniter.rewrite.sources, "lib/my_robot.ex")
+      Source.get(generated_source, :content)
     end
 
     test "strips reverse?: true and inserts a transmission block with reversed? true" do

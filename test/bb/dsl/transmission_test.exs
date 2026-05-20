@@ -228,6 +228,5 @@ defmodule BB.Dsl.TransmissionTest do
       assert Map.has_key?(subs, [:tx, :offset])
       assert Map.has_key?(subs, [:tx, :reversed?])
     end
-
   end
 end

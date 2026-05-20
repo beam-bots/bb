@@ -15,9 +15,9 @@ defmodule BB.Transmission.Resolver do
   """
 
   alias BB.PubSub
+  alias BB.Robot.Runtime
   alias BB.Robot.State, as: RobotState
   alias BB.Robot.Units
-  alias BB.Robot.Runtime
 
   @type field :: :reduction | :offset | :reversed?
   @type subscriptions :: %{field() => [atom()]}

@@ -13,7 +13,19 @@ defmodule BB.Dsl.Verifiers.ValidateParamRefs do
 
   use Spark.Dsl.Verifier
 
-  alias BB.Dsl.{Axis, Dynamics, Inertia, Inertial, Joint, Limit, Link, Origin, ParamRef, Transmission}
+  alias BB.Dsl.{
+    Axis,
+    Dynamics,
+    Inertia,
+    Inertial,
+    Joint,
+    Limit,
+    Link,
+    Origin,
+    ParamRef,
+    Transmission
+  }
+
   alias BB.Unit
   alias Spark.Dsl.Verifier
   alias Spark.Error.DslError
@@ -70,7 +82,9 @@ defmodule BB.Dsl.Verifiers.ValidateParamRefs do
     axis_refs = collect_from_axis(joint.axis, joint_path ++ [:axis])
     limit_refs = collect_from_limit(joint.limit, joint_path ++ [:limit])
     dynamics_refs = collect_from_dynamics(joint.dynamics, joint_path ++ [:dynamics])
-    transmission_refs = collect_from_transmission(joint.transmission, joint_path ++ [:transmission])
+
+    transmission_refs =
+      collect_from_transmission(joint.transmission, joint_path ++ [:transmission])
 
     nested_refs =
       case joint.link do

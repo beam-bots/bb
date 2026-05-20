@@ -73,14 +73,16 @@ if Code.ensure_loaded?(Igniter) do
       {igniter, modules} =
         Igniter.Project.Module.find_all_matching_modules(igniter, fn _mod, _zipper -> true end)
 
-      Enum.reduce(modules, igniter, fn mod, ig ->
-        case Igniter.Project.Module.find_and_update_module(ig, mod, fn zipper ->
-               {:ok, update_module(zipper, driver_module, lift_offset?)}
-             end) do
-          {:ok, ig} -> ig
-          {:error, ig} -> ig
-        end
-      end)
+      Enum.reduce(modules, igniter, &lift_in_module(&1, &2, driver_module, lift_offset?))
+    end
+
+    defp lift_in_module(module, igniter, driver_module, lift_offset?) do
+      updater = fn zipper -> {:ok, update_module(zipper, driver_module, lift_offset?)} end
+
+      case Igniter.Project.Module.find_and_update_module(igniter, module, updater) do
+        {:ok, ig} -> ig
+        {:error, ig} -> ig
+      end
     end
 
     # Apply the transmission lift to every `joint :name do ... end` block in
@@ -107,7 +109,7 @@ if Code.ensure_loaded?(Igniter) do
     defp transform_joint(other, _driver, _lift_offset?), do: other
 
     defp do_block_body([{{:__block__, _, [:do]}, body} = pair]), do: {:ok, body, {:block, pair}}
-    defp do_block_body([do: body]), do: {:ok, body, :plain}
+    defp do_block_body(do: body), do: {:ok, body, :plain}
     defp do_block_body(_), do: :error
 
     defp rebuild_do({:block, {key, _}}, body), do: [{key, body}]
@@ -304,31 +306,33 @@ if Code.ensure_loaded?(Igniter) do
     # value and unit name. Returns nil for non-literal expressions (param refs,
     # arithmetic, etc.) so the upgrader gives up rather than guessing.
     defp unit_literal({:sigil_u, _, [{:<<>>, _, [text]}, _]}) when is_binary(text) do
-      case String.split(text, " ", parts: 2) do
-        [num_str, unit] ->
-          case Float.parse(num_str) do
-            {value, ""} ->
-              {value, unit}
-
-            _ ->
-              case Integer.parse(num_str) do
-                {value, ""} -> {value * 1.0, unit}
-                _ -> nil
-              end
-          end
-
-        _ ->
-          nil
+      with [num_str, unit] <- String.split(text, " ", parts: 2),
+           {value, ""} <- parse_number(num_str) do
+        {value, unit}
+      else
+        _ -> nil
       end
     end
 
     defp unit_literal(_), do: nil
 
+    defp parse_number(str) do
+      case Float.parse(str) do
+        {_, ""} = ok -> ok
+        _ -> integer_to_float(str)
+      end
+    end
+
+    defp integer_to_float(str) do
+      case Integer.parse(str) do
+        {value, ""} -> {value * 1.0, ""}
+        other -> other
+      end
+    end
+
     defp format_number(n) when is_float(n) do
       if n == Float.round(n, 0), do: :erlang.float_to_binary(n, decimals: 1), else: to_string(n)
     end
-
-    defp format_number(n), do: to_string(n)
 
     # Place a new node immediately after the `limit do ... end` call if one is
     # present, otherwise prepend it.
