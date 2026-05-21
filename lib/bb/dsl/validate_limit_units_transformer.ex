@@ -23,7 +23,7 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
 
   use Spark.Dsl.Transformer
 
-  alias BB.Dsl.{Joint, Limit, Link, ParamRef}
+  alias BB.Dsl.{Joint, Limit, Link, ParamRef, Transmission}
   alias BB.Unit
   alias Spark.Dsl.Transformer
   alias Spark.Error.DslError
@@ -89,45 +89,99 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
     end)
   end
 
-  defp validate_joint(%Joint{limit: nil}, _path, _module), do: :ok
-
-  defp validate_joint(%Joint{type: type, limit: %Limit{} = limit}, path, module)
+  defp validate_joint(%Joint{type: type} = joint, path, module)
        when type in @rotational_types do
-    check_fields(limit, @rotational_units, path, module, type)
+    with :ok <- check_limit(joint.limit, @rotational_units, path, module, type) do
+      check_attachment_transmissions(joint, :degree, path, module, type)
+    end
   end
 
-  defp validate_joint(%Joint{type: type, limit: %Limit{} = limit}, path, module)
+  defp validate_joint(%Joint{type: type} = joint, path, module)
        when type in @linear_types do
-    check_fields(limit, @linear_units, path, module, type)
+    with :ok <- check_limit(joint.limit, @linear_units, path, module, type) do
+      check_attachment_transmissions(joint, :meter, path, module, type)
+    end
   end
 
   defp validate_joint(%Joint{}, _path, _module), do: :ok
 
-  defp check_fields(limit, expected_units, path, module, joint_type) do
-    Enum.reduce_while(expected_units, :ok, fn {field, expected_unit}, :ok ->
-      check_field(Map.get(limit, field), field, expected_unit, path, module, joint_type)
+  defp check_limit(nil, _expected_units, _path, _module, _joint_type), do: :ok
+
+  defp check_limit(%Limit{} = limit, expected_units, path, module, joint_type) do
+    check_fields(limit, expected_units, path, module, joint_type)
+  end
+
+  defp check_attachment_transmissions(%Joint{} = joint, expected_unit, path, module, joint_type) do
+    attachments =
+      Enum.map(joint.actuators, &{:actuator, &1}) ++ Enum.map(joint.sensors, &{:sensor, &1})
+
+    Enum.reduce_while(attachments, :ok, fn {kind, attachment}, :ok ->
+      attachment_path = path ++ [kind, attachment.name]
+
+      case check_transmission_offset(
+             attachment.transmission,
+             expected_unit,
+             attachment_path,
+             module,
+             joint_type
+           ) do
+        :ok -> {:cont, :ok}
+        {:error, _} = err -> {:halt, err}
+      end
     end)
   end
 
-  defp check_field(nil, _field, _expected_unit, _path, _module, _joint_type), do: {:cont, :ok}
+  defp check_transmission_offset(nil, _expected_unit, _path, _module, _joint_type), do: :ok
 
-  defp check_field(%ParamRef{}, _field, _expected_unit, _path, _module, _joint_type),
-    do: {:cont, :ok}
-
-  defp check_field(%Localize.Unit{} = value, field, expected_unit, path, module, joint_type) do
-    if Unit.compatible?(value, expected_unit) do
-      {:cont, :ok}
-    else
-      {:halt, {:error, mismatch_error(module, path, field, value, expected_unit, joint_type)}}
+  defp check_transmission_offset(
+         %Transmission{offset: offset},
+         expected_unit,
+         path,
+         module,
+         joint_type
+       ) do
+    case check_field(offset, :transmission, :offset, expected_unit, path, module, joint_type) do
+      {:cont, :ok} -> :ok
+      {:halt, error} -> error
     end
   end
 
-  defp check_field(_value, _field, _expected_unit, _path, _module, _joint_type), do: {:cont, :ok}
+  defp check_fields(limit, expected_units, path, module, joint_type) do
+    Enum.reduce_while(expected_units, :ok, fn {field, expected_unit}, :ok ->
+      check_field(Map.get(limit, field), :limit, field, expected_unit, path, module, joint_type)
+    end)
+  end
 
-  defp mismatch_error(module, path, field, value, expected_unit, joint_type) do
+  defp check_field(nil, _section, _field, _expected_unit, _path, _module, _joint_type),
+    do: {:cont, :ok}
+
+  defp check_field(%ParamRef{}, _section, _field, _expected_unit, _path, _module, _joint_type),
+    do: {:cont, :ok}
+
+  defp check_field(
+         %Localize.Unit{} = value,
+         section,
+         field,
+         expected_unit,
+         path,
+         module,
+         joint_type
+       ) do
+    if Unit.compatible?(value, expected_unit) do
+      {:cont, :ok}
+    else
+      {:halt,
+       {:error, mismatch_error(module, path, section, field, value, expected_unit, joint_type)}}
+    end
+  end
+
+  defp check_field(_value, _section, _field, _expected_unit, _path, _module, _joint_type),
+    do: {:cont, :ok}
+
+  defp mismatch_error(module, path, section, field, value, expected_unit, joint_type) do
     DslError.exception(
       module: module,
-      path: path ++ [:limit, field],
+      path: path ++ [section, field],
       message: """
       The unit `#{value.name}` provided for `#{field}` is not compatible with a `#{joint_type}` joint.
 

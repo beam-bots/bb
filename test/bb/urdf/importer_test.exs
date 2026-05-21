@@ -188,6 +188,40 @@ defmodule BB.Urdf.ImporterTest do
       assert {:error, {:multiple_root_links, _}} = Importer.to_source(parsed, X)
     end
 
+    test "warns that <transmission> blocks cannot be imported automatically" do
+      {_source, warnings} = import_fixture("simple_transmission.urdf", MyApp.TxGen)
+
+      assert Enum.any?(
+               warnings,
+               &(&1 =~
+                   ~r/transmission for joint .*shoulder_pan.* with mechanicalReduction 101\.0/)
+             )
+    end
+
+    test "does not warn for the default 1:1 reduction" do
+      xml = """
+      <?xml version="1.0"?>
+      <robot name="t">
+        <link name="base"/><link name="a"/>
+        <joint name="j" type="revolute">
+          <parent link="base"/><child link="a"/>
+          <limit lower="0" upper="1" effort="1" velocity="1"/>
+        </joint>
+        <transmission name="t1">
+          <type>transmission_interface/SimpleTransmission</type>
+          <joint name="j"/>
+          <actuator name="m1"><mechanicalReduction>1</mechanicalReduction></actuator>
+        </transmission>
+      </robot>
+      """
+
+      {:ok, parsed} = Parser.parse_string(xml)
+      {:ok, source, warnings} = Importer.to_source(parsed, MyApp.TxGenIdentity)
+
+      refute source =~ "transmission do"
+      refute Enum.any?(warnings, &(&1 =~ "transmission for joint"))
+    end
+
     test "errors out when a joint references an undefined link" do
       xml = """
       <?xml version="1.0"?>

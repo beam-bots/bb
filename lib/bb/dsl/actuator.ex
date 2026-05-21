@@ -8,8 +8,10 @@ defmodule BB.Dsl.Actuator do
   defstruct __identifier__: nil,
             __spark_metadata__: nil,
             name: nil,
-            child_spec: nil
+            child_spec: nil,
+            transmission: nil
 
+  alias BB.Dsl.Transmission
   alias Spark.Dsl.Entity
 
   @type child_spec :: module | {module, Keyword.t()}
@@ -18,6 +20,7 @@ defmodule BB.Dsl.Actuator do
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
           name: atom,
-          child_spec: child_spec
+          child_spec: child_spec,
+          transmission: nil | Transmission.t()
         }
 end

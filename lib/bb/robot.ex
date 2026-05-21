@@ -48,7 +48,10 @@ defmodule BB.Robot do
     param_subscriptions: %{}
   ]
 
-  @type param_location :: {:joint, atom(), [atom()]}
+  @type param_location ::
+          {:joint, atom(), [atom()]}
+          | {:actuator, atom(), [atom()]}
+          | {:sensor, atom(), [atom()]}
 
   @type t :: %__MODULE__{
           name: atom(),
@@ -61,14 +64,22 @@ defmodule BB.Robot do
           param_subscriptions: %{[atom()] => [param_location()]}
         }
 
+  @type transmission :: %{
+          reduction: float() | nil,
+          offset: float() | nil,
+          reversed?: boolean() | nil
+        }
+
   @type sensor_info :: %{
           name: atom(),
-          attached_to: {:link, atom()} | {:joint, atom()} | :robot
+          attached_to: {:link, atom()} | {:joint, atom()} | :robot,
+          transmission: transmission() | nil
         }
 
   @type actuator_info :: %{
           name: atom(),
-          joint: atom()
+          joint: atom(),
+          transmission: transmission() | nil
         }
 
   @doc """

@@ -6,355 +6,425 @@ SPDX-License-Identifier: Apache-2.0
 
 # How to Write a Custom Sensor
 
-Create a sensor module that publishes data to BB's PubSub system.
+Build a sensor that publishes data into the BB framework. This guide is task-oriented — for the broader concepts behind sensors and PubSub, see [Sensors and PubSub](../tutorials/03-sensors-and-pubsub.md).
 
 ## Prerequisites
 
 - Familiarity with the BB DSL (see [First Robot](../tutorials/01-first-robot.md))
-- Understanding of BB PubSub (see [Sensors and PubSub](../tutorials/03-sensors-and-pubsub.md))
-- GenServer knowledge
+- Comfort with GenServer-style callback modules
+- A picture of the hardware (or virtual source) you're reading from
 
-## Step 1: Create the Sensor Module
+## Three flavours
 
-A sensor is a GenServer that reads data and publishes messages:
+Sensors in BB can attach at three different levels. The level determines which information the wrapper makes available:
+
+| Attachment | Examples | Has a transmission? |
+|---|---|---|
+| **Robot-level** (`sensors do … end`) | Battery monitor, ambient temperature, top-level IMU | No |
+| **Link-level** (inside a link) | IMU on a specific link, end-of-arm camera | No |
+| **Joint-level** (inside a joint) | Encoder, load cell, joint-mounted thermometer | Yes (optional) |
+
+Joint-level sensors are the only kind that participate in transmissions. The framework injects a `:sensor_profile` into their opts containing the resolved transmission, so a sensor reading raw motor-space encoder counts can publish joint-space state without doing the maths itself.
+
+## Step 1: Implement the sensor module
+
+A sensor is a `BB.Sensor` callback module. `BB.Sensor.Server` is the actual GenServer — your module just supplies callbacks. Don't `use GenServer`.
 
 ```elixir
 defmodule MySensor do
-  use GenServer, restart: :permanent
+  use BB.Sensor,
+    options_schema: [
+      pin: [type: :non_neg_integer, required: true, doc: "GPIO pin"],
+      poll_interval_ms: [type: :pos_integer, default: 100]
+    ]
 
+  alias BB.Message
   alias BB.Message.Sensor.Range
 
-  @schema [
-    pin: [
-      type: :non_neg_integer,
-      required: true,
-      doc: "GPIO pin for the sensor"
-    ],
-    poll_interval: [
-      type: :pos_integer,
-      default: 100,
-      doc: "Polling interval in milliseconds"
-    ]
-  ]
+  @impl BB.Sensor
+  def init(opts) do
+    bb = Keyword.fetch!(opts, :bb)
 
-  def schema, do: @schema
-
-  def start_link(init_arg) do
-    {bb, init_arg} = Keyword.pop!(init_arg, :bb)
-    opts = Spark.Options.validate!(init_arg, @schema)
-    GenServer.start_link(__MODULE__, {bb, opts})
-  end
-
-  @impl GenServer
-  def init({bb, opts}) do
-    # Store BB context for publishing
     state = %{
       bb: bb,
-      opts: opts,
+      pin: Keyword.fetch!(opts, :pin),
+      poll_interval_ms: Keyword.fetch!(opts, :poll_interval_ms),
       last_reading: nil
     }
 
-    # Start polling
-    schedule_poll(opts[:poll_interval])
-
+    schedule_poll(state.poll_interval_ms)
     {:ok, state}
   end
 
-  @impl GenServer
+  @impl BB.Sensor
   def handle_info(:poll, state) do
-    reading = read_sensor(state.opts[:pin])
+    reading = MyHardware.read(state.pin)
 
-    # Publish if changed (optional - can publish every time)
     if reading != state.last_reading do
-      publish_reading(reading, state)
+      publish(reading, state)
     end
 
-    schedule_poll(state.opts[:poll_interval])
+    schedule_poll(state.poll_interval_ms)
     {:noreply, %{state | last_reading: reading}}
   end
 
-  defp schedule_poll(interval) do
-    Process.send_after(self(), :poll, interval)
+  defp publish(distance_metres, state) do
+    {:ok, msg} =
+      Message.new(Range, List.last(state.bb.path),
+        range: distance_metres,
+        min_range: 0.02,
+        max_range: 4.0,
+        radiation_type: :ultrasound
+      )
+
+    BB.publish(state.bb.robot, [:sensor | state.bb.path], msg)
   end
 
-  defp read_sensor(pin) do
-    # Your hardware reading logic
-    # Returns distance in metres
-    0.5
-  end
-
-  defp publish_reading(distance, state) do
-    message = Range.new!(
-      range: distance,
-      min_range: 0.02,
-      max_range: 4.0,
-      radiation_type: :ultrasound
-    )
-
-    BB.publish(state.bb.robot_module, state.bb.path, message)
-  end
+  defp schedule_poll(ms), do: Process.send_after(self(), :poll, ms)
 end
 ```
 
-## Step 2: Use in Robot Definition
+The `:bb` key in `opts` contains `%{robot: module, path: [atom]}`. Use `state.bb.robot` (not `state.bb.robot_module` — that key doesn't exist) when calling `BB.publish/3`, `BB.subscribe/2`, etc.
 
-Add the sensor to your robot:
+## Step 2: Use it in a robot definition
+
+For a robot-level or link-level sensor, no transmission is involved:
 
 ```elixir
 defmodule MyRobot.Robot do
   use BB
 
+  sensors do
+    sensor :ambient, {MySensor, pin: 18}
+  end
+
   topology do
     link :base_link do
-      sensor :distance, {MySensor, pin: 18, poll_interval: 50}
+      sensor :front_distance, {MySensor, pin: 19, poll_interval_ms: 50}
     end
   end
 end
 ```
 
-## Step 3: Subscribe to Sensor Data
+For a joint-attached sensor, see step 3.
 
-Consume the sensor data elsewhere:
+## Step 3: Joint-attached sensors with transmissions
 
-```elixir
-# In another process
-BB.subscribe(MyRobot.Robot, [:sensor, :distance])
+A sensor sitting on a joint can declare its own `transmission` block — independent of any actuator on the same joint. Common scenarios:
 
-# In handle_info
-def handle_info({:bb, [:sensor, :distance], %{payload: range}}, state) do
-  IO.puts("Distance: #{range.range}m")
-  {:noreply, state}
-end
-```
-
-## Event-Driven Sensors
-
-For sensors with hardware interrupts (not polling):
+- A magnetic encoder on the joint output shaft (no reduction, `reduction 1.0`)
+- An encoder on the motor shaft, before the gearbox (same `reduction` as the actuator)
+- A potentiometer with a polarity flip relative to the actuator
 
 ```elixir
-defmodule InterruptSensor do
-  use GenServer, restart: :permanent
+joint :shoulder do
+  type :revolute
 
-  def start_link(init_arg) do
-    {bb, init_arg} = Keyword.pop!(init_arg, :bb)
-    GenServer.start_link(__MODULE__, {bb, init_arg})
+  limit do
+    lower(~u(-90 degree))
+    upper(~u(90 degree))
+    velocity(~u(60 degree_per_second))
+    effort(~u(10 newton_meter))
   end
 
-  @impl GenServer
-  def init({bb, opts}) do
-    # Set up interrupt handler
-    {:ok, gpio} = Circuits.GPIO.open(opts[:pin], :input)
-    Circuits.GPIO.set_interrupts(gpio, :both)
-
-    {:ok, %{bb: bb, gpio: gpio}}
+  actuator :motor, {MyServo.Actuator, channel: 0} do
+    transmission do
+      reduction 50.0
+      reversed? true
+    end
   end
 
-  @impl GenServer
-  def handle_info({:circuits_gpio, _pin, _timestamp, value}, state) do
-    # Publish on interrupt
-    message = create_message(value)
-    BB.publish(state.bb.robot_module, state.bb.path, message)
-
-    {:noreply, state}
+  sensor :encoder, {MyEncoder, address: 0x6B} do
+    transmission do
+      reduction 1.0
+      # Encoder reads the output shaft directly; no offset/reversal.
+    end
   end
 end
 ```
 
-## Publishing Different Message Types
+### Reading the sensor profile
 
-### Joint State (Position Feedback)
+`BB.Sensor.Server` injects a `:sensor_profile` into the resolved opts when the sensor is joint-attached:
 
 ```elixir
-alias BB.Message.Sensor.JointState
+%BB.Sensor.SensorProfile{
+  joint_name: :shoulder,
+  transmission: %{reduction: 1.0, offset: 0.0, reversed?: false}
+}
+```
 
-def publish_position(position, velocity, state) do
-  message = JointState.new!(
-    names: [state.joint_name],
-    positions: [position],
-    velocities: [velocity]
-  )
+Sensors at the robot or link level get a `sensor_profile` with both fields `nil`.
 
-  BB.publish(state.bb.robot_module, state.bb.path, message)
+```elixir
+@impl BB.Sensor
+def init(opts) do
+  sensor_profile = Keyword.fetch!(opts, :sensor_profile)
+  bb = Keyword.fetch!(opts, :bb)
+
+  state = %{
+    bb: bb,
+    sensor_profile: sensor_profile,
+    address: Keyword.fetch!(opts, :address)
+  }
+
+  {:ok, state}
+end
+
+@impl BB.Sensor
+def handle_options(new_opts, state) do
+  {:ok, %{state | sensor_profile: Keyword.fetch!(new_opts, :sensor_profile)}}
 end
 ```
 
-### IMU Data
+`handle_options/2` is called when a transmission parameter changes at runtime, so the profile stays current without the sensor having to subscribe to anything itself.
+
+### Publishing joint state
+
+For a sensor that reads a joint position, use `BB.Sensor.publish_joint_state/3`. The driver supplies a position in its own (motor or sensor) coordinate space; the helper applies the transmission and publishes joint-space state to `[:sensor | path]`:
 
 ```elixir
-alias BB.Message.Sensor.Imu
+defp publish_position(state) do
+  raw = MyHardware.read_position(state.address)
+  motor_radians = encoder_counts_to_motor_radians(raw)
 
-def publish_imu(orientation, angular_vel, linear_accel, state) do
-  message = Imu.new!(
-    orientation: orientation,
-    angular_velocity: angular_vel,
-    linear_acceleration: linear_accel
+  BB.Sensor.publish_joint_state(state.bb.robot, state.bb.path,
+    positions: [motor_radians]
   )
-
-  BB.publish(state.bb.robot_module, state.bb.path, message)
 end
 ```
 
-### Battery State
+Subscribers see joint-space positions; the sensor only ever sees its own coordinate space.
+
+### Publishing other message types
+
+For messages that aren't `JointState`, use `BB.Sensor.to_joint_space/3` to translate then publish wherever you like:
 
 ```elixir
-alias BB.Message.Sensor.BatteryState
+defp publish_load(state) do
+  motor_torque = MyHardware.read_load(state.address)
 
-def publish_battery(voltage, current, percentage, state) do
-  message = BatteryState.new!(
-    voltage: voltage,
-    current: current,
-    percentage: percentage
-  )
+  {:ok, motor_msg} =
+    Message.new(BB.Message.Sensor.JointState, state.sensor_profile.joint_name,
+      names: [state.sensor_profile.joint_name],
+      efforts: [motor_torque]
+    )
 
-  BB.publish(state.bb.robot_module, [:sensor, :battery], message)
+  joint_msg = BB.Sensor.to_joint_space(state.bb.robot, state.bb.path, motor_msg)
+  BB.publish(state.bb.robot, [:sensor | state.bb.path], joint_msg)
 end
 ```
 
-## Sensor with Calibration
+`to_joint_space/3` does a fresh transmission resolution on every call. If the sensor isn't joint-attached, or has no transmission block, the message is returned unchanged.
 
-Store calibration data and apply during reading:
+## Step 4: Common message shapes
+
+### `JointState` (joint position feedback)
+
+Use `publish_joint_state/3` for the common single-joint case. For multi-joint states (rare for a single sensor), build the message yourself and publish without `to_joint_space/3`, since the same transmission can't sensibly apply to every joint in the list.
+
+### `Imu` (orientation, angular velocity, linear acceleration)
 
 ```elixir
-defmodule CalibratedSensor do
-  use GenServer, restart: :permanent
+defp publish_imu(state) do
+  {q, w, a} = MyHardware.read_imu(state.bus)
 
-  @schema [
-    pin: [type: :non_neg_integer, required: true],
-    calibration: [
-      type: :map,
-      default: %{offset: 0.0, scale: 1.0}
+  {:ok, msg} =
+    Message.new(BB.Message.Sensor.Imu, List.last(state.bb.path),
+      orientation: q,
+      angular_velocity: w,
+      linear_acceleration: a
+    )
+
+  BB.publish(state.bb.robot, [:sensor | state.bb.path], msg)
+end
+```
+
+IMUs are typically link-level — they have no transmission, just an `origin` (in the future, see the [proposals repository](https://github.com/beam-bots/proposals) for `origin` on attachments).
+
+### `BatteryState`
+
+```elixir
+defp publish_battery(state) do
+  {:ok, msg} =
+    Message.new(BB.Message.Sensor.BatteryState, :battery,
+      voltage: read_voltage(state),
+      current: read_current(state),
+      percentage: read_percentage(state)
+    )
+
+  BB.publish(state.bb.robot, [:sensor | state.bb.path], msg)
+end
+```
+
+### `Range`, `LaserScan`, `Image`
+
+All follow the same shape — build a `Message`, then `BB.publish/3` it to `[:sensor | state.bb.path]`. See `lib/bb/message/sensor/` for available types.
+
+## Step 5: Closed-loop control example
+
+The original motivating case for sensor-side transmissions: an open-loop PWM servo plus an independent magnetic encoder, with a PID closing the loop in joint-space.
+
+```elixir
+defmodule MyArm.Robot do
+  use BB
+
+  parameters do
+    group :gains do
+      param :kp, type: :float, default: 1.0
+    end
+  end
+
+  controllers do
+    controller :pid_shoulder, {BB.PidController,
+      input: [:sensor, :shoulder_encoder],
+      output: [:actuator, :shoulder_pwm],
+      kp: param([:gains, :kp])
+    }
+  end
+
+  topology do
+    link :base do
+      joint :shoulder do
+        type :revolute
+
+        limit do
+          lower(~u(-90 degree))
+          upper(~u(90 degree))
+          velocity(~u(60 degree_per_second))
+          effort(~u(2 newton_meter))
+        end
+
+        # Open-loop PWM servo behind a 100:1 reduction.
+        actuator :shoulder_pwm, {BB.Servo.Pigpio.Actuator, pin: 17} do
+          transmission do
+            reduction 100.0
+          end
+        end
+
+        # Magnetic encoder reading the output shaft directly.
+        sensor :shoulder_encoder, {AS5600.Sensor, address: 0x36} do
+          transmission do
+            reduction 1.0
+          end
+        end
+
+        link :upper_arm
+      end
+    end
+  end
+end
+```
+
+Both the PID's input (the encoder's `JointState`) and its output (the actuator's `Command.Position`) are in joint-space. The encoder driver doesn't know about the actuator's reduction; the actuator doesn't know about the encoder's. Each runs through its own transmission and the PID itself doesn't need to know there's a chain.
+
+## Step 6: Testing
+
+Mimic-copy `BB`, `BB.Sensor`, and any hardware modules:
+
+```elixir
+# test/test_helper.exs
+Mimic.copy(BB)
+Mimic.copy(BB.Sensor)
+Mimic.copy(MyHardware)
+```
+
+For sensors that publish via `publish_joint_state/3`, stub that helper to assert on the sensor-space opts directly:
+
+```elixir
+defmodule MyEncoderTest do
+  use ExUnit.Case, async: true
+  use Mimic
+
+  alias BB.Sensor.SensorProfile
+  alias MyEncoder
+
+  defp sensor_profile do
+    %SensorProfile{
+      joint_name: :shoulder,
+      transmission: %{reduction: 1.0, offset: 0.0, reversed?: false}
+    }
+  end
+
+  test "publishes joint state in motor-space opts" do
+    stub(MyHardware, :read_position, fn _ -> 1234 end)
+
+    expect(BB.Sensor, :publish_joint_state, fn _robot, _path, opts ->
+      assert is_list(opts[:positions])
+      :ok
+    end)
+
+    opts = [
+      bb: %{robot: TestRobot, path: [:shoulder, :encoder]},
+      address: 0x36,
+      sensor_profile: sensor_profile()
     ]
-  ]
 
-  def start_link(init_arg) do
-    {bb, init_arg} = Keyword.pop!(init_arg, :bb)
-    opts = Spark.Options.validate!(init_arg, @schema)
-    GenServer.start_link(__MODULE__, {bb, opts})
-  end
-
-  @impl GenServer
-  def init({bb, opts}) do
-    {:ok, %{bb: bb, opts: opts}}
-  end
-
-  defp read_and_calibrate(state) do
-    raw = read_raw(state.opts[:pin])
-    cal = state.opts[:calibration]
-
-    raw * cal.scale + cal.offset
+    {:ok, state} = MyEncoder.init(opts)
+    MyEncoder.handle_info(:poll, state)
   end
 end
 ```
 
-## Robot-Level vs Joint-Level Sensors
+The transmission lookup itself is tested once, in `bb` — you don't need to retest it in every sensor.
 
-### Joint-Level (Inside Topology)
+## Safety considerations
 
-```elixir
-topology do
-  link :arm do
-    joint :shoulder do
-      sensor :encoder, {EncoderSensor, channel: 0}
-    end
-  end
-end
-```
-
-Path: `[:sensor, :encoder]` (relative to joint)
-
-### Robot-Level (Outside Topology)
+For sensors whose loss is safety-critical (e.g. the only encoder on a powered joint), report repeated read failures through `BB.Safety.report_error/3` and then crash. The supervision tree decides whether to escalate:
 
 ```elixir
-sensors do
-  sensor :battery, {BatterySensor, adc_channel: 0}
-  sensor :imu, {IMUSensor, bus: "i2c-1", address: 0x68}
-end
-
-topology do
-  # ...
-end
-```
-
-Path: `[:sensor, :battery]`, `[:sensor, :imu]`
-
-## Testing Sensors
-
-```elixir
-defmodule MySensorTest do
-  use ExUnit.Case
-
-  test "publishes range messages" do
-    {:ok, _} = BB.Supervisor.start_link(TestRobot, simulation: :kinematic)
-
-    # Subscribe to sensor
-    BB.subscribe(TestRobot, [:sensor, :distance])
-
-    # Wait for message
-    assert_receive {:bb, [:sensor, :distance], %{payload: %Range{} = range}}, 1000
-    assert range.range >= 0.02
-    assert range.range <= 4.0
-  end
-end
-```
-
-## Safety Considerations
-
-For sensors that might affect safety decisions:
-
-```elixir
+@impl BB.Sensor
 def handle_info(:poll, state) do
-  case read_sensor(state.opts[:pin]) do
-    {:ok, reading} ->
-      publish_reading(reading, state)
-      {:noreply, %{state | last_reading: reading, errors: 0}}
+  case MyHardware.read(state.pin) do
+    {:ok, value} ->
+      publish(value, state)
+      schedule_poll(state.poll_interval_ms)
+      {:noreply, %{state | errors: 0}}
 
     {:error, reason} ->
       new_errors = state.errors + 1
 
       if new_errors >= 3 do
-        # Publish to [:safety, :error] for subscribers, then crash so
-        # the supervisor decides whether to escalate.
-        BB.Safety.report_error(
-          state.bb.robot_module,
-          state.bb.path,
-          {:sensor_failure, reason}
-        )
+        BB.Safety.report_error(state.bb.robot, state.bb.path,
+          {:sensor_failure, reason})
 
         {:stop, {:sensor_failure, reason}, state}
       else
+        schedule_poll(state.poll_interval_ms)
         {:noreply, %{state | errors: new_errors}}
       end
   end
 end
 ```
 
-`BB.Safety.report_error/3` is a notification only - it publishes a `BB.Safety.HardwareError` event but does not change safety state. Escalation happens through the supervision tree: if your process crashes often enough to exhaust the topology supervisor's restart budget, the safety controller will force-disarm the robot.
+`BB.Safety.report_error/3` is a notification only — it publishes a `BB.Safety.HardwareError` event but does not change safety state. Escalation happens through the supervision tree: if your process crashes often enough to exhaust the topology supervisor's restart budget, the safety controller force-disarms the robot.
 
-## Common Issues
+Sensors that also control hardware (e.g. a spinning LIDAR you can switch off) should implement the optional `disarm/1` callback from the `BB.Sensor` behaviour. When that callback is present, `BB.Sensor.Server` automatically registers the sensor with `BB.Safety`.
 
-### Messages Not Received
+## Common pitfalls
 
-Check that:
-- The sensor is started (part of supervision tree)
-- Subscribers use the correct path
-- The message type is valid
+### Sensor uses `state.bb.robot_module`
 
-### High CPU Usage
+That key doesn't exist. The injected map is `%{robot: module, path: [atom]}` — use `state.bb.robot`.
 
-For high-frequency sensors:
-- Batch readings before publishing
-- Use longer poll intervals if acceptable
-- Consider hardware filtering
+### Sensor reaches into `BB.Robot.sensors` or `BB.Transmission`
 
-### Stale Data
+If you find yourself doing manual transmission lookups in a sensor driver, push the maths into the framework instead. Use `:sensor_profile` (injected at init), `publish_joint_state/3`, or `to_joint_space/3`. The driver should never see `BB.Transmission.apply_*`.
 
-If data seems delayed:
-- Check poll interval
-- Verify no blocking operations in read function
-- Consider event-driven approach
+### Sensor isn't joint-attached but expects a transmission
 
-## Next Steps
+Robot-level and link-level sensors get a `sensor_profile` with `joint_name: nil` and `transmission: nil`. Calling `publish_joint_state/3` on a non-joint-attached sensor is allowed — the publish path is unchanged — but the value passes through without transformation, which may not be what you want. If the sensor is supposed to be joint-attached, the bug is in the robot DSL, not the driver.
 
-- Add calibration UI with [bb_kino](https://hexdocs.pm/bb_kino)
-- Implement sensor fusion for multiple inputs
-- Add telemetry for monitoring sensor health
+### Subscribers don't receive messages
+
+Verify the topic. Sensors published via `publish_joint_state/3` (and the `[:sensor | state.bb.path]` pattern in general) appear on a hierarchical topic — subscribers can listen at any ancestor. Check:
+
+- The sensor is started (look at the supervision tree)
+- The subscriber's path is an ancestor of the published path
+- `message_types:` filtering (if used) matches the published message struct
+
+## Next steps
+
+- [Sensors and PubSub](../tutorials/03-sensors-and-pubsub.md) — concepts behind subscription and message routing.
+- [How to Integrate a Servo Driver](integrate-servo-driver.md) — for the actuator side, particularly when pairing a sensor with a closed-loop controller.
+- [Writing an Actuator](../tutorials/12-writing-an-actuator.md) — concepts behind motor-space ↔ joint-space conversion, much of which mirrors the sensor side.

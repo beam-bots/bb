@@ -38,8 +38,15 @@ defmodule BB.Urdf.Parser do
           name: String.t(),
           links: [link],
           joints: [joint],
+          transmissions: %{optional(String.t()) => transmission},
           materials: %{optional(String.t()) => material},
           warnings: [String.t()]
+        }
+  @type transmission :: %{
+          name: String.t() | nil,
+          joint: String.t(),
+          actuator: String.t() | nil,
+          reduction: float
         }
   @type link :: %{
           name: String.t(),
@@ -136,26 +143,133 @@ defmodule BB.Urdf.Parser do
         {joint, warnings ++ acc}
       end)
 
-    other_warnings =
+    {transmissions, transmission_warnings} =
+      children
+      |> filter_by_name(:transmission)
+      |> Enum.map_reduce([], fn el, acc ->
+        {parsed, warnings} = parse_transmission(el)
+        {parsed, warnings ++ acc}
+      end)
+
+    transmissions_by_joint =
+      transmissions
+      |> Enum.reject(&is_nil/1)
+      |> Enum.into(%{}, fn t -> {t.joint, t} end)
+
+    gazebo_warnings =
       children
       |> Enum.flat_map(fn
-        xml_element(name: :transmission, attributes: attrs) ->
-          ["skipping <transmission> #{attr_value(attrs, :name, "")}"]
-
-        xml_element(name: :gazebo) ->
-          ["skipping <gazebo> extension block"]
-
-        _ ->
-          []
+        xml_element(name: :gazebo) -> ["skipping <gazebo> extension block"]
+        _ -> []
       end)
 
     %{
       name: to_string(name),
       links: links,
       joints: joints,
+      transmissions: transmissions_by_joint,
       materials: materials,
-      warnings: Enum.reverse(link_warnings) ++ Enum.reverse(joint_warnings) ++ other_warnings
+      warnings:
+        Enum.reverse(link_warnings) ++
+          Enum.reverse(joint_warnings) ++
+          Enum.reverse(transmission_warnings) ++
+          gazebo_warnings
     }
+  end
+
+  defp parse_transmission(xml_element(name: :transmission) = element) do
+    parsed = %{
+      name: attr(element, :name, nil),
+      children: children(element)
+    }
+
+    parsed
+    |> Map.merge(transmission_metadata(parsed.children))
+    |> classify_transmission()
+  end
+
+  defp transmission_metadata(children) do
+    %{
+      type: transmission_type(first_by_name(children, :type)),
+      joint_name: transmission_joint(first_by_name(children, :joint)),
+      actuators: filter_by_name(children, :actuator)
+    }
+  end
+
+  defp transmission_type(nil), do: nil
+  defp transmission_type(el), do: el |> text_content() |> String.trim()
+
+  defp transmission_joint(nil), do: nil
+  defp transmission_joint(el), do: el |> attr(:name) |> to_string()
+
+  defp classify_transmission(%{joint_name: nil} = parsed) do
+    {nil, [skip_warning(parsed.name, "missing <joint>")]}
+  end
+
+  defp classify_transmission(%{type: type} = parsed)
+       when not is_nil(type) do
+    if simple_transmission?(type) do
+      build_transmission(parsed)
+    else
+      {nil,
+       [
+         skip_warning(
+           parsed.name,
+           "type #{inspect(type)} is not supported (only SimpleTransmission)"
+         )
+       ]}
+    end
+  end
+
+  defp classify_transmission(parsed), do: build_transmission(parsed)
+
+  defp build_transmission(%{actuators: actuators} = parsed) when length(actuators) > 1 do
+    {nil,
+     [skip_warning(parsed.name, "coupled transmissions (multiple <actuator>) are not supported")]}
+  end
+
+  defp build_transmission(parsed) do
+    {reduction, actuator_name} =
+      case parsed.actuators do
+        [] -> {1.0, nil}
+        [actuator | _] -> {extract_reduction(actuator), extract_actuator_name(actuator)}
+      end
+
+    {%{
+       name: parsed.name && to_string(parsed.name),
+       joint: parsed.joint_name,
+       actuator: actuator_name,
+       reduction: reduction
+     }, []}
+  end
+
+  defp extract_actuator_name(actuator_el) do
+    case attr(actuator_el, :name) do
+      nil -> nil
+      name -> to_string(name)
+    end
+  end
+
+  defp skip_warning(name, reason) do
+    "skipping <transmission> #{inspect(to_string(name || ""))}: #{reason}"
+  end
+
+  defp simple_transmission?(type) do
+    String.ends_with?(type, "SimpleTransmission")
+  end
+
+  defp extract_reduction(actuator_element) do
+    case actuator_element |> children() |> first_by_name(:mechanicalReduction) do
+      nil -> 1.0
+      el -> el |> text_content() |> String.trim() |> parse_float()
+    end
+  end
+
+  defp text_content(xml_element(content: content)) do
+    Enum.map_join(content, "", fn
+      {:xmlText, _, _, _, value, _} -> to_string(value)
+      _ -> ""
+    end)
   end
 
   defp parse_top_level_materials(children) do

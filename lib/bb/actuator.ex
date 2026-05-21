@@ -289,7 +289,67 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   alias BB.Message
+  alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Actuator.Command
+  alias BB.Transmission
+  alias BB.Transmission.Resolver, as: TransmissionResolver
+
+  # ----------------------------------------------------------------------------
+  # Outbound publishing
+  # ----------------------------------------------------------------------------
+
+  @doc """
+  Translate a motor-space outbound message into joint-space using the
+  transmission of the joint above the actuator at `actuator_path`.
+
+  Convenient for callers that build a message in motor-space and then
+  publish it on a topic of their own choosing — e.g. a controller
+  publishing `JointState` on a sensor topic. Performs a fresh
+  transmission resolution against the current parameter store on every
+  call, so it stays correct across runtime parameter changes without
+  the caller needing to subscribe.
+
+  Returns the message unchanged when the joint has no transmission.
+  """
+  @spec to_joint_space(module(), [atom()], Message.t()) :: Message.t()
+  def to_joint_space(robot, actuator_path, %Message{} = motor_message) do
+    actuator_name = List.last(actuator_path)
+    transmission = TransmissionResolver.resolve(robot, :actuator, actuator_name)
+    Transmission.unapply_to_payload(motor_message, transmission)
+  end
+
+  @doc """
+  Publish a `BeginMotion` message for the actuator at `path`, converting
+  the supplied motor-space values into joint-space before publishing.
+
+  The driver builds the message in motor-space (the only coordinate space
+  it knows about); this helper looks up the joint above the actuator,
+  resolves its transmission against the current parameter store, applies
+  `BB.Transmission.unapply_to_payload/2`, and publishes the joint-space
+  message to `[:actuator | path]`.
+
+  `path` is the actuator's full path (i.e. the `:bb.path` injected into
+  driver opts). `opts` is the keyword list accepted by
+  `BB.Message.Actuator.BeginMotion`'s schema, with `:initial_position`,
+  `:target_position`, `:peak_velocity`, and `:acceleration` in
+  motor-space.
+  """
+  @spec publish_begin_motion(module(), [atom()], keyword()) :: :ok
+  def publish_begin_motion(robot, path, opts) do
+    joint_name = joint_name_for_actuator(robot, path)
+    {:ok, motor_message} = Message.new(BeginMotion, joint_name, opts)
+    joint_message = to_joint_space(robot, path, motor_message)
+    BB.publish(robot, [:actuator | path], joint_message)
+  end
+
+  defp joint_name_for_actuator(robot, path) do
+    actuator_name = List.last(path)
+
+    case Map.get(robot.robot().actuators, actuator_name) do
+      %{joint: joint_name} -> joint_name
+      _ -> actuator_name
+    end
+  end
 
   # ----------------------------------------------------------------------------
   # Position Commands

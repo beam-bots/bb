@@ -68,6 +68,48 @@ defmodule BB.Urdf.ParserTest do
     test "returns an error for missing files" do
       assert {:error, :enoent} = Parser.parse_file("/no/such/file.urdf")
     end
+
+    test "parses a SimpleTransmission into the transmissions map keyed by joint" do
+      {:ok, robot} = Parser.parse_file(Path.join(@fixture_dir, "simple_transmission.urdf"))
+
+      assert robot.transmissions == %{
+               "shoulder_pan" => %{
+                 name: "shoulder_pan_trans",
+                 joint: "shoulder_pan",
+                 actuator: "shoulder_pan_motor",
+                 reduction: 101.0
+               }
+             }
+    end
+
+    test "warns and skips coupled transmissions" do
+      xml = """
+      <?xml version="1.0"?>
+      <robot name="t">
+        <link name="base"/>
+        <link name="a"/>
+        <link name="b"/>
+        <joint name="j1" type="revolute">
+          <parent link="base"/><child link="a"/>
+          <limit lower="0" upper="1" effort="1" velocity="1"/>
+        </joint>
+        <joint name="j2" type="revolute">
+          <parent link="base"/><child link="b"/>
+          <limit lower="0" upper="1" effort="1" velocity="1"/>
+        </joint>
+        <transmission name="coupled">
+          <type>transmission_interface/DifferentialTransmission</type>
+          <joint name="j1"/>
+          <actuator name="m1"><mechanicalReduction>2</mechanicalReduction></actuator>
+          <actuator name="m2"><mechanicalReduction>3</mechanicalReduction></actuator>
+        </transmission>
+      </robot>
+      """
+
+      {:ok, robot} = Parser.parse_string(xml)
+      assert robot.transmissions == %{}
+      assert Enum.any?(robot.warnings, &(&1 =~ "DifferentialTransmission"))
+    end
   end
 
   describe "parse_string/1" do

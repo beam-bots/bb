@@ -29,11 +29,17 @@ defmodule BB.Urdf.Exporter do
   """
   @spec export_robot(Robot.t()) :: {:ok, String.t()}
   def export_robot(%Robot{} = robot) do
+    joints_in_order = Robot.joints_in_order(robot)
     links = Robot.links_in_order(robot) |> Enum.map(&build_link_element/1)
-    joints = Robot.joints_in_order(robot) |> Enum.map(&build_joint_element/1)
+    joints = Enum.map(joints_in_order, &build_joint_element/1)
+    transmissions = Enum.flat_map(joints_in_order, &build_transmission_elements(&1, robot))
 
     xml =
-      Xml.element(:robot, [name: format_robot_name(robot.name)], links ++ joints)
+      Xml.element(
+        :robot,
+        [name: format_robot_name(robot.name)],
+        links ++ joints ++ transmissions
+      )
       |> Xml.to_string()
 
     {:ok, xml}
@@ -245,5 +251,39 @@ defmodule BB.Urdf.Exporter do
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
     if Enum.empty?(attrs), do: nil, else: Xml.element(:dynamics, attrs)
+  end
+
+  # URDF's `<transmission>` standard only carries `mechanicalReduction`.
+  # `offset` and `reversed?` are BB extensions and have no round-trip
+  # representation. Sensor-side transmissions are also BB-only and are
+  # silently dropped on export.
+  defp build_transmission_elements(%Joint{} = joint, robot) do
+    Enum.flat_map(joint.actuators, fn actuator_name ->
+      case robot.actuators[actuator_name] do
+        %{transmission: %{reduction: reduction}} when reduction != 1.0 ->
+          [build_transmission_element(joint, actuator_name, reduction)]
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp build_transmission_element(joint, actuator_name, reduction) do
+    transmission_name = "#{joint.name}_#{actuator_name}_trans"
+
+    actuator_attrs = [name: Atom.to_string(actuator_name)]
+
+    actuator_children = [
+      Xml.element(:mechanicalReduction, [], Xml.format_float(reduction))
+    ]
+
+    children = [
+      Xml.element(:type, [], "transmission_interface/SimpleTransmission"),
+      Xml.element(:joint, [name: Atom.to_string(joint.name)], []),
+      Xml.element(:actuator, actuator_attrs, actuator_children)
+    ]
+
+    Xml.element(:transmission, [name: transmission_name], children)
   end
 end

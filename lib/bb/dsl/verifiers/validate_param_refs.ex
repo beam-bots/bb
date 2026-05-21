@@ -13,7 +13,19 @@ defmodule BB.Dsl.Verifiers.ValidateParamRefs do
 
   use Spark.Dsl.Verifier
 
-  alias BB.Dsl.{Axis, Dynamics, Inertia, Inertial, Joint, Limit, Link, Origin, ParamRef}
+  alias BB.Dsl.{
+    Axis,
+    Dynamics,
+    Inertia,
+    Inertial,
+    Joint,
+    Limit,
+    Link,
+    Origin,
+    ParamRef,
+    Transmission
+  }
+
   alias BB.Unit
   alias Spark.Dsl.Verifier
   alias Spark.Error.DslError
@@ -71,13 +83,33 @@ defmodule BB.Dsl.Verifiers.ValidateParamRefs do
     limit_refs = collect_from_limit(joint.limit, joint_path ++ [:limit])
     dynamics_refs = collect_from_dynamics(joint.dynamics, joint_path ++ [:dynamics])
 
+    actuator_refs =
+      Enum.flat_map(joint.actuators, fn actuator ->
+        collect_from_transmission(
+          actuator.transmission,
+          joint_path ++ [:actuator, actuator.name, :transmission]
+        )
+      end)
+
+    sensor_refs =
+      Enum.flat_map(joint.sensors, fn sensor ->
+        collect_from_transmission(
+          sensor.transmission,
+          joint_path ++ [:sensor, sensor.name, :transmission]
+        )
+      end)
+
     nested_refs =
       case joint.link do
         nil -> []
         nested_link -> collect_from_entity(nested_link, path_prefix)
       end
 
-    origin_refs ++ axis_refs ++ limit_refs ++ dynamics_refs ++ nested_refs
+    origin_refs ++
+      axis_refs ++
+      limit_refs ++
+      dynamics_refs ++
+      actuator_refs ++ sensor_refs ++ nested_refs
   end
 
   defp collect_from_entity(_entity, _path_prefix), do: []
@@ -112,6 +144,18 @@ defmodule BB.Dsl.Verifiers.ValidateParamRefs do
     [:lower, :upper, :effort, :velocity]
     |> Enum.flat_map(fn field ->
       case Map.get(limit, field) do
+        %ParamRef{} = ref -> [{ref, path ++ [field]}]
+        _ -> []
+      end
+    end)
+  end
+
+  defp collect_from_transmission(nil, _path), do: []
+
+  defp collect_from_transmission(%Transmission{} = transmission, path) do
+    [:reduction, :offset, :reversed?]
+    |> Enum.flat_map(fn field ->
+      case Map.get(transmission, field) do
         %ParamRef{} = ref -> [{ref, path ++ [field]}]
         _ -> []
       end

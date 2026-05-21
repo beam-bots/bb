@@ -23,8 +23,19 @@ defmodule BB.Urdf.Xml do
   Attributes are converted to charlists as required by xmerl.
   Nil children are filtered out.
   """
-  @spec element(atom(), keyword(), list()) :: tuple()
-  def element(name, attrs \\ [], children \\ []) do
+  @spec element(atom(), keyword(), list() | binary()) :: tuple()
+  def element(name, attrs \\ [], children \\ [])
+
+  def element(name, attrs, text) when is_binary(text) do
+    xmerl_attrs =
+      attrs
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Enum.map(fn {k, v} -> {k, to_charlist(v)} end)
+
+    {name, xmerl_attrs, [String.to_charlist(text)]}
+  end
+
+  def element(name, attrs, children) when is_list(children) do
     xmerl_attrs =
       attrs
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
