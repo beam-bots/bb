@@ -11,6 +11,25 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.18.0](https://github.com/beam-bots/bb/compare/v0.17.1...v0.18.0) (2026-05-21)
+
+
+
+
+### Features:
+
+* model URDF `<transmission>` in the BB DSL (#110) by James Harton
+
+* add `mix bb.from_urdf` URDF importer (#107) by James Harton
+
+* bridge `BB.Safety.arm/1`/`disarm/1` to user-defined commands (#106) by James Harton
+
+### Improvements:
+
+* merge `mix bb.from_urdf` output into existing modules (#109) by James Harton
+
+* add `nx_eigen` to the Nx backend choices in `bb.add_nx_backend` (#105) by James Harton
+
 ## [v0.17.1](https://github.com/beam-bots/bb/compare/v0.17.0...v0.17.1) (2026-05-18)
 
 
