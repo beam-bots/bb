@@ -76,6 +76,7 @@ defmodule BB.Urdf.ParserTest do
                "shoulder_pan" => %{
                  name: "shoulder_pan_trans",
                  joint: "shoulder_pan",
+                 actuator: "shoulder_pan_motor",
                  reduction: 101.0
                }
              }

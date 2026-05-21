@@ -6,7 +6,7 @@ if Code.ensure_loaded?(Igniter) do
   defmodule BB.Igniter.Transmission do
     @moduledoc """
     Shared Igniter upgrade logic for lifting actuator-driver `reverse?` options
-    into joint-level `transmission` blocks.
+    into per-attachment `transmission` blocks.
 
     Used by the upgrade tasks in each driver package (Feetech, Robotis,
     PCA9685, Pigpio). The transformation is:
@@ -37,13 +37,14 @@ if Code.ensure_loaded?(Igniter) do
             effort(~u(10 newton_meter))
             velocity(~u(180 degree_per_second))
           end
-          transmission do
-            offset(~u(90.0 degree))
-            reversed? true
-          end
           actuator :motor, {BB.Servo.Feetech.Actuator,
             servo_id: 1, controller: :feetech
-          }
+          } do
+            transmission do
+              offset(~u(90.0 degree))
+              reversed? true
+            end
+          end
           link :arm
         end
 
@@ -51,13 +52,17 @@ if Code.ensure_loaded?(Igniter) do
     auto-centering behaviour the Feetech/Robotis drivers used to derive
     internally. `lift_offset?: false` skips the offset computation — used by
     the PCA9685 and Pigpio upgraders, which never auto-centered.
+
+    Also handles re-running on code that was previously upgraded to put the
+    `transmission` block at the joint level: such blocks are removed and
+    merged into the actuator's own block.
     """
 
     alias Sourceror.Zipper
 
     @doc """
     Lift `reverse?` opts on the given driver's actuator child-specs into
-    joint-level `transmission` blocks across the project.
+    per-attachment `transmission` blocks across the project.
 
     Options:
 
@@ -85,9 +90,6 @@ if Code.ensure_loaded?(Igniter) do
       end
     end
 
-    # Apply the transmission lift to every `joint :name do ... end` block in
-    # the module body. We work directly on the quoted form rather than the
-    # zipper since we need recursive transformation of nested calls.
     defp update_module(zipper, driver, lift_offset?) do
       current = Zipper.node(zipper)
       new_node = Macro.prewalk(current, &transform_joint(&1, driver, lift_offset?))
@@ -115,72 +117,138 @@ if Code.ensure_loaded?(Igniter) do
     defp rebuild_do({:block, {key, _}}, body), do: [{key, body}]
     defp rebuild_do(:plain, body), do: [do: body]
 
-    # The joint's `do` body can be a single call or a `:__block__` of calls.
-    # Normalise to a list, transform, and pack back.
     defp rewrite_joint_body({:__block__, meta, stmts}, driver, lift_offset?) do
-      {new_stmts, joint_state} = scan_and_modify(stmts, driver, lift_offset?)
-      new_stmts = insert_transmission(new_stmts, joint_state)
+      new_stmts = do_rewrite_joint_body(stmts, driver, lift_offset?)
       {:__block__, meta, new_stmts}
     end
 
     defp rewrite_joint_body(stmt, driver, lift_offset?) do
-      {new_stmts, joint_state} = scan_and_modify([stmt], driver, lift_offset?)
-      new_stmts = insert_transmission(new_stmts, joint_state)
-
-      case new_stmts do
+      case do_rewrite_joint_body([stmt], driver, lift_offset?) do
         [single] -> single
         many -> {:__block__, [], many}
       end
     end
 
-    # Walk statements in the joint body. For each one:
-    #   - actuator(...) calls matching driver: strip `reverse?:` opt, capture
-    #     whether it was true.
-    #   - limit do ... end blocks: capture lower/upper for offset computation.
-    #   - transmission do ... end blocks: capture so we can merge into the
-    #     existing block instead of inserting a new one.
-    defp scan_and_modify(stmts, driver, lift_offset?) do
-      Enum.map_reduce(
-        stmts,
-        %{
-          reverse?: false,
-          touched_actuator?: false,
-          existing_transmission_index: nil,
-          limits: nil,
-          lift_offset?: lift_offset?
-        },
-        fn stmt, acc ->
-          process_stmt(stmt, driver, acc)
-        end
-      )
+    defp do_rewrite_joint_body(stmts, driver, lift_offset?) do
+      limits = collect_limits(stmts)
+
+      {stmts, existing_transmission} = extract_joint_level_transmission(stmts)
+
+      Enum.map(stmts, fn stmt ->
+        rewrite_actuator(stmt, driver, lift_offset?, limits, existing_transmission)
+      end)
     end
 
-    defp process_stmt({:actuator, meta, [name, child_spec]}, driver, acc) do
+    defp collect_limits(stmts) do
+      Enum.find_value(stmts, fn
+        {:limit, _, [[{{:__block__, _, [:do]}, body}]]} -> extract_limits(body)
+        {:limit, _, [[do: body]]} -> extract_limits(body)
+        _ -> nil
+      end)
+    end
+
+    # A `transmission do ... end` sibling of the actuator inside a joint is a
+    # leftover from the previous (joint-level) version of this upgrader.
+    # Capture and remove it so we can merge its contents into the actuator's
+    # own block.
+    defp extract_joint_level_transmission(stmts) do
+      {kept, captured} =
+        Enum.reduce(stmts, {[], nil}, fn
+          {:transmission, _, [[{{:__block__, _, [:do]}, body}]]} = stmt, {acc, nil} ->
+            {acc, %{body: body, ast: stmt}}
+
+          {:transmission, _, [[do: body]]} = stmt, {acc, nil} ->
+            {acc, %{body: body, ast: stmt}}
+
+          stmt, {acc, captured} ->
+            {[stmt | acc], captured}
+        end)
+
+      {Enum.reverse(kept), captured}
+    end
+
+    defp rewrite_actuator(
+           {:actuator, meta, [name, child_spec]},
+           driver,
+           lift_offset?,
+           limits,
+           existing
+         ) do
       case strip_reverse_question(child_spec, driver) do
         {:matched, was_true?, new_child_spec} ->
-          new_acc = %{acc | reverse?: acc.reverse? or was_true?, touched_actuator?: true}
-          {{:actuator, meta, [name, new_child_spec]}, new_acc}
+          transmission =
+            build_transmission(was_true?, lift_offset?, limits, existing)
+
+          if transmission do
+            {:actuator, meta, [name, new_child_spec, [do: transmission]]}
+          else
+            {:actuator, meta, [name, new_child_spec]}
+          end
 
         :unmatched ->
-          {{:actuator, meta, [name, child_spec]}, acc}
+          {:actuator, meta, [name, child_spec]}
       end
     end
 
-    defp process_stmt({:limit, _meta, [[{{:__block__, _, [:do]}, body}]]} = stmt, _driver, acc) do
-      {stmt, %{acc | limits: extract_limits(body)}}
+    defp rewrite_actuator(other, _driver, _lift_offset?, _limits, _existing), do: other
+
+    defp build_transmission(reversed?, lift_offset?, limits, existing) do
+      offset_line = build_offset_line(lift_offset?, limits, existing)
+      reversed_line = build_reversed_line(reversed?, existing)
+      reduction_line = existing && extract_reduction_line(existing.body)
+
+      [reduction_line, offset_line, reversed_line]
+      |> Enum.reject(&is_nil/1)
+      |> render_transmission_source()
     end
 
-    defp process_stmt({:limit, _meta, [[do: body]]} = stmt, _driver, acc) do
-      {stmt, %{acc | limits: extract_limits(body)}}
+    defp build_offset_line(lift_offset?, limits, existing) do
+      with nil <- existing && extract_offset_line(existing.body) do
+        if lift_offset?, do: offset_line_from_limits(limits)
+      end
     end
 
-    defp process_stmt(stmt, _driver, acc), do: {stmt, acc}
+    defp build_reversed_line(true, _existing), do: "reversed? true"
+
+    defp build_reversed_line(false, existing) do
+      if existing_has_reversed_true?(existing), do: "reversed? true"
+    end
+
+    defp render_transmission_source([]), do: nil
+
+    defp render_transmission_source(lines) do
+      Sourceror.parse_string!("transmission do\n  " <> Enum.join(lines, "\n  ") <> "\nend")
+    end
+
+    defp existing_has_reversed_true?(nil), do: false
+
+    defp existing_has_reversed_true?(%{body: body}) do
+      Enum.any?(body_stmts(body), fn
+        {:reversed?, _, [true]} -> true
+        {:reversed?, _, [{:__block__, _, [true]}]} -> true
+        _ -> false
+      end)
+    end
+
+    defp extract_offset_line(body) do
+      Enum.find_value(body_stmts(body), fn
+        {:offset, _, [arg]} -> "offset #{Macro.to_string(arg)}"
+        _ -> nil
+      end)
+    end
+
+    defp extract_reduction_line(body) do
+      Enum.find_value(body_stmts(body), fn
+        {:reduction, _, [arg]} -> "reduction #{Macro.to_string(arg)}"
+        _ -> nil
+      end)
+    end
+
+    defp body_stmts({:__block__, _, stmts}), do: stmts
+    defp body_stmts(stmt), do: [stmt]
 
     # Look for `{Driver, opts}` (or `{Driver, opts}` aliased) and strip `reverse?:`.
-    defp strip_reverse_question(
-           {:{}, meta, [driver_alias, opts]},
-           driver
-         ) do
+    defp strip_reverse_question({:{}, meta, [driver_alias, opts]}, driver) do
       strip_from_tuple(driver_alias, opts, driver, fn new_opts ->
         {:{}, meta, [driver_alias, new_opts]}
       end)
@@ -205,7 +273,7 @@ if Code.ensure_loaded?(Igniter) do
       if alias_matches?(driver_alias, driver) and is_list(opts) do
         case pop_reverse_question(opts) do
           :not_present ->
-            :unmatched
+            {:matched, false, rebuild.(opts)}
 
           {value, new_opts} ->
             was_true? = literal_true?(value)
@@ -240,7 +308,6 @@ if Code.ensure_loaded?(Igniter) do
     defp literal_true?(true), do: true
     defp literal_true?(_), do: false
 
-    # Pull `lower` and `upper` calls out of a limit body so we can compute an offset.
     defp extract_limits({:__block__, _, stmts}), do: extract_limits(stmts)
 
     defp extract_limits(stmts) when is_list(stmts) do
@@ -252,41 +319,6 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp extract_limits(_), do: nil
-
-    defp insert_transmission(stmts, %{touched_actuator?: false}), do: stmts
-
-    defp insert_transmission(stmts, %{reverse?: false, lift_offset?: false}), do: stmts
-
-    defp insert_transmission(stmts, state) do
-      case transmission_source(state) do
-        nil ->
-          stmts
-
-        source ->
-          new_node = Sourceror.parse_string!(source)
-          place_after_limit(stmts, new_node)
-      end
-    end
-
-    defp transmission_source(state) do
-      offset_line =
-        if state.lift_offset? do
-          offset_line_from_limits(state.limits)
-        end
-
-      reversed_line =
-        if state.reverse? do
-          "reversed? true"
-        end
-
-      case Enum.reject([offset_line, reversed_line], &is_nil/1) do
-        [] ->
-          nil
-
-        lines ->
-          "transmission do\n  " <> Enum.join(lines, "\n  ") <> "\nend"
-      end
-    end
 
     defp offset_line_from_limits(nil), do: nil
     defp offset_line_from_limits(%{lower: nil}), do: nil
@@ -302,9 +334,6 @@ if Code.ensure_loaded?(Igniter) do
       end
     end
 
-    # Match `~u(-110 degree)` / `~u(190 degree)` / etc. and pull out the numeric
-    # value and unit name. Returns nil for non-literal expressions (param refs,
-    # arithmetic, etc.) so the upgrader gives up rather than guessing.
     defp unit_literal({:sigil_u, _, [{:<<>>, _, [text]}, _]}) when is_binary(text) do
       with [num_str, unit] <- String.split(text, " ", parts: 2),
            {value, ""} <- parse_number(num_str) do
@@ -333,17 +362,5 @@ if Code.ensure_loaded?(Igniter) do
     defp format_number(n) when is_float(n) do
       if n == Float.round(n, 0), do: :erlang.float_to_binary(n, decimals: 1), else: to_string(n)
     end
-
-    # Place a new node immediately after the `limit do ... end` call if one is
-    # present, otherwise prepend it.
-    defp place_after_limit(stmts, new_node) do
-      case Enum.find_index(stmts, &limit_call?/1) do
-        nil -> [new_node | stmts]
-        idx -> List.insert_at(stmts, idx + 1, new_node)
-      end
-    end
-
-    defp limit_call?({:limit, _, _}), do: true
-    defp limit_call?(_), do: false
   end
 end

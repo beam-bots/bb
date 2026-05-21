@@ -313,8 +313,8 @@ defmodule BB.Actuator do
   """
   @spec to_joint_space(module(), [atom()], Message.t()) :: Message.t()
   def to_joint_space(robot, actuator_path, %Message{} = motor_message) do
-    joint_name = joint_name_for_actuator(robot, actuator_path)
-    transmission = TransmissionResolver.resolve(robot, joint_name)
+    actuator_name = List.last(actuator_path)
+    transmission = TransmissionResolver.resolve(robot, :actuator, actuator_name)
     Transmission.unapply_to_payload(motor_message, transmission)
   end
 

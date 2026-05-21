@@ -209,11 +209,15 @@ defmodule BB.Dsl do
   @transmission %Entity{
     name: :transmission,
     describe: """
-    A mechanical transmission between the joint and its actuator(s).
+    A mechanical transmission between this attachment (actuator or sensor)
+    and its joint.
 
-    Captures the relationship between joint-space command and motor-space
-    command: gear reduction, zero-offset, and polarity. The URDF equivalent
-    is `<transmission>`.
+    Captures the relationship between joint-space and this attachment's
+    own coordinate space: gear reduction, zero-offset, and polarity.
+    Actuators with a non-identity transmission have URDF equivalents via
+    `<transmission>` (the actuator name and joint name name the pairing).
+    Sensor-side transmissions are a BB extension and do not round-trip
+    through URDF.
     """,
     target: BB.Dsl.Transmission,
     identifier: {:auto, :unique_integer},
@@ -222,20 +226,20 @@ defmodule BB.Dsl do
       reduction: [
         type: {:or, [:float, {:struct, BB.Dsl.ParamRef}]},
         doc:
-          "Gear ratio between actuator and joint. A reduction of `n` means the actuator rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference.",
+          "Gear ratio between attachment and joint. A reduction of `n` means the attachment rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference.",
         required: false,
         default: 1.0
       ],
       offset: [
         type: {:or, [unit_type(compatible: :degree), unit_type(compatible: :meter)]},
         doc:
-          "Zero-point offset between joint frame and actuator frame: the joint angle (or linear position) corresponding to the actuator's zero. May be a `param/1` reference.",
+          "Zero-point offset between joint frame and attachment frame: the joint angle (or linear position) corresponding to the attachment's zero. May be a `param/1` reference.",
         required: false
       ],
       reversed?: [
         type: {:or, [:boolean, {:struct, BB.Dsl.ParamRef}]},
         doc:
-          "Whether actuator motion is reversed relative to joint motion. May be a `param/1` reference.",
+          "Whether the attachment's motion is reversed relative to joint motion. May be a `param/1` reference.",
         required: false,
         default: false
       ]
@@ -249,6 +253,8 @@ defmodule BB.Dsl do
     identifier: :name,
     args: [:name, :child_spec],
     imports: [BB.Dsl.ParamRef],
+    entities: [transmission: [@transmission]],
+    singleton_entity_keys: [:transmission],
     schema: [
       name: [
         type: :atom,
@@ -272,6 +278,8 @@ defmodule BB.Dsl do
     identifier: :name,
     args: [:name, :child_spec],
     imports: [BB.Dsl.ParamRef],
+    entities: [transmission: [@transmission]],
+    singleton_entity_keys: [:transmission],
     schema: [
       name: [
         type: :atom,
@@ -317,12 +325,11 @@ defmodule BB.Dsl do
       ],
       dynamics: [@dynamics],
       limit: [@limit],
-      transmission: [@transmission],
       sensors: [@sensor],
       actuators: [@actuator]
     ],
     recursive_as: :joints,
-    singleton_entity_keys: [:dynamics, :origin, :axis, :link, :limit, :transmission],
+    singleton_entity_keys: [:dynamics, :origin, :axis, :link, :limit],
     schema: [
       name: [
         type: :atom,

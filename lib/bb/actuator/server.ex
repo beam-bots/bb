@@ -35,6 +35,7 @@ defmodule BB.Actuator.Server do
     :transmission_subscriptions,
     :joint,
     :joint_name,
+    :actuator_name,
     :bb,
     :user_state
   ]
@@ -48,6 +49,7 @@ defmodule BB.Actuator.Server do
           transmission_subscriptions: %{atom() => [atom()]},
           joint: map() | nil,
           joint_name: atom() | nil,
+          actuator_name: atom() | nil,
           bb: %{robot: module(), path: [atom()]},
           user_state: term()
         }
@@ -71,11 +73,12 @@ defmodule BB.Actuator.Server do
     {param_subscriptions, resolved_opts} =
       ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
 
+    actuator_name = List.last(bb.path)
     {joint, joint_name} = joint_for_actuator(bb)
 
     {transmission, transmission_subscriptions} =
-      if joint_name do
-        TransmissionResolver.resolve_and_subscribe(bb.robot, joint_name)
+      if actuator_name do
+        TransmissionResolver.resolve_and_subscribe(bb.robot, :actuator, actuator_name)
       else
         {nil, %{}}
       end
@@ -92,6 +95,7 @@ defmodule BB.Actuator.Server do
       transmission_subscriptions: transmission_subscriptions,
       joint: joint,
       joint_name: joint_name,
+      actuator_name: actuator_name,
       bb: bb
     }
 
@@ -128,7 +132,8 @@ defmodule BB.Actuator.Server do
              state.transmission,
              state.transmission_subscriptions,
              state.bb.robot,
-             state.joint_name
+             :actuator,
+             state.actuator_name
            ) do
         {:changed, new_transmission} ->
           {true, %{state | transmission: new_transmission}}

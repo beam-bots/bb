@@ -9,6 +9,7 @@ defmodule BB.Sensor.Server do
   This module manages the lifecycle of user-defined sensor modules, handling:
   - Parameter reference resolution at startup
   - Subscription to parameter changes
+  - For joint-attached sensors, transmission resolution and a `:sensor_profile` opt
   - Delegation of GenServer callbacks to user module
   - Optional safety registration (only if sensor implements `disarm/1`)
 
@@ -19,13 +20,20 @@ defmodule BB.Sensor.Server do
   use GenServer
 
   alias BB.Parameter.Changed, as: ParameterChanged
+  alias BB.Sensor.SensorProfile
   alias BB.Server.ParamResolution
+  alias BB.Transmission
+  alias BB.Transmission.Resolver, as: TransmissionResolver
 
   defstruct [
     :callback_module,
     :resolved_opts,
     :raw_opts,
     :param_subscriptions,
+    :transmission,
+    :transmission_subscriptions,
+    :sensor_name,
+    :joint_name,
     :bb,
     :user_state
   ]
@@ -35,6 +43,10 @@ defmodule BB.Sensor.Server do
           resolved_opts: keyword(),
           raw_opts: keyword(),
           param_subscriptions: %{[atom()] => atom()},
+          transmission: Transmission.t() | nil,
+          transmission_subscriptions: %{atom() => [atom()]},
+          sensor_name: atom() | nil,
+          joint_name: atom() | nil,
           bb: %{robot: module(), path: [atom()]},
           user_state: term()
         }
@@ -58,28 +70,37 @@ defmodule BB.Sensor.Server do
     {param_subscriptions, resolved_opts} =
       ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
 
+    sensor_name = List.last(bb.path)
+    joint_name = joint_name_for_sensor(bb, sensor_name)
+
+    {transmission, transmission_subscriptions} =
+      if joint_name do
+        TransmissionResolver.resolve_and_subscribe(bb.robot, :sensor, sensor_name)
+      else
+        {nil, %{}}
+      end
+
+    sensor_profile = %SensorProfile{joint_name: joint_name, transmission: transmission}
+    resolved_opts = Keyword.put(resolved_opts, :sensor_profile, sensor_profile)
+
+    base = %__MODULE__{
+      callback_module: callback_module,
+      resolved_opts: resolved_opts,
+      raw_opts: raw_opts,
+      param_subscriptions: param_subscriptions,
+      transmission: transmission,
+      transmission_subscriptions: transmission_subscriptions,
+      sensor_name: sensor_name,
+      joint_name: joint_name,
+      bb: bb
+    }
+
     case callback_module.init(resolved_opts) do
       {:ok, user_state} ->
-        {:ok,
-         %__MODULE__{
-           callback_module: callback_module,
-           resolved_opts: resolved_opts,
-           raw_opts: raw_opts,
-           param_subscriptions: param_subscriptions,
-           bb: bb,
-           user_state: user_state
-         }}
+        {:ok, %{base | user_state: user_state}}
 
       {:ok, user_state, timeout_or_continue} ->
-        {:ok,
-         %__MODULE__{
-           callback_module: callback_module,
-           resolved_opts: resolved_opts,
-           raw_opts: raw_opts,
-           param_subscriptions: param_subscriptions,
-           bb: bb,
-           user_state: user_state
-         }, timeout_or_continue}
+        {:ok, %{base | user_state: user_state}, timeout_or_continue}
 
       {:stop, reason} ->
         {:stop, reason}
@@ -89,25 +110,62 @@ defmodule BB.Sensor.Server do
     end
   end
 
+  defp joint_name_for_sensor(%{robot: robot_module}, sensor_name) do
+    case Map.get(robot_module.robot().sensors, sensor_name) do
+      %{attached_to: {:joint, joint_name}} -> joint_name
+      _ -> nil
+    end
+  end
+
   @impl GenServer
   def handle_info({:bb, [:param | param_path], %{payload: %ParameterChanged{}}}, state) do
-    case ParamResolution.handle_change(
-           param_path,
-           state.param_subscriptions,
-           state.raw_opts,
-           state.bb.robot
-         ) do
-      {:changed, new_resolved} ->
-        case state.callback_module.handle_options(new_resolved, state.user_state) do
-          {:ok, new_user_state} ->
-            {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+    {transmission_changed?, state} =
+      case TransmissionResolver.handle_change(
+             param_path,
+             state.transmission,
+             state.transmission_subscriptions,
+             state.bb.robot,
+             :sensor,
+             state.sensor_name
+           ) do
+        {:changed, new_transmission} ->
+          {true, %{state | transmission: new_transmission}}
 
-          {:stop, reason} ->
-            {:stop, reason, state}
+        :ignored ->
+          {false, state}
+      end
+
+    param_result =
+      ParamResolution.handle_change(
+        param_path,
+        state.param_subscriptions,
+        state.raw_opts,
+        state.bb.robot
+      )
+
+    if transmission_changed? or match?({:changed, _}, param_result) do
+      base_opts =
+        case param_result do
+          {:changed, opts} -> opts
+          :ignored -> Keyword.delete(state.resolved_opts, :sensor_profile)
         end
 
-      :ignored ->
-        {:noreply, state}
+      new_resolved =
+        Keyword.put(
+          base_opts,
+          :sensor_profile,
+          %SensorProfile{joint_name: state.joint_name, transmission: state.transmission}
+        )
+
+      case state.callback_module.handle_options(new_resolved, state.user_state) do
+        {:ok, new_user_state} ->
+          {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+
+        {:stop, reason} ->
+          {:stop, reason, state}
+      end
+    else
+      {:noreply, state}
     end
   end
 

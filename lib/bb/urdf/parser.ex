@@ -45,6 +45,7 @@ defmodule BB.Urdf.Parser do
   @type transmission :: %{
           name: String.t() | nil,
           joint: String.t(),
+          actuator: String.t() | nil,
           reduction: float
         }
   @type link :: %{
@@ -228,17 +229,25 @@ defmodule BB.Urdf.Parser do
   end
 
   defp build_transmission(parsed) do
-    reduction =
+    {reduction, actuator_name} =
       case parsed.actuators do
-        [] -> 1.0
-        [actuator | _] -> extract_reduction(actuator)
+        [] -> {1.0, nil}
+        [actuator | _] -> {extract_reduction(actuator), extract_actuator_name(actuator)}
       end
 
     {%{
        name: parsed.name && to_string(parsed.name),
        joint: parsed.joint_name,
+       actuator: actuator_name,
        reduction: reduction
      }, []}
+  end
+
+  defp extract_actuator_name(actuator_el) do
+    case attr(actuator_el, :name) do
+      nil -> nil
+      name -> to_string(name)
+    end
   end
 
   defp skip_warning(name, reason) do

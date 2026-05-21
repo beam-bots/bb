@@ -32,14 +32,16 @@ Robot topology
      * capsule
      * mesh
    * sensor
+     * transmission
  * [joint](#topology-joint)
    * origin
    * axis
    * dynamics
    * limit
-   * transmission
    * sensor
+     * transmission
    * actuator
+     * transmission
 
 
 
@@ -76,6 +78,7 @@ A kinematic link (ie solid body).
    * capsule
    * mesh
  * [sensor](#topology-link-sensor)
+   * transmission
 
 
 
@@ -657,6 +660,8 @@ sensor name, child_spec
 
 A sensor attached to the robot, a link, or a joint.
 
+### Nested DSLs
+ * [transmission](#topology-link-sensor-transmission)
 
 
 
@@ -669,6 +674,41 @@ A sensor attached to the robot, a link, or a joint.
 | [`child_spec`](#topology-link-sensor-child_spec){: #topology-link-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
 
 
+
+### topology.link.sensor.transmission
+
+
+A mechanical transmission between this attachment (actuator or sensor)
+and its joint.
+
+Captures the relationship between joint-space and this attachment's
+own coordinate space: gear reduction, zero-offset, and polarity.
+Actuators with a non-identity transmission have URDF equivalents via
+`<transmission>` (the actuator name and joint name name the pairing).
+Sensor-side transmissions are a BB extension and do not round-trip
+through URDF.
+
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`reduction`](#topology-link-sensor-transmission-reduction){: #topology-link-sensor-transmission-reduction } | `float \| BB.Dsl.ParamRef` | `1.0` | Gear ratio between attachment and joint. A reduction of `n` means the attachment rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference. |
+| [`offset`](#topology-link-sensor-transmission-offset){: #topology-link-sensor-transmission-offset } | `any` |  | Zero-point offset between joint frame and attachment frame: the joint angle (or linear position) corresponding to the attachment's zero. May be a `param/1` reference. |
+| [`reversed?`](#topology-link-sensor-transmission-reversed?){: #topology-link-sensor-transmission-reversed? } | `boolean \| BB.Dsl.ParamRef` | `false` | Whether the attachment's motion is reversed relative to joint motion. May be a `param/1` reference. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Transmission`
 
 
 
@@ -698,9 +738,10 @@ A kinematic joint between a parent link and a child link.
  * [axis](#topology-joint-axis)
  * [dynamics](#topology-joint-dynamics)
  * [limit](#topology-joint-limit)
- * [transmission](#topology-joint-transmission)
  * [sensor](#topology-joint-sensor)
+   * transmission
  * [actuator](#topology-joint-actuator)
+   * transmission
 
 
 
@@ -828,37 +869,6 @@ Limits applied to joint movement
 
 Target: `BB.Dsl.Limit`
 
-### topology.joint.transmission
-
-
-A mechanical transmission between the joint and its actuator(s).
-
-Captures the relationship between joint-space command and motor-space
-command: gear reduction, zero-offset, and polarity. The URDF equivalent
-is `<transmission>`.
-
-
-
-
-
-
-
-### Options
-
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`reduction`](#topology-joint-transmission-reduction){: #topology-joint-transmission-reduction } | `float \| BB.Dsl.ParamRef` | `1.0` | Gear ratio between actuator and joint. A reduction of `n` means the actuator rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference. |
-| [`offset`](#topology-joint-transmission-offset){: #topology-joint-transmission-offset } | `any` |  | Zero-point offset between joint frame and actuator frame: the joint angle (or linear position) corresponding to the actuator's zero. May be a `param/1` reference. |
-| [`reversed?`](#topology-joint-transmission-reversed?){: #topology-joint-transmission-reversed? } | `boolean \| BB.Dsl.ParamRef` | `false` | Whether actuator motion is reversed relative to joint motion. May be a `param/1` reference. |
-
-
-
-
-
-### Introspection
-
-Target: `BB.Dsl.Transmission`
-
 ### topology.joint.sensor
 ```elixir
 sensor name, child_spec
@@ -867,6 +877,8 @@ sensor name, child_spec
 
 A sensor attached to the robot, a link, or a joint.
 
+### Nested DSLs
+ * [transmission](#topology-joint-sensor-transmission)
 
 
 
@@ -879,6 +891,41 @@ A sensor attached to the robot, a link, or a joint.
 | [`child_spec`](#topology-joint-sensor-child_spec){: #topology-joint-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
 
 
+
+### topology.joint.sensor.transmission
+
+
+A mechanical transmission between this attachment (actuator or sensor)
+and its joint.
+
+Captures the relationship between joint-space and this attachment's
+own coordinate space: gear reduction, zero-offset, and polarity.
+Actuators with a non-identity transmission have URDF equivalents via
+`<transmission>` (the actuator name and joint name name the pairing).
+Sensor-side transmissions are a BB extension and do not round-trip
+through URDF.
+
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`reduction`](#topology-joint-sensor-transmission-reduction){: #topology-joint-sensor-transmission-reduction } | `float \| BB.Dsl.ParamRef` | `1.0` | Gear ratio between attachment and joint. A reduction of `n` means the attachment rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference. |
+| [`offset`](#topology-joint-sensor-transmission-offset){: #topology-joint-sensor-transmission-offset } | `any` |  | Zero-point offset between joint frame and attachment frame: the joint angle (or linear position) corresponding to the attachment's zero. May be a `param/1` reference. |
+| [`reversed?`](#topology-joint-sensor-transmission-reversed?){: #topology-joint-sensor-transmission-reversed? } | `boolean \| BB.Dsl.ParamRef` | `false` | Whether the attachment's motion is reversed relative to joint motion. May be a `param/1` reference. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Transmission`
 
 
 
@@ -895,6 +942,8 @@ actuator name, child_spec
 
 An actuator attached to a joint.
 
+### Nested DSLs
+ * [transmission](#topology-joint-actuator-transmission)
 
 
 
@@ -907,6 +956,41 @@ An actuator attached to a joint.
 | [`child_spec`](#topology-joint-actuator-child_spec){: #topology-joint-actuator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the actuator process. Either a module or `{module, keyword_list}` |
 
 
+
+### topology.joint.actuator.transmission
+
+
+A mechanical transmission between this attachment (actuator or sensor)
+and its joint.
+
+Captures the relationship between joint-space and this attachment's
+own coordinate space: gear reduction, zero-offset, and polarity.
+Actuators with a non-identity transmission have URDF equivalents via
+`<transmission>` (the actuator name and joint name name the pairing).
+Sensor-side transmissions are a BB extension and do not round-trip
+through URDF.
+
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`reduction`](#topology-joint-actuator-transmission-reduction){: #topology-joint-actuator-transmission-reduction } | `float \| BB.Dsl.ParamRef` | `1.0` | Gear ratio between attachment and joint. A reduction of `n` means the attachment rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference. |
+| [`offset`](#topology-joint-actuator-transmission-offset){: #topology-joint-actuator-transmission-offset } | `any` |  | Zero-point offset between joint frame and attachment frame: the joint angle (or linear position) corresponding to the attachment's zero. May be a `param/1` reference. |
+| [`reversed?`](#topology-joint-actuator-transmission-reversed?){: #topology-joint-actuator-transmission-reversed? } | `boolean \| BB.Dsl.ParamRef` | `false` | Whether the attachment's motion is reversed relative to joint motion. May be a `param/1` reference. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Transmission`
 
 
 
@@ -955,6 +1039,7 @@ Robot-level sensors
 
 ### Nested DSLs
  * [sensor](#sensors-sensor)
+   * transmission
 
 
 
@@ -968,6 +1053,8 @@ sensor name, child_spec
 
 A sensor attached to the robot, a link, or a joint.
 
+### Nested DSLs
+ * [transmission](#sensors-sensor-transmission)
 
 
 
@@ -980,6 +1067,41 @@ A sensor attached to the robot, a link, or a joint.
 | [`child_spec`](#sensors-sensor-child_spec){: #sensors-sensor-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the sensor process. Either a module or `{module, keyword_list}` |
 
 
+
+### sensors.sensor.transmission
+
+
+A mechanical transmission between this attachment (actuator or sensor)
+and its joint.
+
+Captures the relationship between joint-space and this attachment's
+own coordinate space: gear reduction, zero-offset, and polarity.
+Actuators with a non-identity transmission have URDF equivalents via
+`<transmission>` (the actuator name and joint name name the pairing).
+Sensor-side transmissions are a BB extension and do not round-trip
+through URDF.
+
+
+
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`reduction`](#sensors-sensor-transmission-reduction){: #sensors-sensor-transmission-reduction } | `float \| BB.Dsl.ParamRef` | `1.0` | Gear ratio between attachment and joint. A reduction of `n` means the attachment rotates `n` times for one rotation of the joint. Defaults to `1.0` (direct drive). May be a `param/1` reference. |
+| [`offset`](#sensors-sensor-transmission-offset){: #sensors-sensor-transmission-offset } | `any` |  | Zero-point offset between joint frame and attachment frame: the joint angle (or linear position) corresponding to the attachment's zero. May be a `param/1` reference. |
+| [`reversed?`](#sensors-sensor-transmission-reversed?){: #sensors-sensor-transmission-reversed? } | `boolean \| BB.Dsl.ParamRef` | `false` | Whether the attachment's motion is reversed relative to joint motion. May be a `param/1` reference. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Transmission`
 
 
 

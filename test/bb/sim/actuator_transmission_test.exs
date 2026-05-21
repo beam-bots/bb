@@ -19,12 +19,6 @@ defmodule BB.Sim.ActuatorTransmissionTest do
           joint :shoulder do
             type :revolute
 
-            transmission do
-              reduction 50.0
-              offset(~u(45 degree))
-              reversed? true
-            end
-
             limit do
               lower(~u(-180 degree))
               upper(~u(180 degree))
@@ -33,7 +27,14 @@ defmodule BB.Sim.ActuatorTransmissionTest do
               acceleration(~u(120 degree_per_square_second))
             end
 
-            actuator :motor, ServoMotor
+            actuator :motor, ServoMotor do
+              transmission do
+                reduction 50.0
+                offset(~u(45 degree))
+                reversed? true
+              end
+            end
+
             sensor :estimator, {BB.Sensor.OpenLoopPositionEstimator, actuator: :motor}
 
             link :arm

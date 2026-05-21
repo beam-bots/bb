@@ -16,18 +16,18 @@ defmodule BB.Actuator.ServerTransmissionTest do
         joint :shoulder do
           type :revolute
 
-          transmission do
-            reduction 50.0
-            offset(~u(45 degree))
-            reversed? true
-          end
-
           limit do
             effort(~u(10 newton_meter))
             velocity(~u(180 degree_per_second))
           end
 
-          actuator :motor, BB.Test.RecordingActuator
+          actuator :motor, BB.Test.RecordingActuator do
+            transmission do
+              reduction 50.0
+              offset(~u(45 degree))
+              reversed? true
+            end
+          end
 
           link :arm
         end

@@ -25,7 +25,7 @@ if Code.ensure_loaded?(Igniter) do
       Source.get(generated_source, :content)
     end
 
-    test "strips reverse?: true and inserts a transmission block with reversed? true" do
+    test "strips reverse?: true and nests a transmission block inside the actuator" do
       output =
         run("""
         defmodule MyRobot do
@@ -57,6 +57,51 @@ if Code.ensure_loaded?(Igniter) do
       assert output =~ "transmission do"
       assert output =~ "reversed?(true)"
       refute output =~ "reverse?:"
+
+      # The transmission block should be inside the actuator's do/end, not
+      # a sibling of the actuator inside the joint.
+      assert output =~ ~r/actuator\(:motor.*?do.*?transmission do/s
+    end
+
+    test "re-upgrading from a joint-level transmission moves it into the actuator" do
+      output =
+        run("""
+        defmodule MyRobot do
+          use BB
+
+          topology do
+            link :base do
+              joint :shoulder do
+                type :revolute
+
+                limit do
+                  lower ~u(-90 degree)
+                  upper ~u(90 degree)
+                  effort ~u(10 newton_meter)
+                  velocity ~u(180 degree_per_second)
+                end
+
+                transmission do
+                  reversed? true
+                end
+
+                actuator :motor, {BB.Igniter.TransmissionTest.FakeDriver,
+                  servo_id: 1
+                }
+
+                link :arm
+              end
+            end
+          end
+        end
+        """)
+
+      # The joint-level transmission block is gone…
+      refute output =~
+               ~r/joint :shoulder do.*?transmission do.*?reversed\?\(true\).*?end.*?actuator/s
+
+      # …and lives inside the actuator instead.
+      assert output =~ ~r/actuator\(:motor.*?do.*?transmission do.*?reversed\?\(true\)/s
     end
 
     test "drops reverse?: false silently, no transmission block added" do

@@ -362,16 +362,16 @@ defmodule BB.Urdf.ExporterTest do
           joint :shoulder do
             type :revolute
 
-            transmission do
-              reduction 101.0
-            end
-
             limit do
               effort(~u(10 newton_meter))
               velocity(~u(180 degree_per_second))
             end
 
-            actuator :motor, BB.Test.MockActuator
+            actuator :motor, BB.Test.MockActuator do
+              transmission do
+                reduction 101.0
+              end
+            end
 
             link :arm
           end
@@ -387,16 +387,16 @@ defmodule BB.Urdf.ExporterTest do
           joint :shoulder do
             type :revolute
 
-            transmission do
-              reversed? true
-            end
-
             limit do
               effort(~u(10 newton_meter))
               velocity(~u(180 degree_per_second))
             end
 
-            actuator :motor, BB.Test.MockActuator
+            actuator :motor, BB.Test.MockActuator do
+              transmission do
+                reversed? true
+              end
+            end
 
             link :arm
           end
@@ -407,7 +407,7 @@ defmodule BB.Urdf.ExporterTest do
     test "emits a <transmission> block with mechanicalReduction" do
       {:ok, xml} = Exporter.export(RobotWithTransmission)
 
-      assert xml =~ ~s(<transmission name="shoulder_trans">)
+      assert xml =~ ~s(<transmission name="shoulder_motor_trans">)
       assert xml =~ ~s(<type>transmission_interface/SimpleTransmission</type>)
       assert xml =~ ~s(<joint name="shoulder"/>)
       assert xml =~ ~s(<actuator name="motor">)

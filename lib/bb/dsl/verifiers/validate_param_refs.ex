@@ -83,8 +83,21 @@ defmodule BB.Dsl.Verifiers.ValidateParamRefs do
     limit_refs = collect_from_limit(joint.limit, joint_path ++ [:limit])
     dynamics_refs = collect_from_dynamics(joint.dynamics, joint_path ++ [:dynamics])
 
-    transmission_refs =
-      collect_from_transmission(joint.transmission, joint_path ++ [:transmission])
+    actuator_refs =
+      Enum.flat_map(joint.actuators, fn actuator ->
+        collect_from_transmission(
+          actuator.transmission,
+          joint_path ++ [:actuator, actuator.name, :transmission]
+        )
+      end)
+
+    sensor_refs =
+      Enum.flat_map(joint.sensors, fn sensor ->
+        collect_from_transmission(
+          sensor.transmission,
+          joint_path ++ [:sensor, sensor.name, :transmission]
+        )
+      end)
 
     nested_refs =
       case joint.link do
@@ -92,7 +105,11 @@ defmodule BB.Dsl.Verifiers.ValidateParamRefs do
         nested_link -> collect_from_entity(nested_link, path_prefix)
       end
 
-    origin_refs ++ axis_refs ++ limit_refs ++ dynamics_refs ++ transmission_refs ++ nested_refs
+    origin_refs ++
+      axis_refs ++
+      limit_refs ++
+      dynamics_refs ++
+      actuator_refs ++ sensor_refs ++ nested_refs
   end
 
   defp collect_from_entity(_entity, _path_prefix), do: []

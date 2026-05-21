@@ -257,4 +257,68 @@ defmodule BB.Sensor do
       )
     end
   end
+
+  # ----------------------------------------------------------------------------
+  # Outbound publishing
+  # ----------------------------------------------------------------------------
+
+  alias BB.Message
+  alias BB.Message.Sensor.JointState
+  alias BB.Transmission
+  alias BB.Transmission.Resolver, as: TransmissionResolver
+
+  @doc """
+  Translate a sensor-space outbound message into joint-space using the
+  transmission of the sensor at `sensor_path`.
+
+  Convenient for sensor drivers that build a message in their own
+  coordinate space and then publish it on a topic of their own choosing.
+  Performs a fresh transmission resolution against the current parameter
+  store on every call, so it stays correct across runtime parameter
+  changes without the caller needing to subscribe.
+
+  Returns the message unchanged when the sensor has no transmission
+  (i.e. it isn't joint-attached, or its transmission block is absent).
+  """
+  @spec to_joint_space(module(), [atom()], Message.t()) :: Message.t()
+  def to_joint_space(robot, sensor_path, %Message{} = sensor_message) do
+    sensor_name = List.last(sensor_path)
+    transmission = TransmissionResolver.resolve(robot, :sensor, sensor_name)
+    Transmission.unapply_to_payload(sensor_message, transmission)
+  end
+
+  @doc """
+  Publish a single-joint `JointState` message for the sensor at
+  `sensor_path`, converting the supplied sensor-space values into
+  joint-space before publishing.
+
+  `path` is the sensor's full path (i.e. the `:bb.path` injected into
+  driver opts). `opts` is the keyword list accepted by
+  `BB.Message.Sensor.JointState`'s schema, with `:positions`,
+  `:velocities`, and `:efforts` in the sensor's own coordinate space.
+
+  The published message goes to `[:sensor | path]`. The frame_id is the
+  joint name above the sensor (when joint-attached) or the sensor name
+  itself (otherwise).
+  """
+  @spec publish_joint_state(module(), [atom()], keyword()) :: :ok
+  def publish_joint_state(robot, path, opts) do
+    sensor_name = List.last(path)
+    frame_id = frame_id_for_sensor(robot, sensor_name)
+
+    opts =
+      opts
+      |> Keyword.put_new(:names, [frame_id])
+
+    {:ok, sensor_message} = Message.new(JointState, frame_id, opts)
+    joint_message = to_joint_space(robot, path, sensor_message)
+    BB.publish(robot, [:sensor | path], joint_message)
+  end
+
+  defp frame_id_for_sensor(robot, sensor_name) do
+    case Map.get(robot.robot().sensors, sensor_name) do
+      %{attached_to: {:joint, joint_name}} -> joint_name
+      _ -> sensor_name
+    end
+  end
 end

@@ -77,8 +77,8 @@ defmodule BB.Robot.Builder do
     acc = put_in(acc.joints[joint.name], joint)
     acc = merge_param_subscriptions(acc, param_subs)
 
-    acc = collect_joint_sensors(dsl_joint.sensors, joint.name, acc)
-    acc = collect_actuators(dsl_joint.actuators, joint.name, acc)
+    acc = collect_joint_sensors(dsl_joint.sensors, joint.name, dsl_joint.type, acc)
+    acc = collect_actuators(dsl_joint.actuators, joint.name, dsl_joint.type, acc)
 
     collect_link(dsl_joint.link, joint.name, acc)
   end
@@ -93,20 +93,44 @@ defmodule BB.Robot.Builder do
   end
 
   defp collect_link_sensors(sensors, link_name, acc) do
+    # Link-level sensors are not joint-attached; transmissions don't apply.
     Enum.reduce(sensors, acc, fn %Dsl.Sensor{name: name}, acc ->
-      put_in(acc.sensors[name], %{name: name, attached_to: {:link, link_name}})
+      put_in(acc.sensors[name], %{
+        name: name,
+        attached_to: {:link, link_name},
+        transmission: nil
+      })
     end)
   end
 
-  defp collect_joint_sensors(sensors, joint_name, acc) do
-    Enum.reduce(sensors, acc, fn %Dsl.Sensor{name: name}, acc ->
-      put_in(acc.sensors[name], %{name: name, attached_to: {:joint, joint_name}})
+  defp collect_joint_sensors(sensors, joint_name, joint_type, acc) do
+    Enum.reduce(sensors, acc, fn %Dsl.Sensor{name: name} = sensor, acc ->
+      {transmission, subs} = convert_transmission(sensor.transmission, joint_type, :sensor, name)
+
+      acc =
+        put_in(acc.sensors[name], %{
+          name: name,
+          attached_to: {:joint, joint_name},
+          transmission: transmission
+        })
+
+      merge_param_subscriptions(acc, subs)
     end)
   end
 
-  defp collect_actuators(actuators, joint_name, acc) do
-    Enum.reduce(actuators, acc, fn %Dsl.Actuator{name: name}, acc ->
-      put_in(acc.actuators[name], %{name: name, joint: joint_name})
+  defp collect_actuators(actuators, joint_name, joint_type, acc) do
+    Enum.reduce(actuators, acc, fn %Dsl.Actuator{name: name} = actuator, acc ->
+      {transmission, subs} =
+        convert_transmission(actuator.transmission, joint_type, :actuator, name)
+
+      acc =
+        put_in(acc.actuators[name], %{
+          name: name,
+          joint: joint_name,
+          transmission: transmission
+        })
+
+      merge_param_subscriptions(acc, subs)
     end)
   end
 
@@ -132,9 +156,6 @@ defmodule BB.Robot.Builder do
     {limits, limits_subs} = convert_limits(dsl_joint.limit, dsl_joint.type, joint_name)
     {dynamics, dynamics_subs} = convert_dynamics(dsl_joint.dynamics, dsl_joint.type, joint_name)
 
-    {transmission, transmission_subs} =
-      convert_transmission(dsl_joint.transmission, dsl_joint.type, joint_name)
-
     joint = %Joint{
       name: joint_name,
       type: dsl_joint.type,
@@ -144,46 +165,47 @@ defmodule BB.Robot.Builder do
       axis: axis,
       limits: limits,
       dynamics: dynamics,
-      transmission: transmission,
       sensors: Enum.map(dsl_joint.sensors, & &1.name),
       actuators: Enum.map(dsl_joint.actuators, & &1.name)
     }
 
-    param_subs =
-      origin_subs ++ axis_subs ++ limits_subs ++ dynamics_subs ++ transmission_subs
+    param_subs = origin_subs ++ axis_subs ++ limits_subs ++ dynamics_subs
 
     {joint, param_subs}
   end
 
-  defp convert_transmission(nil, _type, _joint_name), do: {nil, []}
+  defp convert_transmission(nil, _type, _kind, _attachment_name), do: {nil, []}
 
-  defp convert_transmission(%Dsl.Transmission{} = transmission, type, joint_name) do
+  defp convert_transmission(%Dsl.Transmission{} = transmission, type, kind, attachment_name) do
     offset_converter = offset_converter_for(type)
 
     {reduction, reduction_subs} =
-      convert_with_default(
+      convert_attachment_field(
         transmission.reduction,
         & &1,
         1.0,
-        joint_name,
+        kind,
+        attachment_name,
         [:transmission, :reduction]
       )
 
     {offset, offset_subs} =
-      convert_with_default(
+      convert_attachment_field(
         transmission.offset,
         offset_converter,
         0.0,
-        joint_name,
+        kind,
+        attachment_name,
         [:transmission, :offset]
       )
 
     {reversed?, reversed_subs} =
-      convert_with_default(
+      convert_attachment_field(
         transmission.reversed?,
         & &1,
         false,
-        joint_name,
+        kind,
+        attachment_name,
         [:transmission, :reversed?]
       )
 
@@ -191,13 +213,20 @@ defmodule BB.Robot.Builder do
     {converted, reduction_subs ++ offset_subs ++ reversed_subs}
   end
 
-  defp convert_with_default(nil, _converter, default, _joint_name, _field_path),
+  defp convert_attachment_field(nil, _converter, default, _kind, _name, _field_path),
     do: {default, []}
 
-  defp convert_with_default(%ParamRef{path: path}, _converter, _default, joint_name, field_path),
-    do: {nil, [{path, {:joint, joint_name, field_path}}]}
+  defp convert_attachment_field(
+         %ParamRef{path: path},
+         _converter,
+         _default,
+         kind,
+         name,
+         field_path
+       ),
+       do: {nil, [{path, {kind, name, field_path}}]}
 
-  defp convert_with_default(value, converter, _default, _joint_name, _field_path),
+  defp convert_attachment_field(value, converter, _default, _kind, _name, _field_path),
     do: {converter.(value), []}
 
   defp offset_converter_for(type) when type in [:revolute, :continuous],

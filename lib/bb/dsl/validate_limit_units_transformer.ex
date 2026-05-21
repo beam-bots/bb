@@ -92,14 +92,14 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
   defp validate_joint(%Joint{type: type} = joint, path, module)
        when type in @rotational_types do
     with :ok <- check_limit(joint.limit, @rotational_units, path, module, type) do
-      check_transmission_offset(joint.transmission, :degree, path, module, type)
+      check_attachment_transmissions(joint, :degree, path, module, type)
     end
   end
 
   defp validate_joint(%Joint{type: type} = joint, path, module)
        when type in @linear_types do
     with :ok <- check_limit(joint.limit, @linear_units, path, module, type) do
-      check_transmission_offset(joint.transmission, :meter, path, module, type)
+      check_attachment_transmissions(joint, :meter, path, module, type)
     end
   end
 
@@ -109,6 +109,26 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
 
   defp check_limit(%Limit{} = limit, expected_units, path, module, joint_type) do
     check_fields(limit, expected_units, path, module, joint_type)
+  end
+
+  defp check_attachment_transmissions(%Joint{} = joint, expected_unit, path, module, joint_type) do
+    attachments =
+      Enum.map(joint.actuators, &{:actuator, &1}) ++ Enum.map(joint.sensors, &{:sensor, &1})
+
+    Enum.reduce_while(attachments, :ok, fn {kind, attachment}, :ok ->
+      attachment_path = path ++ [kind, attachment.name]
+
+      case check_transmission_offset(
+             attachment.transmission,
+             expected_unit,
+             attachment_path,
+             module,
+             joint_type
+           ) do
+        :ok -> {:cont, :ok}
+        {:error, _} = err -> {:halt, err}
+      end
+    end)
   end
 
   defp check_transmission_offset(nil, _expected_unit, _path, _module, _joint_type), do: :ok

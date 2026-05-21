@@ -110,6 +110,7 @@ if Code.ensure_loaded?(Sourceror) do
       links_by_name = Map.new(robot.links, &{&1.name, &1})
       joints_by_parent = Enum.group_by(robot.joints, & &1.parent)
       child_links = MapSet.new(robot.joints, & &1.child)
+      transmissions = Map.get(robot, :transmissions, %{})
 
       with :ok <- validate_referenced_links(robot.joints, links_by_name),
            {:ok, root} <- roots(robot.links, child_links) do
@@ -118,11 +119,34 @@ if Code.ensure_loaded?(Sourceror) do
            root: root,
            links_by_name: links_by_name,
            joints_by_parent: joints_by_parent,
-           transmissions: Map.get(robot, :transmissions, %{}),
+           transmissions: transmissions,
            name: robot.name,
-           warnings: robot.warnings
+           warnings: robot.warnings ++ transmission_skip_warnings(transmissions)
          }}
       end
+    end
+
+    # Per-attachment transmissions need an `actuator` entity to be hung off,
+    # and the URDF importer has no way to know what BB driver module the
+    # user will use. Warn for each non-identity transmission so the user
+    # knows to re-add it to the actuator they declare.
+    defp transmission_skip_warnings(transmissions) do
+      transmissions
+      |> Map.values()
+      |> Enum.flat_map(fn
+        %{reduction: 1.0} ->
+          []
+
+        %{joint: joint, actuator: actuator, reduction: reduction} ->
+          actuator_part = if actuator, do: " (actuator #{inspect(actuator)})", else: ""
+
+          [
+            "transmission for joint #{inspect(joint)}#{actuator_part} with " <>
+              "mechanicalReduction #{reduction} was not imported. Add an " <>
+              "actuator on this joint and declare `transmission do reduction " <>
+              "#{reduction} end` inside it."
+          ]
+      end)
     end
 
     # URDF commonly anchors a robot to the world with a fixed joint whose
@@ -368,19 +392,10 @@ if Code.ensure_loaded?(Sourceror) do
           render_axis(joint) ++
           render_limit(joint) ++
           render_dynamics(joint.dynamics) ++
-          render_transmission(Map.get(transmissions, joint.name)) ++
           render_mimic(joint) ++
           [render_link(child_link, links_by_name, joints_by_parent, transmissions)]
 
       call(:joint, [atom_name(joint.name)], body)
-    end
-
-    defp render_transmission(nil), do: []
-
-    defp render_transmission(%{reduction: 1.0}), do: []
-
-    defp render_transmission(%{reduction: reduction}) do
-      [call(:transmission, [], [call(:reduction, [reduction * 1.0])])]
     end
 
     defp render_mimic(%{mimic: nil}), do: []

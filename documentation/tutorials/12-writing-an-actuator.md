@@ -24,17 +24,11 @@ Everything coming out of the rest of the robot is in joint-space. Everything the
 
 ## Joint-space vs. motor-space
 
-Joints have logical positions in the DSL — `~u(-90 degree)` to `~u(90 degree)`, say. The hardware behind the joint may rotate fifty times for one degree of joint motion (a 50:1 reduction), may be physically wired backwards (`reversed?`), and may have its electrical zero somewhere other than the joint's logical zero (`offset`). The `transmission` block on a joint captures all three:
+Joints have logical positions in the DSL — `~u(-90 degree)` to `~u(90 degree)`, say. The hardware behind the joint may rotate fifty times for one degree of joint motion (a 50:1 reduction), may be physically wired backwards (`reversed?`), and may have its electrical zero somewhere other than the joint's logical zero (`offset`). The `transmission` block is a property of the **attachment** (each actuator or sensor on the joint), not of the joint itself:
 
 ```elixir
 joint :shoulder do
   type :revolute
-
-  transmission do
-    reduction 50.0
-    offset ~u(45 degree)
-    reversed? true
-  end
 
   limit do
     lower ~u(-90 degree)
@@ -42,11 +36,17 @@ joint :shoulder do
     velocity ~u(60 degree_per_second)
   end
 
-  actuator :motor, {MyDriver, channel: 0}
+  actuator :motor, {MyDriver, channel: 0} do
+    transmission do
+      reduction 50.0
+      offset ~u(45 degree)
+      reversed? true
+    end
+  end
 end
 ```
 
-The framework resolves the transmission against the runtime parameter store and uses it for **every** translation between joint-space and motor-space — without the driver having to know it exists.
+This means each attachment can declare its own relationship to the joint independently — useful when, say, a motor sits behind a gearbox but an external encoder sits on the joint output shaft and reads it directly. The framework resolves each transmission against the runtime parameter store and uses it for **every** translation between joint-space and motor-space — without the driver having to know it exists.
 
 ## The two pipelines
 
@@ -262,6 +262,8 @@ It's worth being explicit about the invariants:
 | Driver → world | motor → joint | `BB.Actuator.publish_begin_motion/3` | call it from your driver |
 | Controller → world | motor → joint | `BB.Actuator.to_joint_space/3` + your `BB.publish` | call from outside the wrapper |
 | Joint limits → driver | joint → motor, once | `BB.Actuator.Server` builds `MotorProfile` | read from `:motor_profile` in opts |
+
+The same shape applies to sensors that read in their own coordinate space (e.g. a magnetic encoder on a geared shaft). Sensors get a `:sensor_profile` injected with their own resolved transmission, and the mirror API is `BB.Sensor.to_joint_space/3` and `BB.Sensor.publish_joint_state/3`.
 
 Drivers never call `BB.Transmission.apply_*` or `unapply_*` directly. If you find yourself writing those calls in a driver, something has slipped through the abstraction — push the conversion back into the wrapper.
 

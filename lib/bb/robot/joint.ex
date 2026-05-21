@@ -19,7 +19,6 @@ defmodule BB.Robot.Joint do
     :axis,
     :limits,
     :dynamics,
-    :transmission,
     :sensors,
     :actuators
   ]
@@ -35,7 +34,6 @@ defmodule BB.Robot.Joint do
           axis: axis() | nil,
           limits: limits() | nil,
           dynamics: dynamics() | nil,
-          transmission: transmission() | nil,
           sensors: [atom()],
           actuators: [atom()]
         }
@@ -92,26 +90,6 @@ defmodule BB.Robot.Joint do
   @type dynamics :: %{
           damping: float() | nil,
           friction: float() | nil
-        }
-
-  @typedoc """
-  Mechanical transmission between this joint and its actuator(s).
-
-  - `reduction`: gear ratio (dimensionless). `1.0` means direct drive.
-  - `offset`: joint-space value (radians for rotational joints, metres for
-    linear joints) corresponding to the actuator's zero. `nil` means no
-    offset is applied.
-  - `reversed?`: whether actuator motion is reversed relative to joint
-    motion.
-
-  Any field may be `nil` when its DSL value is a `ParamRef` awaiting
-  resolution at runtime; the `BB.Transmission.Server` resolves and stores
-  the live values.
-  """
-  @type transmission :: %{
-          reduction: float() | nil,
-          offset: float() | nil,
-          reversed?: boolean() | nil
         }
 
   @doc """

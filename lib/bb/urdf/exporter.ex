@@ -255,29 +255,27 @@ defmodule BB.Urdf.Exporter do
 
   # URDF's `<transmission>` standard only carries `mechanicalReduction`.
   # `offset` and `reversed?` are BB extensions and have no round-trip
-  # representation. When a transmission has only those non-URDF properties
-  # (reduction == 1.0), no `<transmission>` block is emitted.
-  defp build_transmission_elements(%Joint{transmission: nil}, _robot), do: []
-
-  defp build_transmission_elements(%Joint{transmission: %{reduction: 1.0}}, _robot), do: []
-
+  # representation. Sensor-side transmissions are also BB-only and are
+  # silently dropped on export.
   defp build_transmission_elements(%Joint{} = joint, robot) do
-    actuator_name =
-      case joint.actuators do
-        [first | _] -> first
-        [] -> :"#{joint.name}_motor"
-      end
+    Enum.flat_map(joint.actuators, fn actuator_name ->
+      case robot.actuators[actuator_name] do
+        %{transmission: %{reduction: reduction}} when reduction != 1.0 ->
+          [build_transmission_element(joint, actuator_name, reduction)]
 
-    transmission_name = "#{joint.name}_trans"
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp build_transmission_element(joint, actuator_name, reduction) do
+    transmission_name = "#{joint.name}_#{actuator_name}_trans"
 
     actuator_attrs = [name: Atom.to_string(actuator_name)]
 
     actuator_children = [
-      Xml.element(
-        :mechanicalReduction,
-        [],
-        Xml.format_float(joint.transmission.reduction)
-      )
+      Xml.element(:mechanicalReduction, [], Xml.format_float(reduction))
     ]
 
     children = [
@@ -286,7 +284,6 @@ defmodule BB.Urdf.Exporter do
       Xml.element(:actuator, actuator_attrs, actuator_children)
     ]
 
-    _ = robot
-    [Xml.element(:transmission, [name: transmission_name], children)]
+    Xml.element(:transmission, [name: transmission_name], children)
   end
 end
