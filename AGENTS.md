@@ -174,6 +174,14 @@ end
 
 `BB.Message` wraps payloads with timestamp/frame_id. Payload types use `use BB.Message` with a schema for validation via Spark.Options.
 
+**Payload naming conventions** under `BB.Message.Sensor.*` and `BB.Message.Actuator.*`:
+
+- **`*State`** — multi-field snapshot of an identifiable entity's *current condition*. Used when several coupled fields together describe the entity at one moment in time. Examples: `BatteryState`, `JointState`, `PowerState`.
+- **Naked noun** — a single-purpose reading where the message *is* the sample. Examples: `Image`, `Range`, `LaserScan`. (`Imu` lives here too although it could have been `ImuState` — kept as-is for precedent.)
+- **`VerbObject`** — events / notifications. Example: `BeginMotion`. Future likely candidates: `EndMotion`, `Stalled`, `LimitReached`.
+
+When adding a new payload, pick the convention that matches its shape rather than inventing a new suffix.
+
 ## Key Patterns
 
 - Units: Use `Cldr.Unit` throughout DSL, converted to floats (SI) in Robot struct
