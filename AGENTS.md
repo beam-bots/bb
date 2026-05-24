@@ -184,7 +184,7 @@ When adding a new payload, pick the convention that matches its shape rather tha
 
 ## Key Patterns
 
-- Units: Use `Cldr.Unit` throughout DSL, converted to floats (SI) in Robot struct
+- Units: Use `Localize.Unit` throughout DSL, converted to floats (SI) in Robot struct
 - Transforms: 4x4 matrices in `BB.Math.Transform`, angles in radians
 - Process registration: Uses Registry with `:via` tuples, names must be globally unique per robot
 - DSL entities are structs in `lib/bb/dsl/` matching entity names
