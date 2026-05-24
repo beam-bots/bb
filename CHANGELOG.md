@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.19.0](https://github.com/beam-bots/bb/compare/v0.18.0...v0.19.0) (2026-05-24)
+
+
+
+
+### Features:
+
+* add `BB.Message.Sensor.PowerState` for generic V/I/P readings (#114) by James Harton
+
 ## [v0.18.0](https://github.com/beam-bots/bb/compare/v0.17.1...v0.18.0) (2026-05-21)
 
 
