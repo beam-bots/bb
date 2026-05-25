@@ -12,6 +12,7 @@ defmodule BB.Dsl.Link do
             collisions: [],
             joints: [],
             sensors: [],
+            estimators: [],
             visual: nil,
             inertial: nil
 
@@ -24,6 +25,7 @@ defmodule BB.Dsl.Link do
           collisions: [BB.Dsl.Collision.t()],
           joints: [BB.Dsl.Joint.t()],
           sensors: [BB.Dsl.Sensor.t()],
+          estimators: [BB.Dsl.Estimator.t()],
           visual: BB.Dsl.Visual.t(),
           inertial: nil | BB.Dsl.Inertial.t()
         }

@@ -246,6 +246,148 @@ defmodule BB.Dsl do
     ]
   }
 
+  @estimator_input %Entity{
+    name: :input,
+    describe: """
+    Declares an input source for a cross-sensor estimator.
+
+    Multi-input estimators must mark exactly one input as the driver
+    (`driver?: true`). The driver's arrival triggers fan-in: the framework
+    snapshots the most recent non-driver inputs and dispatches them
+    together. Stale non-drivers (older than the estimator's `sync_tolerance`)
+    cause the dispatch to be dropped instead.
+
+    Single-input link-nested estimators may declare one `input` without
+    `driver?:`. Sensor-nested estimators omit `input` entirely - the parent
+    sensor's output is implicitly consumed.
+    """,
+    target: BB.Dsl.Estimator.Input,
+    identifier: :name,
+    args: [:name, :path],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A name used to key this input within `handle_input/2`'s payload map"
+      ],
+      path: [
+        type: {:wrap_list, :atom},
+        required: true,
+        doc: "The full pubsub path of the source (e.g. `[:sensor, :base_link, :imu]`)"
+      ],
+      driver?: [
+        type: :boolean,
+        required: false,
+        default: false,
+        doc:
+          "When `true`, this input drives dispatch: the framework fires `handle_input/2` whenever a message arrives on this path, fanning in the most-recent value of every other input."
+      ]
+    ]
+  }
+
+  @estimator_output %Entity{
+    name: :output,
+    describe: """
+    Declares a named output on a multi-output estimator.
+
+    Single-output estimators default to a conventional `:out` output that
+    routes to the estimator's natural path - no `output` block is needed.
+    Multi-output estimators (e.g. a Kalman filter emitting both a pose and
+    a velocity) declare each one explicitly so subscribers can address them
+    by name.
+    """,
+    target: BB.Dsl.Estimator.Output,
+    identifier: :name,
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "The output name. Match this in `{:reply, [{name, message}], state}` replies."
+      ],
+      path: [
+        type: {:wrap_list, :atom},
+        required: false,
+        doc:
+          "Override the auto-derived output path. Defaults to the estimator's natural path suffixed with the output name."
+      ]
+    ]
+  }
+
+  @sensor_nested_estimator %Entity{
+    name: :estimator,
+    describe: """
+    A state estimator that consumes its parent sensor's output and publishes
+    derived state in the sensor's own frame.
+
+    Within-sensor fusion form. The parent sensor's output is the implicit
+    input - no `input` blocks are allowed here. To consume multiple
+    sources, declare the estimator at the link level instead.
+
+    See `BB.Estimator` for the behaviour contract.
+    """,
+    target: BB.Dsl.Estimator,
+    identifier: :name,
+    args: [:name, :child_spec],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
+    entities: [outputs: [@estimator_output]],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the estimator"
+      ],
+      child_spec: [
+        type:
+          {:or,
+           [{:behaviour, BB.Estimator}, {:tuple, [{:behaviour, BB.Estimator}, :keyword_list]}]},
+        required: true,
+        doc:
+          "The child specification for the estimator process. Either a module or `{module, keyword_list}`"
+      ]
+    ]
+  }
+
+  @link_nested_estimator %Entity{
+    name: :estimator,
+    describe: """
+    A state estimator that consumes one or more explicitly declared input
+    streams and publishes derived state in the parent link's frame.
+
+    Cross-sensor fusion form. Each `input` block names a source path; for
+    multi-input estimators exactly one input must be marked `driver?: true`
+    to drive dispatch.
+
+    See `BB.Estimator` for the behaviour contract.
+    """,
+    target: BB.Dsl.Estimator,
+    identifier: :name,
+    args: [:name, :child_spec],
+    imports: [BB.Unit, BB.Dsl.ParamRef],
+    entities: [inputs: [@estimator_input], outputs: [@estimator_output]],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "A unique name for the estimator"
+      ],
+      child_spec: [
+        type:
+          {:or,
+           [{:behaviour, BB.Estimator}, {:tuple, [{:behaviour, BB.Estimator}, :keyword_list]}]},
+        required: true,
+        doc:
+          "The child specification for the estimator process. Either a module or `{module, keyword_list}`"
+      ],
+      sync_tolerance: [
+        type: unit_type(compatible: :second),
+        required: false,
+        doc:
+          "For multi-input estimators, the maximum age a non-driver input may have relative to the driver before its dispatch is dropped. Omit for unbounded tolerance (always dispatch with the latest snapshot)."
+      ]
+    ]
+  }
+
   @sensor %Entity{
     name: :sensor,
     describe: "A sensor attached to the robot, a link, or a joint.",
@@ -253,7 +395,7 @@ defmodule BB.Dsl do
     identifier: :name,
     args: [:name, :child_spec],
     imports: [BB.Dsl.ParamRef],
-    entities: [transmission: [@transmission]],
+    entities: [transmission: [@transmission], estimators: [@sensor_nested_estimator]],
     singleton_entity_keys: [:transmission],
     schema: [
       name: [
@@ -659,7 +801,8 @@ defmodule BB.Dsl do
       inertial: [@inertial],
       visual: [@visual],
       collisions: [@collision],
-      sensors: [@sensor]
+      sensors: [@sensor],
+      estimators: [@link_nested_estimator]
     ],
     singleton_entity_keys: [:visual, :inertial],
     schema: [
@@ -1079,6 +1222,7 @@ defmodule BB.Dsl do
     ],
     verifiers: [
       __MODULE__.Verifiers.ValidateChildSpecs,
+      __MODULE__.Verifiers.ValidateEstimators,
       __MODULE__.Verifiers.ValidateParamRefs,
       __MODULE__.Verifiers.ValidateStateRefs,
       __MODULE__.Verifiers.ValidateCategoryRefs

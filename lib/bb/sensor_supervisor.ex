@@ -14,6 +14,7 @@ defmodule BB.SensorSupervisor do
   use Supervisor
 
   alias BB.Dsl.Info
+  alias BB.Estimator.Wiring
 
   def start_link({robot_module, opts}) do
     Supervisor.start_link(__MODULE__, {robot_module, opts},
@@ -23,13 +24,28 @@ defmodule BB.SensorSupervisor do
 
   @impl true
   def init({robot_module, opts}) do
-    children =
-      robot_module
-      |> Info.sensors()
-      |> Enum.map(fn sensor ->
+    sensors = Info.sensors(robot_module)
+
+    sensor_children =
+      Enum.map(sensors, fn sensor ->
         BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [], :sensor, opts)
       end)
 
-    Supervisor.init(children, strategy: :one_for_one)
+    estimator_children =
+      Enum.flat_map(sensors, fn sensor ->
+        sensor_path = [:sensor, sensor.name]
+
+        Enum.map(sensor.estimators, fn estimator ->
+          Wiring.sensor_nested_child_spec(
+            robot_module,
+            estimator,
+            sensor_path,
+            sensor.name,
+            opts
+          )
+        end)
+      end)
+
+    Supervisor.init(sensor_children ++ estimator_children, strategy: :one_for_one)
   end
 end
