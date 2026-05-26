@@ -53,6 +53,7 @@ defmodule BB.Estimator.Server do
   alias BB.Estimator.Context
   alias BB.Message
   alias BB.Parameter.Changed, as: ParameterChanged
+  alias BB.Robot.Runtime
   alias BB.Server.ParamResolution
 
   defstruct [
@@ -69,7 +70,16 @@ defmodule BB.Estimator.Server do
     :sync_tolerance_ns,
     :outputs,
     :last_messages,
-    :user_state
+    :user_state,
+    :latency_budget_ns,
+    :lost_after_ns,
+    :recover_after,
+    :on_degraded,
+    :on_lost,
+    :on_recovered,
+    :health_state,
+    :consecutive_ok,
+    :lost_timer_ref
   ]
 
   @type input_spec :: %{
@@ -77,6 +87,8 @@ defmodule BB.Estimator.Server do
           required(:path) => [atom()],
           required(:driver?) => boolean()
         }
+
+  @type health_state :: :healthy | :degraded | :lost
 
   @type t :: %__MODULE__{
           callback_module: module(),
@@ -92,13 +104,23 @@ defmodule BB.Estimator.Server do
           sync_tolerance_ns: integer() | nil,
           outputs: %{atom() => [atom()]},
           last_messages: %{atom() => Message.t()},
-          user_state: term()
+          user_state: term(),
+          latency_budget_ns: integer() | nil,
+          lost_after_ns: integer() | nil,
+          recover_after: pos_integer(),
+          on_degraded: atom() | nil,
+          on_lost: atom() | nil,
+          on_recovered: atom() | nil,
+          health_state: health_state(),
+          consecutive_ok: non_neg_integer(),
+          lost_timer_ref: reference() | nil
         }
 
   @internal_keys [
     :__callback_module__,
     :__estimator_inputs__,
-    :__estimator_outputs__
+    :__estimator_outputs__,
+    :__estimator_health__
   ]
 
   @doc false
@@ -120,6 +142,7 @@ defmodule BB.Estimator.Server do
     callback_module = Keyword.fetch!(init_arg, :__callback_module__)
     input_config = Keyword.fetch!(init_arg, :__estimator_inputs__)
     outputs = Keyword.fetch!(init_arg, :__estimator_outputs__)
+    health = Keyword.get(init_arg, :__estimator_health__, default_health())
 
     raw_opts = Keyword.drop(init_arg, @internal_keys)
     bb = Keyword.fetch!(raw_opts, :bb)
@@ -156,15 +179,24 @@ defmodule BB.Estimator.Server do
       input_name_by_path: input_name_by_path,
       sync_tolerance_ns: Map.get(input_config, :sync_tolerance_ns),
       outputs: outputs,
-      last_messages: %{}
+      last_messages: %{},
+      latency_budget_ns: health.latency_budget_ns,
+      lost_after_ns: health.lost_after_ns,
+      recover_after: health.recover_after,
+      on_degraded: health.on_degraded,
+      on_lost: health.on_lost,
+      on_recovered: health.on_recovered,
+      health_state: :healthy,
+      consecutive_ok: 0,
+      lost_timer_ref: nil
     }
 
     case callback_module.init(resolved_opts) do
       {:ok, user_state} ->
-        {:ok, %{base | user_state: user_state}}
+        {:ok, reset_lost_timer(%{base | user_state: user_state})}
 
       {:ok, user_state, timeout_or_continue} ->
-        {:ok, %{base | user_state: user_state}, timeout_or_continue}
+        {:ok, reset_lost_timer(%{base | user_state: user_state}), timeout_or_continue}
 
       {:stop, reason} ->
         {:stop, reason}
@@ -172,6 +204,17 @@ defmodule BB.Estimator.Server do
       :ignore ->
         :ignore
     end
+  end
+
+  defp default_health do
+    %{
+      latency_budget_ns: nil,
+      lost_after_ns: nil,
+      recover_after: 1,
+      on_degraded: nil,
+      on_lost: nil,
+      on_recovered: nil
+    }
   end
 
   # ----------------------------------------------------------------------------
@@ -200,11 +243,16 @@ defmodule BB.Estimator.Server do
     end
   end
 
+  def handle_info(:bb_estimator_lost_check, state) do
+    {:noreply, transition_to(state, :lost, :lost, nil)}
+  end
+
   def handle_info({:bb, source_path, %Message{} = message}, state) do
     case Map.fetch(state.input_name_by_path, source_path) do
       {:ok, input_name} ->
         emit_input_telemetry(state, source_path)
-        dispatch_input(state, input_name, message)
+        state = reset_lost_timer(state)
+        dispatch_input(state, input_name, message, source_path)
 
       :error ->
         delegate_handle_info({:bb, source_path, message}, state)
@@ -215,29 +263,30 @@ defmodule BB.Estimator.Server do
     delegate_handle_info(msg, state)
   end
 
-  defp dispatch_input(%{mode: :single} = state, _input_name, message) do
-    invoke_handle_input(state, message, message)
+  defp dispatch_input(%{mode: :single} = state, _input_name, message, source_path) do
+    invoke_handle_input(state, message, message, source_path)
   end
 
-  defp dispatch_input(%{mode: :multi} = state, input_name, message) do
+  defp dispatch_input(%{mode: :multi} = state, input_name, message, source_path) do
     state = %{state | last_messages: Map.put(state.last_messages, input_name, message)}
 
     if input_name == state.driver_input do
-      maybe_dispatch_multi(state, message)
+      maybe_dispatch_multi(state, message, source_path)
     else
       {:noreply, state}
     end
   end
 
-  defp maybe_dispatch_multi(state, driver_message) do
+  defp maybe_dispatch_multi(state, driver_message, source_path) do
     snapshot = build_input_snapshot(state, driver_message)
 
     case check_sync(state, driver_message, snapshot) do
       :ok ->
-        invoke_handle_input(state, snapshot, driver_message)
+        invoke_handle_input(state, snapshot, driver_message, source_path)
 
       {:sync_miss, late_input} ->
         emit_dropped_telemetry(state, late_input, :sync_miss)
+        state = transition_to(state, :degraded, :sync_miss, source_path)
         {:noreply, state}
     end
   end
@@ -282,13 +331,46 @@ defmodule BB.Estimator.Server do
     end)
   end
 
-  defp invoke_handle_input(state, input, driver_message) do
+  defp invoke_handle_input(state, input, driver_message, source_path) do
     start_time = System.monotonic_time()
     result = state.callback_module.handle_input(input, state.user_state)
-    duration = System.monotonic_time() - start_time
+    duration_ns = native_to_ns(System.monotonic_time() - start_time)
 
-    handle_callback_result(result, state, driver_message: driver_message, duration: duration)
+    state = record_dispatch_outcome(state, duration_ns, source_path)
+    handle_callback_result(result, state, driver_message: driver_message, duration: duration_ns)
   end
+
+  defp record_dispatch_outcome(%{latency_budget_ns: nil} = state, _duration, _source_path),
+    do: state
+
+  defp record_dispatch_outcome(state, duration_ns, source_path) do
+    if duration_ns > state.latency_budget_ns do
+      transition_to(state, :degraded, :latency_overrun, source_path)
+    else
+      handle_in_budget(state)
+    end
+  end
+
+  defp handle_in_budget(state) do
+    case state.health_state do
+      :healthy ->
+        %{state | consecutive_ok: state.consecutive_ok + 1}
+
+      :degraded ->
+        new_count = state.consecutive_ok + 1
+
+        if new_count >= state.recover_after do
+          transition_to(%{state | consecutive_ok: 0}, :healthy, :recovered, nil)
+        else
+          %{state | consecutive_ok: new_count}
+        end
+
+      :lost ->
+        transition_to(%{state | consecutive_ok: 1}, :degraded, :recovered, nil)
+    end
+  end
+
+  defp native_to_ns(native), do: System.convert_time_unit(native, :native, :nanosecond)
 
   # ----------------------------------------------------------------------------
   # Other GenServer callbacks (with output-routing support)
@@ -457,5 +539,73 @@ defmodule BB.Estimator.Server do
         reason: reason
       }
     )
+  end
+
+  defp emit_transition_telemetry(state, from, to, reason) do
+    :telemetry.execute(
+      [:bb, :estimator, :transition],
+      %{count: 1},
+      %{
+        robot: state.bb.robot,
+        estimator: List.last(state.bb.path),
+        from: from,
+        to: to,
+        reason: reason
+      }
+    )
+  end
+
+  # ----------------------------------------------------------------------------
+  # Health transitions
+  # ----------------------------------------------------------------------------
+
+  defp transition_to(state, new_health_state, reason, source_path) do
+    previous = state.health_state
+
+    if previous == new_health_state do
+      state
+    else
+      emit_transition_telemetry(state, previous, new_health_state, reason)
+      dispatch_transition_command(state, previous, new_health_state, reason, source_path)
+      %{state | health_state: new_health_state, consecutive_ok: 0}
+    end
+  end
+
+  defp dispatch_transition_command(state, previous, new_state, reason, source_path) do
+    command_name = command_for_state(state, new_state)
+
+    if command_name do
+      args = %{
+        estimator: List.last(state.bb.path),
+        reason: reason,
+        source_path: source_path,
+        previous_state: previous,
+        new_state: new_state
+      }
+
+      _ = Runtime.execute(state.bb.robot, command_name, args)
+    end
+
+    :ok
+  end
+
+  defp command_for_state(state, :degraded), do: state.on_degraded
+  defp command_for_state(state, :lost), do: state.on_lost
+  defp command_for_state(state, :healthy), do: state.on_recovered
+
+  # ----------------------------------------------------------------------------
+  # Lost-detection timer
+  # ----------------------------------------------------------------------------
+
+  defp reset_lost_timer(%{lost_after_ns: nil} = state), do: state
+
+  defp reset_lost_timer(state) do
+    if is_reference(state.lost_timer_ref) do
+      Process.cancel_timer(state.lost_timer_ref)
+    end
+
+    timeout_ms = max(div(state.lost_after_ns, 1_000_000), 1)
+    ref = Process.send_after(self(), :bb_estimator_lost_check, timeout_ms)
+    %{state | lost_timer_ref: ref}
   end
 end

@@ -314,6 +314,46 @@ defmodule BB.Dsl do
     ]
   }
 
+  @estimator_health_schema [
+    latency_budget: [
+      type: unit_type(compatible: :second),
+      required: false,
+      doc:
+        "Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires."
+    ],
+    lost_after: [
+      type: unit_type(compatible: :second),
+      required: false,
+      doc:
+        "If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires."
+    ],
+    recover_after: [
+      type: :pos_integer,
+      required: false,
+      default: 1,
+      doc:
+        "Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping."
+    ],
+    on_degraded: [
+      type: :atom,
+      required: false,
+      doc:
+        "Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] | nil, previous_state: atom, new_state: :degraded}`."
+    ],
+    on_lost: [
+      type: :atom,
+      required: false,
+      doc:
+        "Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`."
+    ],
+    on_recovered: [
+      type: :atom,
+      required: false,
+      doc:
+        "Name of a command to fire when the estimator transitions back to `:healthy`. Receives the same metadata shape as `on_degraded`."
+    ]
+  ]
+
   @sensor_nested_estimator %Entity{
     name: :estimator,
     describe: """
@@ -331,21 +371,22 @@ defmodule BB.Dsl do
     args: [:name, :child_spec],
     imports: [BB.Unit, BB.Dsl.ParamRef],
     entities: [outputs: [@estimator_output]],
-    schema: [
-      name: [
-        type: :atom,
-        required: true,
-        doc: "A unique name for the estimator"
-      ],
-      child_spec: [
-        type:
-          {:or,
-           [{:behaviour, BB.Estimator}, {:tuple, [{:behaviour, BB.Estimator}, :keyword_list]}]},
-        required: true,
-        doc:
-          "The child specification for the estimator process. Either a module or `{module, keyword_list}`"
-      ]
-    ]
+    schema:
+      [
+        name: [
+          type: :atom,
+          required: true,
+          doc: "A unique name for the estimator"
+        ],
+        child_spec: [
+          type:
+            {:or,
+             [{:behaviour, BB.Estimator}, {:tuple, [{:behaviour, BB.Estimator}, :keyword_list]}]},
+          required: true,
+          doc:
+            "The child specification for the estimator process. Either a module or `{module, keyword_list}`"
+        ]
+      ] ++ @estimator_health_schema
   }
 
   @link_nested_estimator %Entity{
@@ -365,27 +406,28 @@ defmodule BB.Dsl do
     args: [:name, :child_spec],
     imports: [BB.Unit, BB.Dsl.ParamRef],
     entities: [inputs: [@estimator_input], outputs: [@estimator_output]],
-    schema: [
-      name: [
-        type: :atom,
-        required: true,
-        doc: "A unique name for the estimator"
-      ],
-      child_spec: [
-        type:
-          {:or,
-           [{:behaviour, BB.Estimator}, {:tuple, [{:behaviour, BB.Estimator}, :keyword_list]}]},
-        required: true,
-        doc:
-          "The child specification for the estimator process. Either a module or `{module, keyword_list}`"
-      ],
-      sync_tolerance: [
-        type: unit_type(compatible: :second),
-        required: false,
-        doc:
-          "For multi-input estimators, the maximum age a non-driver input may have relative to the driver before its dispatch is dropped. Omit for unbounded tolerance (always dispatch with the latest snapshot)."
-      ]
-    ]
+    schema:
+      [
+        name: [
+          type: :atom,
+          required: true,
+          doc: "A unique name for the estimator"
+        ],
+        child_spec: [
+          type:
+            {:or,
+             [{:behaviour, BB.Estimator}, {:tuple, [{:behaviour, BB.Estimator}, :keyword_list]}]},
+          required: true,
+          doc:
+            "The child specification for the estimator process. Either a module or `{module, keyword_list}`"
+        ],
+        sync_tolerance: [
+          type: unit_type(compatible: :second),
+          required: false,
+          doc:
+            "For multi-input estimators, the maximum age a non-driver input may have relative to the driver before its dispatch is dropped. Omit for unbounded tolerance (always dispatch with the latest snapshot)."
+        ]
+      ] ++ @estimator_health_schema
   }
 
   @sensor %Entity{

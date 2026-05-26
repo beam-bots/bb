@@ -21,7 +21,13 @@ defmodule BB.Dsl.Estimator do
             child_spec: nil,
             inputs: [],
             outputs: [],
-            sync_tolerance: nil
+            sync_tolerance: nil,
+            latency_budget: nil,
+            lost_after: nil,
+            recover_after: 1,
+            on_degraded: nil,
+            on_lost: nil,
+            on_recovered: nil
 
   @type child_spec :: module | {module, Keyword.t()}
 
@@ -32,6 +38,12 @@ defmodule BB.Dsl.Estimator do
           child_spec: child_spec,
           inputs: [Input.t()],
           outputs: [Output.t()],
-          sync_tolerance: nil | Localize.Unit.t()
+          sync_tolerance: nil | Localize.Unit.t(),
+          latency_budget: nil | Localize.Unit.t(),
+          lost_after: nil | Localize.Unit.t(),
+          recover_after: pos_integer(),
+          on_degraded: nil | atom(),
+          on_lost: nil | atom(),
+          on_recovered: nil | atom()
         }
 end

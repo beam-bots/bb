@@ -44,6 +44,7 @@ defmodule BB.Estimator.Wiring do
 
     inputs = link_nested_inputs(est)
     outputs = build_outputs(est, full_path)
+    health = build_health(est)
 
     context = %Context{
       robot: robot_module,
@@ -52,7 +53,7 @@ defmodule BB.Estimator.Wiring do
       transforms: %{}
     }
 
-    build_child_spec(robot_module, est, full_path, inputs, outputs, context, opts)
+    build_child_spec(robot_module, est, full_path, inputs, outputs, context, health, opts)
   end
 
   @doc """
@@ -83,6 +84,7 @@ defmodule BB.Estimator.Wiring do
     }
 
     outputs = build_outputs(est, full_path)
+    health = build_health(est)
 
     context = %Context{
       robot: robot_module,
@@ -91,7 +93,7 @@ defmodule BB.Estimator.Wiring do
       transforms: %{}
     }
 
-    build_child_spec(robot_module, est, full_path, inputs, outputs, context, opts)
+    build_child_spec(robot_module, est, full_path, inputs, outputs, context, health, opts)
   end
 
   # ----------------------------------------------------------------------------
@@ -107,18 +109,8 @@ defmodule BB.Estimator.Wiring do
     %{
       mode: if(length(declared) <= 1, do: :single, else: :multi),
       inputs: specs,
-      sync_tolerance_ns: sync_tolerance_to_ns(est.sync_tolerance)
+      sync_tolerance_ns: duration_to_ns(est.sync_tolerance)
     }
-  end
-
-  defp sync_tolerance_to_ns(nil), do: nil
-
-  defp sync_tolerance_to_ns(unit) do
-    unit
-    |> Localize.Unit.convert!("second")
-    |> Units.extract_float()
-    |> Kernel.*(1_000_000_000)
-    |> round()
   end
 
   defp build_outputs(%Estimator{outputs: declared}, full_path) do
@@ -131,6 +123,27 @@ defmodule BB.Estimator.Wiring do
     Map.put_new(declared_map, :out, full_path)
   end
 
+  defp build_health(%Estimator{} = est) do
+    %{
+      latency_budget_ns: duration_to_ns(est.latency_budget),
+      lost_after_ns: duration_to_ns(est.lost_after),
+      recover_after: est.recover_after,
+      on_degraded: est.on_degraded,
+      on_lost: est.on_lost,
+      on_recovered: est.on_recovered
+    }
+  end
+
+  defp duration_to_ns(nil), do: nil
+
+  defp duration_to_ns(unit) do
+    unit
+    |> Localize.Unit.convert!("second")
+    |> Units.extract_float()
+    |> Kernel.*(1_000_000_000)
+    |> round()
+  end
+
   defp build_child_spec(
          robot_module,
          %Estimator{} = est,
@@ -138,6 +151,7 @@ defmodule BB.Estimator.Wiring do
          inputs,
          outputs,
          context,
+         health,
          opts
        ) do
     {callback_module, user_args} = normalise(est.child_spec)
@@ -150,6 +164,7 @@ defmodule BB.Estimator.Wiring do
       |> Keyword.put(:__callback_module__, callback_module)
       |> Keyword.put(:__estimator_inputs__, inputs)
       |> Keyword.put(:__estimator_outputs__, outputs)
+      |> Keyword.put(:__estimator_health__, health)
       |> Keyword.merge(passthrough_opts(opts))
 
     %{
