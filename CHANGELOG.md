@@ -11,6 +11,19 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.20.0](https://github.com/beam-bots/bb/compare/v0.19.0...v0.20.0) (2026-05-26)
+
+
+
+
+### Features:
+
+* estimator health transitions and command dispatch (Phase 2) by James Harton
+
+* Covariance3/6 math types, estimator payloads, error types by James Harton
+
+* BB.Estimator behaviour, DSL entity, and runtime wiring (Phase 1) by James Harton
+
 ## [v0.19.0](https://github.com/beam-bots/bb/compare/v0.18.0...v0.19.0) (2026-05-24)
 
 
