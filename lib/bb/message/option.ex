@@ -20,6 +20,8 @@ defmodule BB.Message.Option do
       ])
   """
 
+  alias BB.Math.Covariance3
+  alias BB.Math.Covariance6
   alias BB.Math.Quaternion
   alias BB.Math.Transform
   alias BB.Math.Vec3
@@ -109,5 +111,49 @@ defmodule BB.Message.Option do
 
   def validate_transform(value, _opts) do
     {:error, "expected BB.Math.Transform.t(), got: #{inspect(value)}"}
+  end
+
+  @doc """
+  Returns a Spark.Options type for validating `BB.Math.Covariance3.t()`.
+
+  ## Examples
+
+      iex> BB.Message.Option.covariance3_type()
+      {:custom, BB.Message.Option, :validate_covariance3, [[]]}
+  """
+  @spec covariance3_type() :: {:custom, module(), atom(), list()}
+  def covariance3_type, do: {:custom, __MODULE__, :validate_covariance3, [[]]}
+
+  @doc """
+  Validates a BB.Math.Covariance3 struct.
+  """
+  @spec validate_covariance3(term(), keyword()) ::
+          {:ok, Covariance3.t()} | {:error, String.t()}
+  def validate_covariance3(%Covariance3{} = cov, _opts), do: {:ok, cov}
+
+  def validate_covariance3(value, _opts) do
+    {:error, "expected BB.Math.Covariance3.t(), got: #{inspect(value)}"}
+  end
+
+  @doc """
+  Returns a Spark.Options type for validating `BB.Math.Covariance6.t()`.
+
+  ## Examples
+
+      iex> BB.Message.Option.covariance6_type()
+      {:custom, BB.Message.Option, :validate_covariance6, [[]]}
+  """
+  @spec covariance6_type() :: {:custom, module(), atom(), list()}
+  def covariance6_type, do: {:custom, __MODULE__, :validate_covariance6, [[]]}
+
+  @doc """
+  Validates a BB.Math.Covariance6 struct.
+  """
+  @spec validate_covariance6(term(), keyword()) ::
+          {:ok, Covariance6.t()} | {:error, String.t()}
+  def validate_covariance6(%Covariance6{} = cov, _opts), do: {:ok, cov}
+
+  def validate_covariance6(value, _opts) do
+    {:error, "expected BB.Math.Covariance6.t(), got: #{inspect(value)}"}
   end
 end

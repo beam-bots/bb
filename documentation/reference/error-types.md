@@ -430,6 +430,64 @@ Low-level protocol failures.
 
 Used by driver packages (e.g., Robotis Dynamixel protocol errors).
 
+## Estimator Errors
+
+State-estimation errors. Raised by `BB.Estimator` implementations or by `BB.Estimator.Server` when an input violates a constraint.
+
+### StaleInput
+
+An input arrived too late to be useful — either it exceeded the estimator's `latency_budget` or it landed outside the configured `sync_tolerance` and the algorithm opted to surface the failure rather than silently drop.
+
+**Module:** `BB.Error.Estimator.StaleInput`
+
+**Class:** `:state`
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `input_path` | `[atom]` | The pubsub path of the late input |
+| `age_ms` | `number` | Observed input age, in milliseconds |
+| `budget_ms` | `number` | The configured budget that was exceeded |
+
+**Severity:** `:warning`
+
+### SyncMiss
+
+A driver input arrived but a paired non-driver input was older than `sync_tolerance`. The framework normally drops these dispatches silently (with `[:bb, :estimator, :dropped]` telemetry, reason `:sync_miss`); this error type exists for algorithms or supervisors that want to surface the miss as a structured value instead.
+
+**Module:** `BB.Error.Estimator.SyncMiss`
+
+**Class:** `:state`
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `driver_path` | `[atom]` | Pubsub path of the driver input |
+| `input_path` | `[atom]` | Pubsub path of the late non-driver input |
+| `gap_ms` | `number` | Gap between driver and non-driver, in milliseconds |
+| `tolerance_ms` | `number` | The configured tolerance that was exceeded |
+
+**Severity:** `:warning`
+
+### MissingCovariance
+
+An algorithm required a covariance field on an input payload but the upstream publisher left it `nil`.
+
+**Module:** `BB.Error.Estimator.MissingCovariance`
+
+**Class:** `:invalid`
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `estimator` | `atom` | The estimator's name |
+| `field` | `atom` | The covariance field that was missing (e.g. `:orientation_covariance`) |
+
+**Severity:** `:error`
+
 ## Creating Errors
 
 Always use `exception/1` to create errors so that Splode can capture backtraces:
