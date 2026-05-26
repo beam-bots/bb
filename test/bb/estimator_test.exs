@@ -342,6 +342,210 @@ defmodule BB.EstimatorTest do
     end
   end
 
+  describe "Verifier - command name resolution" do
+    test "rejects unknown command in on_degraded" do
+      errors =
+        collect_verifier_errors(fn ->
+          defmodule UnknownCmd do
+            @moduledoc false
+            use BB
+
+            topology do
+              link :base_link do
+                sensor :imu, MySensor do
+                  estimator :orientation, EchoEstimator do
+                    on_degraded(:no_such_command)
+                  end
+                end
+              end
+            end
+          end
+        end)
+
+      assert_error_matches(errors, ~r/on_degraded references unknown command :no_such_command/)
+    end
+
+    test "accepts a command that has been declared" do
+      defmodule KnownCmd do
+        @moduledoc false
+        use BB
+
+        commands do
+          command :go_slow do
+            handler BB.Test.ImmediateSuccessCommand
+            allowed_states [:idle]
+          end
+        end
+
+        topology do
+          link :base_link do
+            sensor :imu, MySensor do
+              estimator :orientation, EchoEstimator do
+                on_degraded(:go_slow)
+              end
+            end
+          end
+        end
+      end
+
+      assert KnownCmd.robot()
+    end
+  end
+
+  describe "Runtime - health transitions" do
+    defmodule SlowEstimator do
+      @moduledoc false
+      use BB.Estimator
+
+      @impl BB.Estimator
+      def init(opts) do
+        sleep_ms = :persistent_term.get(:slow_estimator_sleep_ms, 0)
+        {:ok, %{bb: Keyword.fetch!(opts, :bb), sleep_ms: sleep_ms}}
+      end
+
+      @impl BB.Estimator
+      def handle_input(%BB.Message{} = msg, state) do
+        if state.sleep_ms > 0, do: Process.sleep(state.sleep_ms)
+        {:reply, [out: msg], state}
+      end
+
+      def handle_input(_other, state), do: {:noreply, state}
+    end
+
+    defmodule HealthRobot do
+      @moduledoc false
+      use BB
+
+      commands do
+        command :note_degraded do
+          handler BB.Test.ImmediateSuccessCommand
+          allowed_states [:idle]
+        end
+
+        command :note_recovered do
+          handler BB.Test.ImmediateSuccessCommand
+          allowed_states [:idle]
+        end
+      end
+
+      topology do
+        link :base_link do
+          sensor :imu, MySensor do
+            estimator :orientation, SlowEstimator do
+              latency_budget(~u(10 millisecond))
+              lost_after(~u(2 second))
+              recover_after(2)
+              on_degraded(:note_degraded)
+              on_recovered(:note_recovered)
+            end
+          end
+        end
+      end
+    end
+
+    defmodule LostRobot do
+      @moduledoc false
+      use BB
+
+      topology do
+        link :base_link do
+          sensor :imu, MySensor do
+            estimator :orientation, EchoEstimator do
+              lost_after(~u(50 millisecond))
+            end
+          end
+        end
+      end
+    end
+
+    setup do
+      :persistent_term.put(:slow_estimator_sleep_ms, 0)
+      on_exit(fn -> :persistent_term.erase(:slow_estimator_sleep_ms) end)
+      :ok
+    end
+
+    test "transitions to :degraded when handle_input exceeds latency_budget" do
+      handler_id = "transition-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        :persistent_term.put(:slow_estimator_sleep_ms, 50)
+        start_supervised!({HealthRobot, []})
+
+        {:ok, msg} = build_imu_message()
+        BB.publish(HealthRobot, [:sensor, :base_link, :imu], msg)
+
+        assert_receive {:transition, %{from: :healthy, to: :degraded, reason: :latency_overrun}},
+                       500
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "transitions to :lost when no input arrives within lost_after" do
+      handler_id = "lost-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({LostRobot, []})
+
+        assert_receive {:transition, %{to: :lost, reason: :lost}}, 500
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "recovers to :healthy after recover_after consecutive in-budget completions" do
+      handler_id = "recover-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        :persistent_term.put(:slow_estimator_sleep_ms, 50)
+        start_supervised!({HealthRobot, []})
+
+        {:ok, msg} = build_imu_message()
+        BB.publish(HealthRobot, [:sensor, :base_link, :imu], msg)
+
+        assert_receive {:transition, %{to: :degraded}}, 500
+
+        :persistent_term.put(:slow_estimator_sleep_ms, 0)
+        pid = BB.Process.whereis(HealthRobot, :orientation)
+        :sys.replace_state(pid, fn s -> %{s | user_state: %{s.user_state | sleep_ms: 0}} end)
+
+        for _ <- 1..3 do
+          {:ok, m} = build_imu_message()
+          BB.publish(HealthRobot, [:sensor, :base_link, :imu], m)
+          Process.sleep(2)
+        end
+
+        assert_receive {:transition, %{to: :healthy, reason: :recovered}}, 500
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+  end
+
   defp build_imu_message do
     Imu.new(:test,
       orientation: Quaternion.identity(),

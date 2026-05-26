@@ -28,6 +28,7 @@ defmodule BB.Dsl.Verifiers.ValidateEstimators do
 
   use Spark.Dsl.Verifier
 
+  alias BB.Dsl.Command
   alias BB.Dsl.Estimator
   alias BB.Dsl.Estimator.Input
   alias BB.Dsl.Joint
@@ -40,10 +41,56 @@ defmodule BB.Dsl.Verifiers.ValidateEstimators do
   def verify(dsl_state) do
     robot = Verifier.get_persisted(dsl_state, :module)
     catalogue = build_catalogue(dsl_state)
+    command_names = collect_command_names(dsl_state)
 
     with :ok <- validate_estimator_shapes(catalogue, robot),
-         :ok <- validate_input_paths(catalogue, robot) do
+         :ok <- validate_input_paths(catalogue, robot),
+         :ok <- validate_commands(catalogue, command_names, robot) do
       validate_no_cycles(catalogue, robot)
+    end
+  end
+
+  defp collect_command_names(dsl_state) do
+    dsl_state
+    |> Verifier.get_entities([:commands])
+    |> Enum.filter(&is_struct(&1, Command))
+    |> Enum.map(& &1.name)
+    |> MapSet.new()
+  end
+
+  defp validate_commands(%{estimators: estimators}, command_names, robot) do
+    Enum.reduce_while(estimators, :ok, fn entry, :ok ->
+      case validate_entry_commands(entry, command_names, robot) do
+        :ok -> {:cont, :ok}
+        {:error, _} = err -> {:halt, err}
+      end
+    end)
+  end
+
+  defp validate_entry_commands(entry, command_names, robot) do
+    [:on_degraded, :on_lost, :on_recovered]
+    |> Enum.reduce_while(:ok, fn field, :ok ->
+      validate_command_field(entry, field, command_names, robot)
+    end)
+  end
+
+  defp validate_command_field(entry, field, command_names, robot) do
+    case Map.get(entry.estimator, field) do
+      nil ->
+        {:cont, :ok}
+
+      name when is_atom(name) ->
+        if MapSet.member?(command_names, name) do
+          {:cont, :ok}
+        else
+          {:halt,
+           {:error,
+            error(
+              robot,
+              entry,
+              "#{field} references unknown command #{inspect(name)}. Declare it under `commands do ... end` first."
+            )}}
+        end
     end
   end
 

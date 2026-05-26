@@ -752,7 +752,16 @@ See `BB.Estimator` for the behaviour contract.
 |------|------|---------|------|
 | [`name`](#topology-link-sensor-estimator-name){: #topology-link-sensor-estimator-name .spark-required} | `atom` |  | A unique name for the estimator |
 | [`child_spec`](#topology-link-sensor-estimator-child_spec){: #topology-link-sensor-estimator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the estimator process. Either a module or `{module, keyword_list}` |
+### Options
 
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`latency_budget`](#topology-link-sensor-estimator-latency_budget){: #topology-link-sensor-estimator-latency_budget } | `any` |  | Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires. |
+| [`lost_after`](#topology-link-sensor-estimator-lost_after){: #topology-link-sensor-estimator-lost_after } | `any` |  | If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. |
+| [`recover_after`](#topology-link-sensor-estimator-recover_after){: #topology-link-sensor-estimator-recover_after } | `pos_integer` | `1` | Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping. |
+| [`on_degraded`](#topology-link-sensor-estimator-on_degraded){: #topology-link-sensor-estimator-on_degraded } | `atom` |  | Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] \| nil, previous_state: atom, new_state: :degraded}`. |
+| [`on_lost`](#topology-link-sensor-estimator-on_lost){: #topology-link-sensor-estimator-on_lost } | `atom` |  | Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`. |
+| [`on_recovered`](#topology-link-sensor-estimator-on_recovered){: #topology-link-sensor-estimator-on_recovered } | `atom` |  | Name of a command to fire when the estimator transitions back to `:healthy`. Receives the same metadata shape as `on_degraded`. |
 
 
 ### topology.link.sensor.estimator.output
@@ -841,6 +850,12 @@ See `BB.Estimator` for the behaviour contract.
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`sync_tolerance`](#topology-link-estimator-sync_tolerance){: #topology-link-estimator-sync_tolerance } | `any` |  | For multi-input estimators, the maximum age a non-driver input may have relative to the driver before its dispatch is dropped. Omit for unbounded tolerance (always dispatch with the latest snapshot). |
+| [`latency_budget`](#topology-link-estimator-latency_budget){: #topology-link-estimator-latency_budget } | `any` |  | Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires. |
+| [`lost_after`](#topology-link-estimator-lost_after){: #topology-link-estimator-lost_after } | `any` |  | If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. |
+| [`recover_after`](#topology-link-estimator-recover_after){: #topology-link-estimator-recover_after } | `pos_integer` | `1` | Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping. |
+| [`on_degraded`](#topology-link-estimator-on_degraded){: #topology-link-estimator-on_degraded } | `atom` |  | Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] \| nil, previous_state: atom, new_state: :degraded}`. |
+| [`on_lost`](#topology-link-estimator-on_lost){: #topology-link-estimator-on_lost } | `atom` |  | Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`. |
+| [`on_recovered`](#topology-link-estimator-on_recovered){: #topology-link-estimator-on_recovered } | `atom` |  | Name of a command to fire when the estimator transitions back to `:healthy`. Receives the same metadata shape as `on_degraded`. |
 
 
 ### topology.link.estimator.input
@@ -1173,7 +1188,16 @@ See `BB.Estimator` for the behaviour contract.
 |------|------|---------|------|
 | [`name`](#topology-joint-sensor-estimator-name){: #topology-joint-sensor-estimator-name .spark-required} | `atom` |  | A unique name for the estimator |
 | [`child_spec`](#topology-joint-sensor-estimator-child_spec){: #topology-joint-sensor-estimator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the estimator process. Either a module or `{module, keyword_list}` |
+### Options
 
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`latency_budget`](#topology-joint-sensor-estimator-latency_budget){: #topology-joint-sensor-estimator-latency_budget } | `any` |  | Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires. |
+| [`lost_after`](#topology-joint-sensor-estimator-lost_after){: #topology-joint-sensor-estimator-lost_after } | `any` |  | If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. |
+| [`recover_after`](#topology-joint-sensor-estimator-recover_after){: #topology-joint-sensor-estimator-recover_after } | `pos_integer` | `1` | Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping. |
+| [`on_degraded`](#topology-joint-sensor-estimator-on_degraded){: #topology-joint-sensor-estimator-on_degraded } | `atom` |  | Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] \| nil, previous_state: atom, new_state: :degraded}`. |
+| [`on_lost`](#topology-joint-sensor-estimator-on_lost){: #topology-joint-sensor-estimator-on_lost } | `atom` |  | Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`. |
+| [`on_recovered`](#topology-joint-sensor-estimator-on_recovered){: #topology-joint-sensor-estimator-on_recovered } | `atom` |  | Name of a command to fire when the estimator transitions back to `:healthy`. Receives the same metadata shape as `on_degraded`. |
 
 
 ### topology.joint.sensor.estimator.output
@@ -1429,7 +1453,16 @@ See `BB.Estimator` for the behaviour contract.
 |------|------|---------|------|
 | [`name`](#sensors-sensor-estimator-name){: #sensors-sensor-estimator-name .spark-required} | `atom` |  | A unique name for the estimator |
 | [`child_spec`](#sensors-sensor-estimator-child_spec){: #sensors-sensor-estimator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the estimator process. Either a module or `{module, keyword_list}` |
+### Options
 
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`latency_budget`](#sensors-sensor-estimator-latency_budget){: #sensors-sensor-estimator-latency_budget } | `any` |  | Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires. |
+| [`lost_after`](#sensors-sensor-estimator-lost_after){: #sensors-sensor-estimator-lost_after } | `any` |  | If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. |
+| [`recover_after`](#sensors-sensor-estimator-recover_after){: #sensors-sensor-estimator-recover_after } | `pos_integer` | `1` | Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping. |
+| [`on_degraded`](#sensors-sensor-estimator-on_degraded){: #sensors-sensor-estimator-on_degraded } | `atom` |  | Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] \| nil, previous_state: atom, new_state: :degraded}`. |
+| [`on_lost`](#sensors-sensor-estimator-on_lost){: #sensors-sensor-estimator-on_lost } | `atom` |  | Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`. |
+| [`on_recovered`](#sensors-sensor-estimator-on_recovered){: #sensors-sensor-estimator-on_recovered } | `atom` |  | Name of a command to fire when the estimator transitions back to `:healthy`. Receives the same metadata shape as `on_degraded`. |
 
 
 ### sensors.sensor.estimator.output
