@@ -20,7 +20,7 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
 
   use Spark.Dsl.Verifier
 
-  alias BB.Dsl.{Actuator, Bridge, Controller, Joint, Link, ParamRef, Sensor}
+  alias BB.Dsl.{Actuator, Bridge, Controller, Estimator, Joint, Link, ParamRef, Sensor}
   alias Spark.Dsl.Verifier
   alias Spark.Error.DslError
 
@@ -99,7 +99,8 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
   defp verify_topology_entity(%Link{} = link, path, robot_module) do
     link_path = path ++ [:topology, :link, link.name]
 
-    with :ok <- verify_link_sensors(link, link_path, robot_module) do
+    with :ok <- verify_link_sensors(link, link_path, robot_module),
+         :ok <- verify_link_estimators(link, link_path, robot_module) do
       verify_topology_entities(link.joints, link_path, robot_module)
     end
   end
@@ -119,7 +120,24 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
     Enum.reduce_while(sensors, :ok, fn %Sensor{} = sensor, :ok ->
       sensor_path = path ++ [:sensor, sensor.name]
 
-      case validate_child_spec(sensor.child_spec, sensor_path, robot_module) do
+      with :ok <- validate_child_spec(sensor.child_spec, sensor_path, robot_module),
+           :ok <- verify_estimators(sensor.estimators, sensor_path, robot_module) do
+        {:cont, :ok}
+      else
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  defp verify_link_estimators(%Link{estimators: estimators}, path, robot_module) do
+    verify_estimators(estimators, path, robot_module)
+  end
+
+  defp verify_estimators(estimators, path, robot_module) do
+    Enum.reduce_while(estimators, :ok, fn %Estimator{} = est, :ok ->
+      est_path = path ++ [:estimator, est.name]
+
+      case validate_child_spec(est.child_spec, est_path, robot_module) do
         :ok -> {:cont, :ok}
         {:error, error} -> {:halt, {:error, error}}
       end
@@ -132,8 +150,10 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
     Enum.reduce_while(sensors, :ok, fn %Sensor{} = sensor, :ok ->
       sensor_path = path ++ [:sensor, sensor.name]
 
-      case validate_child_spec(sensor.child_spec, sensor_path, robot_module) do
-        :ok -> {:cont, :ok}
+      with :ok <- validate_child_spec(sensor.child_spec, sensor_path, robot_module),
+           :ok <- verify_estimators(sensor.estimators, sensor_path, robot_module) do
+        {:cont, :ok}
+      else
         {:error, error} -> {:halt, {:error, error}}
       end
     end)

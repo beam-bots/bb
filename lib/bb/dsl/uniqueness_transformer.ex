@@ -74,6 +74,14 @@ defmodule BB.Dsl.UniquenessTransformer do
   defp retrieve_names(%Localize.Unit{}, _path, names), do: names
   defp retrieve_names(%Decimal{}, _path, names), do: names
 
+  # Estimator input/output entities use `:name` as a callback-side key
+  # (matched in the user's `handle_input/2` payload map and `{:reply, [...]}`
+  # output list). They are not process-registered and frequently share names
+  # with sensors they reference, so they are excluded from the uniqueness
+  # check.
+  defp retrieve_names(%BB.Dsl.Estimator.Input{}, _path, names), do: names
+  defp retrieve_names(%BB.Dsl.Estimator.Output{}, _path, names), do: names
+
   defp retrieve_names(entity, path, names) when is_map_key(entity, :name) do
     names =
       names

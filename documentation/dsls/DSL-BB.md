@@ -33,6 +33,11 @@ Robot topology
      * mesh
    * sensor
      * transmission
+     * estimator
+       * output
+   * estimator
+     * input
+     * output
  * [joint](#topology-joint)
    * origin
    * axis
@@ -40,6 +45,8 @@ Robot topology
    * limit
    * sensor
      * transmission
+     * estimator
+       * output
    * actuator
      * transmission
 
@@ -79,6 +86,11 @@ A kinematic link (ie solid body).
    * mesh
  * [sensor](#topology-link-sensor)
    * transmission
+   * estimator
+     * output
+ * [estimator](#topology-link-estimator)
+   * input
+   * output
 
 
 
@@ -662,6 +674,8 @@ A sensor attached to the robot, a link, or a joint.
 
 ### Nested DSLs
  * [transmission](#topology-link-sensor-transmission)
+ * [estimator](#topology-link-sensor-estimator)
+   * output
 
 
 
@@ -710,12 +724,212 @@ through URDF.
 
 Target: `BB.Dsl.Transmission`
 
+### topology.link.sensor.estimator
+```elixir
+estimator name, child_spec
+```
+
+
+A state estimator that consumes its parent sensor's output and publishes
+derived state in the sensor's own frame.
+
+Within-sensor fusion form. The parent sensor's output is the implicit
+input - no `input` blocks are allowed here. To consume multiple
+sources, declare the estimator at the link level instead.
+
+See `BB.Estimator` for the behaviour contract.
+
+
+### Nested DSLs
+ * [output](#topology-link-sensor-estimator-output)
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#topology-link-sensor-estimator-name){: #topology-link-sensor-estimator-name .spark-required} | `atom` |  | A unique name for the estimator |
+| [`child_spec`](#topology-link-sensor-estimator-child_spec){: #topology-link-sensor-estimator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the estimator process. Either a module or `{module, keyword_list}` |
+
+
+
+### topology.link.sensor.estimator.output
+```elixir
+output name
+```
+
+
+Declares a named output on a multi-output estimator.
+
+Single-output estimators default to a conventional `:out` output that
+routes to the estimator's natural path - no `output` block is needed.
+Multi-output estimators (e.g. a Kalman filter emitting both a pose and
+a velocity) declare each one explicitly so subscribers can address them
+by name.
+
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#topology-link-sensor-estimator-output-name){: #topology-link-sensor-estimator-output-name .spark-required} | `atom` |  | The output name. Match this in `{:reply, [{name, message}], state}` replies. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`path`](#topology-link-sensor-estimator-output-path){: #topology-link-sensor-estimator-output-path } | `atom \| list(atom)` |  | Override the auto-derived output path. Defaults to the estimator's natural path suffixed with the output name. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator.Output`
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator`
+
 
 
 
 ### Introspection
 
 Target: `BB.Dsl.Sensor`
+
+### topology.link.estimator
+```elixir
+estimator name, child_spec
+```
+
+
+A state estimator that consumes one or more explicitly declared input
+streams and publishes derived state in the parent link's frame.
+
+Cross-sensor fusion form. Each `input` block names a source path; for
+multi-input estimators exactly one input must be marked `driver?: true`
+to drive dispatch.
+
+See `BB.Estimator` for the behaviour contract.
+
+
+### Nested DSLs
+ * [input](#topology-link-estimator-input)
+ * [output](#topology-link-estimator-output)
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#topology-link-estimator-name){: #topology-link-estimator-name .spark-required} | `atom` |  | A unique name for the estimator |
+| [`child_spec`](#topology-link-estimator-child_spec){: #topology-link-estimator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the estimator process. Either a module or `{module, keyword_list}` |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`sync_tolerance`](#topology-link-estimator-sync_tolerance){: #topology-link-estimator-sync_tolerance } | `any` |  | For multi-input estimators, the maximum age a non-driver input may have relative to the driver before its dispatch is dropped. Omit for unbounded tolerance (always dispatch with the latest snapshot). |
+
+
+### topology.link.estimator.input
+```elixir
+input name, path
+```
+
+
+Declares an input source for a cross-sensor estimator.
+
+Multi-input estimators must mark exactly one input as the driver
+(`driver?: true`). The driver's arrival triggers fan-in: the framework
+snapshots the most recent non-driver inputs and dispatches them
+together. Stale non-drivers (older than the estimator's `sync_tolerance`)
+cause the dispatch to be dropped instead.
+
+Single-input link-nested estimators may declare one `input` without
+`driver?:`. Sensor-nested estimators omit `input` entirely - the parent
+sensor's output is implicitly consumed.
+
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#topology-link-estimator-input-name){: #topology-link-estimator-input-name .spark-required} | `atom` |  | A name used to key this input within `handle_input/2`'s payload map |
+| [`path`](#topology-link-estimator-input-path){: #topology-link-estimator-input-path .spark-required} | `atom \| list(atom)` |  | The full pubsub path of the source (e.g. `[:sensor, :base_link, :imu]`) |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`driver?`](#topology-link-estimator-input-driver?){: #topology-link-estimator-input-driver? } | `boolean` | `false` | When `true`, this input drives dispatch: the framework fires `handle_input/2` whenever a message arrives on this path, fanning in the most-recent value of every other input. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator.Input`
+
+### topology.link.estimator.output
+```elixir
+output name
+```
+
+
+Declares a named output on a multi-output estimator.
+
+Single-output estimators default to a conventional `:out` output that
+routes to the estimator's natural path - no `output` block is needed.
+Multi-output estimators (e.g. a Kalman filter emitting both a pose and
+a velocity) declare each one explicitly so subscribers can address them
+by name.
+
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#topology-link-estimator-output-name){: #topology-link-estimator-output-name .spark-required} | `atom` |  | The output name. Match this in `{:reply, [{name, message}], state}` replies. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`path`](#topology-link-estimator-output-path){: #topology-link-estimator-output-path } | `atom \| list(atom)` |  | Override the auto-derived output path. Defaults to the estimator's natural path suffixed with the output name. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator.Output`
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator`
 
 
 
@@ -740,6 +954,8 @@ A kinematic joint between a parent link and a child link.
  * [limit](#topology-joint-limit)
  * [sensor](#topology-joint-sensor)
    * transmission
+   * estimator
+     * output
  * [actuator](#topology-joint-actuator)
    * transmission
 
@@ -879,6 +1095,8 @@ A sensor attached to the robot, a link, or a joint.
 
 ### Nested DSLs
  * [transmission](#topology-joint-sensor-transmission)
+ * [estimator](#topology-joint-sensor-estimator)
+   * output
 
 
 
@@ -926,6 +1144,82 @@ through URDF.
 ### Introspection
 
 Target: `BB.Dsl.Transmission`
+
+### topology.joint.sensor.estimator
+```elixir
+estimator name, child_spec
+```
+
+
+A state estimator that consumes its parent sensor's output and publishes
+derived state in the sensor's own frame.
+
+Within-sensor fusion form. The parent sensor's output is the implicit
+input - no `input` blocks are allowed here. To consume multiple
+sources, declare the estimator at the link level instead.
+
+See `BB.Estimator` for the behaviour contract.
+
+
+### Nested DSLs
+ * [output](#topology-joint-sensor-estimator-output)
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#topology-joint-sensor-estimator-name){: #topology-joint-sensor-estimator-name .spark-required} | `atom` |  | A unique name for the estimator |
+| [`child_spec`](#topology-joint-sensor-estimator-child_spec){: #topology-joint-sensor-estimator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the estimator process. Either a module or `{module, keyword_list}` |
+
+
+
+### topology.joint.sensor.estimator.output
+```elixir
+output name
+```
+
+
+Declares a named output on a multi-output estimator.
+
+Single-output estimators default to a conventional `:out` output that
+routes to the estimator's natural path - no `output` block is needed.
+Multi-output estimators (e.g. a Kalman filter emitting both a pose and
+a velocity) declare each one explicitly so subscribers can address them
+by name.
+
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#topology-joint-sensor-estimator-output-name){: #topology-joint-sensor-estimator-output-name .spark-required} | `atom` |  | The output name. Match this in `{:reply, [{name, message}], state}` replies. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`path`](#topology-joint-sensor-estimator-output-path){: #topology-joint-sensor-estimator-output-path } | `atom \| list(atom)` |  | Override the auto-derived output path. Defaults to the estimator's natural path suffixed with the output name. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator.Output`
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator`
 
 
 
@@ -1040,6 +1334,8 @@ Robot-level sensors
 ### Nested DSLs
  * [sensor](#sensors-sensor)
    * transmission
+   * estimator
+     * output
 
 
 
@@ -1055,6 +1351,8 @@ A sensor attached to the robot, a link, or a joint.
 
 ### Nested DSLs
  * [transmission](#sensors-sensor-transmission)
+ * [estimator](#sensors-sensor-estimator)
+   * output
 
 
 
@@ -1102,6 +1400,82 @@ through URDF.
 ### Introspection
 
 Target: `BB.Dsl.Transmission`
+
+### sensors.sensor.estimator
+```elixir
+estimator name, child_spec
+```
+
+
+A state estimator that consumes its parent sensor's output and publishes
+derived state in the sensor's own frame.
+
+Within-sensor fusion form. The parent sensor's output is the implicit
+input - no `input` blocks are allowed here. To consume multiple
+sources, declare the estimator at the link level instead.
+
+See `BB.Estimator` for the behaviour contract.
+
+
+### Nested DSLs
+ * [output](#sensors-sensor-estimator-output)
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#sensors-sensor-estimator-name){: #sensors-sensor-estimator-name .spark-required} | `atom` |  | A unique name for the estimator |
+| [`child_spec`](#sensors-sensor-estimator-child_spec){: #sensors-sensor-estimator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the estimator process. Either a module or `{module, keyword_list}` |
+
+
+
+### sensors.sensor.estimator.output
+```elixir
+output name
+```
+
+
+Declares a named output on a multi-output estimator.
+
+Single-output estimators default to a conventional `:out` output that
+routes to the estimator's natural path - no `output` block is needed.
+Multi-output estimators (e.g. a Kalman filter emitting both a pose and
+a velocity) declare each one explicitly so subscribers can address them
+by name.
+
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#sensors-sensor-estimator-output-name){: #sensors-sensor-estimator-output-name .spark-required} | `atom` |  | The output name. Match this in `{:reply, [{name, message}], state}` replies. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`path`](#sensors-sensor-estimator-output-path){: #sensors-sensor-estimator-output-path } | `atom \| list(atom)` |  | Override the auto-derived output path. Defaults to the estimator's natural path suffixed with the output name. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator.Output`
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.Estimator`
 
 
 

@@ -9,8 +9,10 @@ defmodule BB.Dsl.Sensor do
             __spark_metadata__: nil,
             name: nil,
             child_spec: nil,
-            transmission: nil
+            transmission: nil,
+            estimators: []
 
+  alias BB.Dsl.Estimator
   alias BB.Dsl.Transmission
   alias Spark.Dsl.Entity
 
@@ -21,6 +23,7 @@ defmodule BB.Dsl.Sensor do
           __spark_metadata__: Entity.spark_meta(),
           name: atom,
           child_spec: child_spec,
-          transmission: nil | Transmission.t()
+          transmission: nil | Transmission.t(),
+          estimators: [Estimator.t()]
         }
 end

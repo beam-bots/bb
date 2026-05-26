@@ -12,6 +12,7 @@ defmodule BB.LinkSupervisor do
   """
 
   alias BB.Dsl.Info
+  alias BB.Estimator.Wiring
 
   @doc """
   Starts the link supervisor.
@@ -57,11 +58,31 @@ defmodule BB.LinkSupervisor do
         )
       end)
 
+    sensor_estimator_children =
+      Enum.flat_map(link.sensors, fn sensor ->
+        sensor_path = [:sensor | link_path ++ [sensor.name]]
+
+        Enum.map(sensor.estimators, fn estimator ->
+          Wiring.sensor_nested_child_spec(
+            robot_module,
+            estimator,
+            sensor_path,
+            sensor.name,
+            opts
+          )
+        end)
+      end)
+
+    estimator_children =
+      Enum.map(link.estimators, fn estimator ->
+        Wiring.link_nested_child_spec(robot_module, estimator, link_path, opts)
+      end)
+
     joint_children =
       Enum.map(link.joints, fn joint ->
         {BB.JointSupervisor, {robot_module, joint, link_path, opts}}
       end)
 
-    sensor_children ++ joint_children
+    sensor_children ++ sensor_estimator_children ++ estimator_children ++ joint_children
   end
 end

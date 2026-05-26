@@ -130,6 +130,83 @@ Command execution span.
 | `command` | `atom` | Command name |
 | `execution_id` | `reference` | Unique execution ID |
 
+## Estimator Events
+
+### `[:bb, :estimator, :input]`
+
+Counter emitted each time a `BB.Estimator` server receives a message on one of its declared input paths.
+
+**Measurements:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `count` | `integer` | Always `1` |
+
+**Metadata:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `robot` | `atom` | Robot module |
+| `estimator` | `atom` | The estimator's name (final atom in its path) |
+| `source_path` | `[atom]` | The pubsub path the message arrived on |
+
+### `[:bb, :estimator, :output]`
+
+Counter emitted each time a `BB.Estimator` server publishes an output message (one per `{output_name, message}` returned from a callback).
+
+**Measurements:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `count` | `integer` | Always `1` |
+
+**Metadata:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `robot` | `atom` | Robot module |
+| `estimator` | `atom` | The estimator's name |
+| `output` | `atom` | Output name (`:out` for single-output estimators) |
+| `payload_module` | `module` | The payload struct module |
+
+### `[:bb, :estimator, :latency]`
+
+Duration from a driver-input message arriving to the estimator emitting its output(s). Useful for monitoring estimator performance and tuning `latency_budget`.
+
+**Measurements:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `duration` | `native_time` | Time spent inside `handle_input/2` |
+| `input_to_output` | `native_time` | Time from driver `monotonic_time` to emission |
+
+**Metadata:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `robot` | `atom` | Robot module |
+| `estimator` | `atom` | The estimator's name |
+| `output` | `atom` | The emitted output name |
+
+### `[:bb, :estimator, :dropped]`
+
+Counter emitted when a dispatch is dropped instead of fired. Currently emitted only for `:sync_miss` (multi-input fan-in: a non-driver input older than `sync_tolerance`).
+
+**Measurements:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `count` | `integer` | Always `1` |
+
+**Metadata:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `robot` | `atom` | Robot module |
+| `estimator` | `atom` | The estimator's name |
+| `source_input` | `atom` | The input that triggered the drop (`nil` if not input-specific) |
+| `reason` | `atom` | `:sync_miss` |
+
 ## Diagnostic Events
 
 ### `[:bb, :diagnostic]`
@@ -261,4 +338,5 @@ Subsystems:
 - `motion` - Motion planning and execution
 - `kinematics` - Kinematic computations
 - `command` - Command system
+- `estimator` - State estimators (`BB.Estimator`)
 - `diagnostic` - Health diagnostics
