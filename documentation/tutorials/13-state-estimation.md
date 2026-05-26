@@ -23,7 +23,7 @@ This tutorial focuses on the within-sensor form because it's the simplest place 
 
 ## The example we'll build
 
-A `TiltSmoother` that nests inside an IMU sensor, consumes its `Imu` messages, and republishes them with the `:orientation` field set to a low-pass tilt estimate computed from the accelerometer. (A real AHRS would also use the gyro — `bb_ahrs` does — but a single-axis low-pass keeps the example small.)
+A `TiltSmoother` that nests inside an IMU sensor, consumes its `Imu` messages, and republishes them with the `:orientation` field set to a low-pass tilt estimate computed from the accelerometer. (A real AHRS would also use the gyro — `bb_estimator_ahrs` does — but a single-axis low-pass keeps the example small.)
 
 ## Step 1: Declare the estimator in your DSL
 
@@ -216,4 +216,4 @@ BB uses SI everywhere: rad/s for angular velocity, m/s² for linear acceleration
 
 - The [understanding-estimators](../topics/understanding-estimators.md) topic explains the design choices behind the behaviour and DSL — single vs multi-input, frame semantics, why the reply shape, where estimators sit in the supervision tree.
 - The [configure estimator health](../how-to/configure-estimator-health.md) how-to covers `latency_budget`, `lost_after`, and the `on_degraded`/`on_lost`/`on_recovered` command-as-policy mechanism.
-- The [`bb_ahrs`](https://github.com/beam-bots/bb_ahrs) sibling package is a real-world example: three IMU fusion algorithms (Madgwick, Mahony, Complementary), each implemented as a `BB.Estimator`. Skim the source for patterns to copy.
+- The [`bb_estimator_ahrs`](https://github.com/beam-bots/bb_estimator_ahrs) sibling package is a real-world example: three IMU fusion algorithms (Madgwick, Mahony, Complementary), each implemented as a `BB.Estimator`. Skim the source for patterns to copy.

@@ -37,7 +37,7 @@ The `estimator` DSL keyword has two different schemas depending on where you nes
 
 ```elixir
 sensor :imu, BB.Sensor.Bmi232, ... do
-  estimator :orientation, {BB.Ahrs.Madgwick, beta: 0.1}
+  estimator :orientation, {BB.Estimator.Ahrs.Madgwick, beta: 0.1}
 end
 ```
 
@@ -154,5 +154,5 @@ A few things `BB.Estimator` deliberately does *not* try to be:
 
 - The [State Estimation tutorial](../tutorials/13-state-estimation.md) walks through building one from scratch.
 - The [Configure Estimator Health how-to](../how-to/configure-estimator-health.md) is the recipe for hooking up `latency_budget` / `lost_after` / `on_*` commands.
-- The [`bb_ahrs`](https://github.com/beam-bots/bb_ahrs) package ports three IMU fusion algorithms onto `BB.Estimator` and is the largest worked example.
+- The [`bb_estimator_ahrs`](https://github.com/beam-bots/bb_estimator_ahrs) package ports three IMU fusion algorithms onto `BB.Estimator` and is the largest worked example.
 - [Proposal 0018](https://github.com/beam-bots/proposals/blob/main/accepted/0018-bb-estimator.md) documents the design discussion that led to the current shape.

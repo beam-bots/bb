@@ -72,7 +72,7 @@ Health options live on the `estimator` DSL entity. The same shape works for both
 topology do
   link :base_link do
     sensor :imu, BB.Sensor.SomeImu, ... do
-      estimator :orientation, {BB.Ahrs.Madgwick, beta: 0.1} do
+      estimator :orientation, {BB.Estimator.Ahrs.Madgwick, beta: 0.1} do
         latency_budget ~u(20 millisecond)
         lost_after ~u(500 millisecond)
         recover_after 10
