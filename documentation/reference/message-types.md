@@ -81,6 +81,11 @@ Inertial measurement unit data.
 | `orientation` | `Quaternion` | No | Orientation quaternion |
 | `angular_velocity` | `Vec3` | No | Angular velocity in rad/s |
 | `linear_acceleration` | `Vec3` | No | Linear acceleration in m/s² |
+| `orientation_covariance` | `Covariance3 \| nil` | No | 3x3 covariance over orientation. `nil` when unknown. |
+| `angular_velocity_covariance` | `Covariance3 \| nil` | No | 3x3 covariance over angular velocity. `nil` when unknown. |
+| `linear_acceleration_covariance` | `Covariance3 \| nil` | No | 3x3 covariance over linear acceleration. `nil` when unknown. |
+
+Drivers with known noise characteristics populate the covariance fields; ones that don't leave them `nil`. Algorithms that require covariance check for `nil` and either fall back to a configured default or raise `BB.Error.Estimator.MissingCovariance`. Mirrors the ROS `sensor_msgs/Imu` shape.
 
 **Published to:** `[:sensor, :imu]` or custom path
 
@@ -312,6 +317,42 @@ Force and torque.
 |-------|------|----------|-------------|
 | `force` | `Vec3` | Yes | Force (N) |
 | `torque` | `Vec3` | Yes | Torque (Nm) |
+
+## Estimator Messages
+
+Payloads published by `BB.Estimator` implementations. Distinguished from `Geometry.*` by carrying optional uncertainty (covariance) alongside the geometric value. Subscribers wanting fused outputs specifically can filter on these payload types to separate them from waypoints or command goals.
+
+### Estimator.Pose
+
+A 6-DOF pose estimate with optional covariance.
+
+**Module:** `BB.Message.Estimator.Pose`
+
+**Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `transform` | `Transform` | Yes | Pose as a 4x4 homogeneous transform |
+| `covariance` | `Covariance6 \| nil` | No | 6x6 covariance over translation (x/y/z) and rotation (r/p/y). `nil` when unknown. |
+
+Canonical output for any estimator publishing a fused pose (AHRS, EKF, visual SLAM front-end).
+
+### Estimator.Odometry
+
+A pose-and-twist odometry estimate with separate optional covariances.
+
+**Module:** `BB.Message.Estimator.Odometry`
+
+**Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `pose` | `Transform` | Yes | Pose component |
+| `twist` | `Twist` | Yes | Linear and angular velocity (as `BB.Message.Geometry.Twist`) |
+| `pose_covariance` | `Covariance6 \| nil` | No | 6x6 covariance over the pose |
+| `twist_covariance` | `Covariance6 \| nil` | No | 6x6 covariance over the twist |
+
+Mirrors ROS `nav_msgs/Odometry`. Canonical output for IMU-plus-wheel-odometry EKFs and any other fusion stage publishing both a pose and a velocity simultaneously.
 
 ## System Messages
 
