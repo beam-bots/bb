@@ -207,6 +207,26 @@ Counter emitted when a dispatch is dropped instead of fired. Currently emitted o
 | `source_input` | `atom` | The input that triggered the drop (`nil` if not input-specific) |
 | `reason` | `atom` | `:sync_miss` |
 
+### `[:bb, :estimator, :transition]`
+
+Counter emitted on every health state transition. Fires whether or not an `on_*` command is configured — observability is independent of policy.
+
+**Measurements:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `count` | `integer` | Always `1` |
+
+**Metadata:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `robot` | `atom` | Robot module |
+| `estimator` | `atom` | The estimator's name |
+| `from` | `:healthy \| :degraded \| :lost` | Previous health state |
+| `to` | `:healthy \| :degraded \| :lost` | New health state |
+| `reason` | `atom` | `:latency_overrun`, `:sync_miss`, `:lost`, or `:recovered` |
+
 ## Diagnostic Events
 
 ### `[:bb, :diagnostic]`
