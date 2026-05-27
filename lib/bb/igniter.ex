@@ -96,18 +96,59 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     @doc """
-    Ensures the robot's child spec in the application module carries the given
-    opts.
+    Sets a default for a robot parameter in the application config and wires the
+    robot's child spec to load its opts from the application environment.
 
-    For new robot children, the opts are inserted directly. For existing
-    children, the existing opts are replaced. This is a coarse operation; if
-    multiple installers need to set different keys, the last one to run wins.
+    `param_path` is the path of the parameter within the robot's `params`, e.g.
+    `[:config, :feetech, :device]`. The default is written to `config/config.exs`
+    as a single leaf under `config <app>, <robot_module>, params: [...]`. Writing
+    a leaf (rather than the whole opts list) lets independent installers each
+    contribute their own defaults without clobbering one another.
+
+    The robot's child spec in the application module is rewritten to
+    `{<robot_module>, Application.get_env(<app>, <robot_module>, [])}`. If the
+    existing child opts are already a non-literal expression — e.g. a
+    `robot_opts()` helper call inserted by a composing installer — they're left
+    untouched so that switch logic is preserved.
     """
-    @spec set_robot_opts(Igniter.t(), module(), keyword()) :: Igniter.t()
-    def set_robot_opts(igniter, robot_module, opts) do
-      Igniter.Project.Application.add_new_child(igniter, {robot_module, opts},
-        opts_updater: fn zipper -> {:ok, Sourceror.Zipper.replace(zipper, opts)} end
+    @spec set_robot_param_default(Igniter.t(), module(), [atom(), ...], term()) :: Igniter.t()
+    def set_robot_param_default(igniter, robot_module, param_path, value)
+        when is_list(param_path) and param_path != [] do
+      app_name = Igniter.Project.Application.app_name(igniter)
+
+      igniter
+      |> Igniter.Project.Config.configure(
+        "config.exs",
+        app_name,
+        [robot_module, :params | param_path],
+        value
       )
+      |> load_robot_opts_from_env(robot_module, app_name)
+    end
+
+    defp load_robot_opts_from_env(igniter, robot_module, app_name) do
+      env_ast =
+        Sourceror.parse_string!(
+          "Application.get_env(#{inspect(app_name)}, #{inspect(robot_module)}, [])"
+        )
+
+      Igniter.Project.Application.add_new_child(igniter, {robot_module, {:code, env_ast}},
+        opts_updater: fn zipper ->
+          if literal_opts?(zipper) do
+            {:ok, Sourceror.Zipper.replace(zipper, env_ast)}
+          else
+            {:ok, zipper}
+          end
+        end
+      )
+    end
+
+    defp literal_opts?(zipper) do
+      case Sourceror.Zipper.node(zipper) do
+        list when is_list(list) -> true
+        {:__block__, _, [list]} when is_list(list) -> true
+        _ -> false
+      end
     end
 
     @doc """

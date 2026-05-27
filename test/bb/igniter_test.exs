@@ -104,20 +104,47 @@ defmodule BB.IgniterTest do
     end
   end
 
-  describe "set_robot_opts/3" do
-    test "sets opts on the robot's child spec in the application module" do
+  describe "set_robot_param_default/4" do
+    test "writes the default as a config leaf under the robot module" do
       project_with_robot()
-      |> BB.Igniter.set_robot_opts(Test.Robot, params: [config: [widget: [speed: 100]]])
+      |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :widget, :speed], 100)
+      |> assert_creates("config/config.exs", """
+      import Config
+      config :test, Test.Robot, params: [config: [widget: [speed: 100]]]
+      """)
+    end
+
+    test "rewrites the robot child spec to read from the application env" do
+      project_with_robot()
+      |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :widget, :speed], 100)
       |> assert_has_patch("lib/test/application.ex", ~s'''
-      + |    children = [{Test.Robot, [params: [config: [widget: [speed: 100]]]]}]
+      + |    children = [{Test.Robot, Application.get_env(:test, Test.Robot, [])}]
       ''')
     end
 
-    test "replaces existing opts on subsequent calls" do
+    test "leaves independent defaults from separate calls side by side" do
       project_with_robot()
-      |> BB.Igniter.set_robot_opts(Test.Robot, params: [config: [widget: [speed: 100]]])
+      |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :widget, :speed], 100)
       |> apply_igniter!()
-      |> BB.Igniter.set_robot_opts(Test.Robot, params: [config: [widget: [speed: 100]]])
+      |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :gadget, :size], 5)
+      |> assert_has_patch("config/config.exs", """
+      + |config :test, Test.Robot, params: [config: [widget: [speed: 100], gadget: [size: 5]]]
+      """)
+    end
+
+    test "does not clobber non-literal child opts (e.g. a robot_opts/0 call)" do
+      project_with_robot()
+      |> set_child_opts_to_call()
+      |> apply_igniter!()
+      |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :widget, :speed], 100)
+      |> assert_unchanged("lib/test/application.ex")
+    end
+
+    test "is idempotent" do
+      project_with_robot()
+      |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :widget, :speed], 100)
+      |> apply_igniter!()
+      |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :widget, :speed], 100)
       |> assert_unchanged()
     end
   end
@@ -183,5 +210,13 @@ defmodule BB.IgniterTest do
 
   defp put_options(igniter, options) do
     %{igniter | args: %{igniter.args | options: options}}
+  end
+
+  defp set_child_opts_to_call(igniter) do
+    Igniter.Project.Application.add_new_child(igniter, {Test.Robot, []},
+      opts_updater: fn zipper ->
+        {:ok, Sourceror.Zipper.replace(zipper, Sourceror.parse_string!("robot_opts()"))}
+      end
+    )
   end
 end
