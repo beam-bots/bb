@@ -12,6 +12,7 @@ if Code.ensure_loaded?(Igniter) do
 
     alias Igniter.Code.Common
     alias Igniter.Code.Function
+    alias Igniter.Project.Config
 
     @doc """
     Returns the robot module to operate on.
@@ -117,7 +118,7 @@ if Code.ensure_loaded?(Igniter) do
       app_name = Igniter.Project.Application.app_name(igniter)
 
       igniter
-      |> Igniter.Project.Config.configure(
+      |> Config.configure(
         "config.exs",
         app_name,
         [robot_module, :params | param_path],
