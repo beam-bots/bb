@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.20.1](https://github.com/beam-bots/bb/compare/v0.20.0...v0.20.1) (2026-05-27)
+
+
+
+
+### Improvements:
+
+* application-env robot config via `set_robot_param_default/4` (#122) by James Harton
+
 ## [v0.20.0](https://github.com/beam-bots/bb/compare/v0.19.0...v0.20.0) (2026-05-26)
 
 
