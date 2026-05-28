@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.20.2](https://github.com/beam-bots/bb/compare/v0.20.1...v0.20.2) (2026-05-28)
+
+
+
+
+### Bug Fixes:
+
+* apply `options_schema` defaults at runtime, enforce component behaviour at compile time (#123) by James Harton
+
 ## [v0.20.1](https://github.com/beam-bots/bb/compare/v0.20.0...v0.20.1) (2026-05-27)
 
 
