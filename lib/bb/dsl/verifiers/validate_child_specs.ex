@@ -4,15 +4,12 @@
 
 defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
   @moduledoc """
-  Validates that child_spec options match the module's schema.
+  Validates that child_spec options match the module's `options_schema/0`.
 
-  Behaviour validation is handled by Spark's schema types (e.g., `{:behaviour, BB.Sensor}`).
-  This verifier handles the additional validation:
-
-  - If options are provided in the DSL (as `{Module, opts}` tuple),
-    the module must define `options_schema/0`
-  - If `options_schema/0` is defined, the provided options are validated
-    against that schema
+  Behaviour conformance is enforced separately (and at hard-error severity)
+  by `BB.Dsl.ValidateChildSpecBehavioursTransformer`; this verifier assumes
+  every wired-in module is already a proper component and so always has
+  `options_schema/0` defined.
 
   Options containing `param()` references are skipped from validation as they
   will be resolved at runtime.
@@ -188,53 +185,29 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
   defp normalize_child_spec({module, opts}) when is_atom(module), do: {module, opts}
 
   defp validate_options(module, opts, path, robot_module) do
-    Code.ensure_loaded(module)
-    has_schema? = function_exported?(module, :options_schema, 0)
-    has_opts? = opts != []
+    schema = module.options_schema()
+    param_ref_keys = get_param_ref_keys(opts)
+    schema_for_validation = mark_keys_as_optional(schema, param_ref_keys)
+    opts_without_param_refs = filter_param_refs(opts)
 
-    cond do
-      has_opts? and not has_schema? ->
+    case Spark.Options.validate(opts_without_param_refs, schema_for_validation) do
+      {:ok, _validated} ->
+        :ok
+
+      {:error, %Spark.Options.ValidationError{} = error} ->
         {:error,
          DslError.exception(
            module: robot_module,
            path: path,
            message: """
-           Module #{inspect(module)} does not define options_schema/0 but options were provided.
+           Invalid options for #{inspect(module)}:
 
-           Either:
-           1. Use the module without options: #{inspect(module)}
-           2. Add options_schema/0 to #{inspect(module)} to accept options
+           #{Exception.message(error)}
+
+           Expected schema:
+           #{format_schema(schema)}
            """
          )}
-
-      has_schema? ->
-        schema = module.options_schema()
-        param_ref_keys = get_param_ref_keys(opts)
-        schema_for_validation = mark_keys_as_optional(schema, param_ref_keys)
-        opts_without_param_refs = filter_param_refs(opts)
-
-        case Spark.Options.validate(opts_without_param_refs, schema_for_validation) do
-          {:ok, _validated} ->
-            :ok
-
-          {:error, %Spark.Options.ValidationError{} = error} ->
-            {:error,
-             DslError.exception(
-               module: robot_module,
-               path: path,
-               message: """
-               Invalid options for #{inspect(module)}:
-
-               #{Exception.message(error)}
-
-               Expected schema:
-               #{format_schema(schema)}
-               """
-             )}
-        end
-
-      true ->
-        :ok
     end
   end
 

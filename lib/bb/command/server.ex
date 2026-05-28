@@ -20,6 +20,7 @@ defmodule BB.Command.Server do
 
   alias BB.Command.Context
   alias BB.Command.ResultCache
+  alias BB.Component.OptionsSchema
   alias BB.Error.State.CommandCrashed
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.PubSub
@@ -84,34 +85,39 @@ defmodule BB.Command.Server do
         Process.send_after(self(), :command_timeout, timeout)
       end
 
-    # Build opts for user's init callback
-    user_opts =
-      Keyword.merge(resolved_opts,
-        bb: %{robot: context.robot_module},
-        goal: goal,
-        context: context
-      )
+    case OptionsSchema.validate(callback_module, resolved_opts, []) do
+      {:error, error} ->
+        {:stop, error}
 
-    case wrap_callback(nil, callback_module, :init, [user_opts]) do
-      {:ok, user_state} ->
-        state = %__MODULE__{
-          callback_module: callback_module,
-          context: context,
-          goal: goal,
-          execution_id: execution_id,
-          runtime_pid: runtime_pid,
-          timeout_ref: timeout_ref,
-          resolved_opts: resolved_opts,
-          raw_opts: raw_opts,
-          param_subscriptions: param_subscriptions,
-          awaiting: [],
-          user_state: user_state
-        }
+      {:ok, resolved_opts} ->
+        user_opts =
+          Keyword.merge(resolved_opts,
+            bb: %{robot: context.robot_module},
+            goal: goal,
+            context: context
+          )
 
-        {:ok, state, {:continue, :execute}}
+        case wrap_callback(nil, callback_module, :init, [user_opts]) do
+          {:ok, user_state} ->
+            state = %__MODULE__{
+              callback_module: callback_module,
+              context: context,
+              goal: goal,
+              execution_id: execution_id,
+              runtime_pid: runtime_pid,
+              timeout_ref: timeout_ref,
+              resolved_opts: resolved_opts,
+              raw_opts: raw_opts,
+              param_subscriptions: param_subscriptions,
+              awaiting: [],
+              user_state: user_state
+            }
 
-      {:stop, reason} ->
-        {:stop, reason}
+            {:ok, state, {:continue, :execute}}
+
+          {:stop, reason} ->
+            {:stop, reason}
+        end
     end
   end
 
@@ -218,15 +224,17 @@ defmodule BB.Command.Server do
            state.context.robot_state
          ) do
       {:changed, new_resolved} ->
-        case wrap_callback(state, state.callback_module, :handle_options, [
-               new_resolved,
-               state.user_state
-             ]) do
-          {:ok, new_user_state} ->
-            {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
-
-          {:stop, reason} ->
-            {:stop, reason, state}
+        with {:ok, new_resolved} <-
+               OptionsSchema.validate(state.callback_module, new_resolved, []),
+             {:ok, new_user_state} <-
+               wrap_callback(state, state.callback_module, :handle_options, [
+                 new_resolved,
+                 state.user_state
+               ]) do
+          {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+        else
+          {:stop, reason} -> {:stop, reason, state}
+          {:error, error} -> {:stop, error, state}
         end
 
       :ignored ->

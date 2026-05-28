@@ -19,11 +19,14 @@ defmodule BB.Sensor.Server do
 
   use GenServer
 
+  alias BB.Component.OptionsSchema
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Sensor.SensorProfile
   alias BB.Server.ParamResolution
   alias BB.Transmission
   alias BB.Transmission.Resolver, as: TransmissionResolver
+
+  @framework_keys [:bb, :sensor_profile]
 
   defstruct [
     :callback_module,
@@ -83,30 +86,36 @@ defmodule BB.Sensor.Server do
     sensor_profile = %SensorProfile{joint_name: joint_name, transmission: transmission}
     resolved_opts = Keyword.put(resolved_opts, :sensor_profile, sensor_profile)
 
-    base = %__MODULE__{
-      callback_module: callback_module,
-      resolved_opts: resolved_opts,
-      raw_opts: raw_opts,
-      param_subscriptions: param_subscriptions,
-      transmission: transmission,
-      transmission_subscriptions: transmission_subscriptions,
-      sensor_name: sensor_name,
-      joint_name: joint_name,
-      bb: bb
-    }
+    case OptionsSchema.validate(callback_module, resolved_opts, @framework_keys) do
+      {:error, error} ->
+        {:stop, error}
 
-    case callback_module.init(resolved_opts) do
-      {:ok, user_state} ->
-        {:ok, %{base | user_state: user_state}}
+      {:ok, resolved_opts} ->
+        base = %__MODULE__{
+          callback_module: callback_module,
+          resolved_opts: resolved_opts,
+          raw_opts: raw_opts,
+          param_subscriptions: param_subscriptions,
+          transmission: transmission,
+          transmission_subscriptions: transmission_subscriptions,
+          sensor_name: sensor_name,
+          joint_name: joint_name,
+          bb: bb
+        }
 
-      {:ok, user_state, timeout_or_continue} ->
-        {:ok, %{base | user_state: user_state}, timeout_or_continue}
+        case callback_module.init(resolved_opts) do
+          {:ok, user_state} ->
+            {:ok, %{base | user_state: user_state}}
 
-      {:stop, reason} ->
-        {:stop, reason}
+          {:ok, user_state, timeout_or_continue} ->
+            {:ok, %{base | user_state: user_state}, timeout_or_continue}
 
-      :ignore ->
-        :ignore
+          {:stop, reason} ->
+            {:stop, reason}
+
+          :ignore ->
+            :ignore
+        end
     end
   end
 
@@ -157,12 +166,14 @@ defmodule BB.Sensor.Server do
           %SensorProfile{joint_name: state.joint_name, transmission: state.transmission}
         )
 
-      case state.callback_module.handle_options(new_resolved, state.user_state) do
-        {:ok, new_user_state} ->
-          {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
-
-        {:stop, reason} ->
-          {:stop, reason, state}
+      with {:ok, new_resolved} <-
+             OptionsSchema.validate(state.callback_module, new_resolved, @framework_keys),
+           {:ok, new_user_state} <-
+             state.callback_module.handle_options(new_resolved, state.user_state) do
+        {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+      else
+        {:stop, reason} -> {:stop, reason, state}
+        {:error, error} -> {:stop, error, state}
       end
     else
       {:noreply, state}

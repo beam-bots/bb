@@ -18,8 +18,11 @@ defmodule BB.Controller.Server do
 
   use GenServer
 
+  alias BB.Component.OptionsSchema
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Server.ParamResolution
+
+  @framework_keys [:bb]
 
   defstruct [
     :callback_module,
@@ -58,34 +61,32 @@ defmodule BB.Controller.Server do
     {param_subscriptions, resolved_opts} =
       ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
 
-    case callback_module.init(resolved_opts) do
-      {:ok, user_state} ->
-        {:ok,
-         %__MODULE__{
-           callback_module: callback_module,
-           resolved_opts: resolved_opts,
-           raw_opts: raw_opts,
-           param_subscriptions: param_subscriptions,
-           bb: bb,
-           user_state: user_state
-         }}
+    case OptionsSchema.validate(callback_module, resolved_opts, @framework_keys) do
+      {:error, error} ->
+        {:stop, error}
 
-      {:ok, user_state, timeout_or_continue} ->
-        {:ok,
-         %__MODULE__{
-           callback_module: callback_module,
-           resolved_opts: resolved_opts,
-           raw_opts: raw_opts,
-           param_subscriptions: param_subscriptions,
-           bb: bb,
-           user_state: user_state
-         }, timeout_or_continue}
+      {:ok, resolved_opts} ->
+        base = %__MODULE__{
+          callback_module: callback_module,
+          resolved_opts: resolved_opts,
+          raw_opts: raw_opts,
+          param_subscriptions: param_subscriptions,
+          bb: bb
+        }
 
-      {:stop, reason} ->
-        {:stop, reason}
+        case callback_module.init(resolved_opts) do
+          {:ok, user_state} ->
+            {:ok, %{base | user_state: user_state}}
 
-      :ignore ->
-        :ignore
+          {:ok, user_state, timeout_or_continue} ->
+            {:ok, %{base | user_state: user_state}, timeout_or_continue}
+
+          {:stop, reason} ->
+            {:stop, reason}
+
+          :ignore ->
+            :ignore
+        end
     end
   end
 
@@ -98,12 +99,14 @@ defmodule BB.Controller.Server do
            state.bb.robot
          ) do
       {:changed, new_resolved} ->
-        case state.callback_module.handle_options(new_resolved, state.user_state) do
-          {:ok, new_user_state} ->
-            {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
-
-          {:stop, reason} ->
-            {:stop, reason, state}
+        with {:ok, new_resolved} <-
+               OptionsSchema.validate(state.callback_module, new_resolved, @framework_keys),
+             {:ok, new_user_state} <-
+               state.callback_module.handle_options(new_resolved, state.user_state) do
+          {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+        else
+          {:stop, reason} -> {:stop, reason, state}
+          {:error, error} -> {:stop, error, state}
         end
 
       :ignored ->
