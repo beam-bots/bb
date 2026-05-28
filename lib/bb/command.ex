@@ -227,9 +227,7 @@ defmodule BB.Command do
   Optional. If defined, options passed to the command handler will be
   validated against this schema.
   """
-  @callback options_schema() :: Spark.Options.schema()
-
-  @optional_callbacks [options_schema: 0]
+  @callback options_schema() :: Spark.Options.t()
 
   @doc """
   Await the command result, blocking until completion or timeout.
@@ -363,6 +361,8 @@ defmodule BB.Command do
     )
   end
 
+  alias BB.Component.OptionsSchema
+
   @doc false
   defmacro __using__(opts) do
     schema_opts = opts[:options_schema]
@@ -415,16 +415,7 @@ defmodule BB.Command do
                      handle_continue: 2,
                      terminate: 2
 
-      unquote(
-        if schema_opts do
-          quote do
-            @__bb_options_schema unquote(schema_opts)
-            @impl BB.Command
-            def options_schema, do: @__bb_options_schema
-            defoverridable options_schema: 0
-          end
-        end
-      )
+      unquote(OptionsSchema.inject(BB.Command, schema_opts))
     end
   end
 end

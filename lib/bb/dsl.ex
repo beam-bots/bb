@@ -1255,6 +1255,7 @@ defmodule BB.Dsl do
       __MODULE__.ValidateLimitUnitsTransformer,
       __MODULE__.SupervisorTransformer,
       __MODULE__.UniquenessTransformer,
+      __MODULE__.ValidateChildSpecBehavioursTransformer,
       __MODULE__.RobotTransformer,
       __MODULE__.CommandTransformer,
       __MODULE__.ParameterTransformer,

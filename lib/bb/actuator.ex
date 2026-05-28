@@ -227,7 +227,6 @@ defmodule BB.Actuator do
   @callback options_schema() :: Spark.Options.t()
 
   @optional_callbacks [
-    options_schema: 0,
     handle_options: 2,
     handle_call: 3,
     handle_cast: 2,
@@ -235,6 +234,8 @@ defmodule BB.Actuator do
     handle_continue: 2,
     terminate: 2
   ]
+
+  alias BB.Component.OptionsSchema
 
   @doc false
   defmacro __using__(opts) do
@@ -269,18 +270,7 @@ defmodule BB.Actuator do
                      handle_continue: 2,
                      terminate: 2
 
-      unquote(
-        if schema_opts do
-          quote do
-            @__bb_options_schema Spark.Options.new!(unquote(schema_opts))
-
-            @impl BB.Actuator
-            def options_schema, do: @__bb_options_schema
-
-            defoverridable options_schema: 0
-          end
-        end
-      )
+      unquote(OptionsSchema.inject(BB.Actuator, schema_opts))
     end
   end
 

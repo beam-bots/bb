@@ -30,7 +30,11 @@ defmodule BB.Command.OptionsTest do
     @moduledoc """
     Test command that receives static options via handler tuple.
     """
-    use BB.Command
+    use BB.Command,
+      options_schema: [
+        max_velocity: [type: :float],
+        timeout_ms: [type: :integer]
+      ]
 
     @impl BB.Command
     def init(opts) do
@@ -63,7 +67,7 @@ defmodule BB.Command.OptionsTest do
     @moduledoc """
     Test command that receives parameterised options and handles updates.
     """
-    use BB.Command
+    use BB.Command, options_schema: [gain: [type: :float]]
 
     @impl BB.Command
     def init(opts) do

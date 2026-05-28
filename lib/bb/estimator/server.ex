@@ -50,11 +50,14 @@ defmodule BB.Estimator.Server do
 
   use GenServer
 
+  alias BB.Component.OptionsSchema
   alias BB.Estimator.Context
   alias BB.Message
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Robot.Runtime
   alias BB.Server.ParamResolution
+
+  @framework_keys [:bb, :estimator_context]
 
   defstruct [
     :callback_module,
@@ -166,43 +169,49 @@ defmodule BB.Estimator.Server do
       BB.PubSub.subscribe(bb.robot, path)
     end)
 
-    base = %__MODULE__{
-      callback_module: callback_module,
-      resolved_opts: resolved_opts,
-      raw_opts: raw_opts,
-      param_subscriptions: param_subscriptions,
-      bb: bb,
-      context: context,
-      mode: input_config.mode,
-      inputs: input_config.inputs,
-      driver_input: driver_input,
-      input_name_by_path: input_name_by_path,
-      sync_tolerance_ns: Map.get(input_config, :sync_tolerance_ns),
-      outputs: outputs,
-      last_messages: %{},
-      latency_budget_ns: health.latency_budget_ns,
-      lost_after_ns: health.lost_after_ns,
-      recover_after: health.recover_after,
-      on_degraded: health.on_degraded,
-      on_lost: health.on_lost,
-      on_recovered: health.on_recovered,
-      health_state: :healthy,
-      consecutive_ok: 0,
-      lost_timer_ref: nil
-    }
+    case OptionsSchema.validate(callback_module, resolved_opts, @framework_keys) do
+      {:error, error} ->
+        {:stop, error}
 
-    case callback_module.init(resolved_opts) do
-      {:ok, user_state} ->
-        {:ok, reset_lost_timer(%{base | user_state: user_state})}
+      {:ok, resolved_opts} ->
+        base = %__MODULE__{
+          callback_module: callback_module,
+          resolved_opts: resolved_opts,
+          raw_opts: raw_opts,
+          param_subscriptions: param_subscriptions,
+          bb: bb,
+          context: context,
+          mode: input_config.mode,
+          inputs: input_config.inputs,
+          driver_input: driver_input,
+          input_name_by_path: input_name_by_path,
+          sync_tolerance_ns: Map.get(input_config, :sync_tolerance_ns),
+          outputs: outputs,
+          last_messages: %{},
+          latency_budget_ns: health.latency_budget_ns,
+          lost_after_ns: health.lost_after_ns,
+          recover_after: health.recover_after,
+          on_degraded: health.on_degraded,
+          on_lost: health.on_lost,
+          on_recovered: health.on_recovered,
+          health_state: :healthy,
+          consecutive_ok: 0,
+          lost_timer_ref: nil
+        }
 
-      {:ok, user_state, timeout_or_continue} ->
-        {:ok, reset_lost_timer(%{base | user_state: user_state}), timeout_or_continue}
+        case callback_module.init(resolved_opts) do
+          {:ok, user_state} ->
+            {:ok, reset_lost_timer(%{base | user_state: user_state})}
 
-      {:stop, reason} ->
-        {:stop, reason}
+          {:ok, user_state, timeout_or_continue} ->
+            {:ok, reset_lost_timer(%{base | user_state: user_state}), timeout_or_continue}
 
-      :ignore ->
-        :ignore
+          {:stop, reason} ->
+            {:stop, reason}
+
+          :ignore ->
+            :ignore
+        end
     end
   end
 
@@ -230,12 +239,14 @@ defmodule BB.Estimator.Server do
            state.bb.robot
          ) do
       {:changed, new_resolved} ->
-        case state.callback_module.handle_options(new_resolved, state.user_state) do
-          {:ok, new_user_state} ->
-            {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
-
-          {:stop, reason} ->
-            {:stop, reason, state}
+        with {:ok, new_resolved} <-
+               OptionsSchema.validate(state.callback_module, new_resolved, @framework_keys),
+             {:ok, new_user_state} <-
+               state.callback_module.handle_options(new_resolved, state.user_state) do
+          {:noreply, %{state | resolved_opts: new_resolved, user_state: new_user_state}}
+        else
+          {:stop, reason} -> {:stop, reason, state}
+          {:error, error} -> {:stop, error, state}
         end
 
       :ignored ->

@@ -200,7 +200,6 @@ defmodule BB.Sensor do
   @callback options_schema() :: Spark.Options.t()
 
   @optional_callbacks [
-    options_schema: 0,
     disarm: 1,
     handle_options: 2,
     handle_call: 3,
@@ -209,6 +208,8 @@ defmodule BB.Sensor do
     handle_continue: 2,
     terminate: 2
   ]
+
+  alias BB.Component.OptionsSchema
 
   @doc false
   defmacro __using__(opts) do
@@ -243,18 +244,7 @@ defmodule BB.Sensor do
                      handle_continue: 2,
                      terminate: 2
 
-      unquote(
-        if schema_opts do
-          quote do
-            @__bb_options_schema Spark.Options.new!(unquote(schema_opts))
-
-            @impl BB.Sensor
-            def options_schema, do: @__bb_options_schema
-
-            defoverridable options_schema: 0
-          end
-        end
-      )
+      unquote(OptionsSchema.inject(BB.Sensor, schema_opts))
     end
   end
 

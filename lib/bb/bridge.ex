@@ -242,12 +242,13 @@ defmodule BB.Bridge do
   @callback subscribe_remote(param_id, state) :: {:ok, state} | {:error, term(), state}
 
   @optional_callbacks [
-    options_schema: 0,
     list_remote: 1,
     get_remote: 2,
     set_remote: 3,
     subscribe_remote: 2
   ]
+
+  alias BB.Component.OptionsSchema
 
   @doc false
   defmacro __using__(opts) do
@@ -257,18 +258,7 @@ defmodule BB.Bridge do
       use GenServer
       @behaviour BB.Bridge
 
-      unquote(
-        if schema_opts do
-          quote do
-            @__bb_options_schema Spark.Options.new!(unquote(schema_opts))
-
-            @impl BB.Bridge
-            def options_schema, do: @__bb_options_schema
-
-            defoverridable options_schema: 0
-          end
-        end
-      )
+      unquote(OptionsSchema.inject(BB.Bridge, schema_opts))
     end
   end
 end
