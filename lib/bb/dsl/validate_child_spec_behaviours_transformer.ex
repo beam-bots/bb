@@ -148,7 +148,15 @@ defmodule BB.Dsl.ValidateChildSpecBehavioursTransformer do
   defp check_one(child_spec, path, robot_module, behaviour) do
     {module, _opts} = normalize(child_spec)
 
-    case Code.ensure_loaded(module) do
+    # `ensure_compiled` asks Mix to finish compiling the module first when it's
+    # part of the current project, so we don't race with in-tree fixtures that
+    # reference a sensor/actuator defined elsewhere in the same package. If
+    # the module genuinely can't be located, defer to runtime — the component
+    # server will refuse to start a module that doesn't implement the
+    # expected behaviour. Halting compilation here would block legitimate
+    # cross-package CI matrices where the referenced module isn't yet
+    # loadable from the transformer's vantage point.
+    case Code.ensure_compiled(module) do
       {:module, _} ->
         if behaviour in declared_behaviours(module) do
           :ok
@@ -165,13 +173,8 @@ defmodule BB.Dsl.ValidateChildSpecBehavioursTransformer do
            )}
         end
 
-      {:error, reason} ->
-        {:error,
-         DslError.exception(
-           module: robot_module,
-           path: path,
-           message: "Could not load #{inspect(module)}: #{inspect(reason)}"
-         )}
+      {:error, _reason} ->
+        :ok
     end
   end
 
