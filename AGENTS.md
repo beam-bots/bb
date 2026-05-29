@@ -124,13 +124,14 @@ See `documentation/tutorials/10-simulation.md` for details.
 
 ### Safety System (CRITICAL)
 
-See `documentation/topics/safety.md` for comprehensive safety documentation.
+See `documentation/topics/understanding-safety.md` for comprehensive safety documentation.
 
 **Changes to safety-critical code require extra care** - bugs here could result in physical harm.
 
 Key points:
-- Actuators controlling hardware MUST implement `BB.Safety` behaviour
-- `disarm/1` callback must work without GenServer state (process may have crashed)
+- Components that drive hardware implement a `disarm/1` callback defined on their behaviour: `BB.Actuator` (required), `BB.Controller`/`BB.Sensor` (optional). `BB.Safety` is the arm/disarm API, not a behaviour.
+- Components register with the safety system via `BB.Safety.register/2`
+- `disarm/1` is called with the opts given at registration and must work without GenServer state (process may have crashed)
 - Safety states: `:disarmed` → `:armed` → `:disarming` → `:disarmed` (or `:error` on failure)
 - Disarm callbacks run concurrently with 5 second timeout
 - The `:error` state means hardware may not be safe - requires `force_disarm/1` to recover
@@ -191,7 +192,7 @@ When adding a new payload, pick the convention that matches its shape rather tha
 - Commands: Return `{:ok, result}` or `{:ok, result, next_state: state}` for state transitions
 - State machine: Robots start `:disarmed`, transition to `:idle` when armed, `:executing` during commands
 - **Errors**: Use structured `BB.Error` types instead of tuple-based errors. All errors must implement `BB.Error.Severity`
-- **Safety**: Actuators controlling physical hardware must implement `BB.Safety` behaviour. Test disarm callbacks thoroughly - they run when things have already gone wrong
+- **Safety**: Components that drive hardware implement the `disarm/1` callback from their behaviour (`BB.Actuator` required; `BB.Controller`/`BB.Sensor` optional) and register via `BB.Safety.register/2`. Test disarm callbacks thoroughly - they run when things have already gone wrong
 
 ## Proposals
 
