@@ -123,6 +123,9 @@ end
 
 ### Serial-based servos (e.g., Dynamixel)
 
+This pattern applies when the **actuator owns the serial port** (a single servo
+on its own port):
+
 ```elixir
 @impl BB.Actuator
 def disarm(opts) do
@@ -143,6 +146,15 @@ def disarm(opts) do
   :ok
 end
 ```
+
+When many servos **share one serial bus** (the usual case — `bb_servo_feetech`,
+`bb_servo_robotis`), the controller owns the port, not the actuators. There the
+*controller* registers and implements `disarm/1` (disabling torque on every
+servo in one bulk write), and each actuator's `disarm/1` is `def disarm(_opts),
+do: :ok`. See [Which Component Registers and
+Disarms?](../topics/understanding-safety.md#which-component-registers-and-disarms)
+for the rule, and [How to Integrate a Servo
+Driver](integrate-servo-driver.md) for the controller-side example.
 
 ## Step 3: Handle Registration Options
 

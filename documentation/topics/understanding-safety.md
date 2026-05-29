@@ -58,6 +58,38 @@ The `disarm/1` callback receives only options, not GenServer state. This design 
 
 The trade-off: you must pass all hardware access information at registration time.
 
+## Which Component Registers and Disarms?
+
+Exactly one component owns each piece of hardware, and that component is
+responsible for its safety: it registers with `BB.Safety.register/2` at init and
+implements the `disarm/1` callback that makes its hardware safe. Other components
+that share the same hardware do not register and do not disarm — they only gate
+their own commands on `BB.Safety.armed?/1`.
+
+Which component owns the hardware depends on the driver shape:
+
+- **Standalone actuator** (independent channel — e.g. PWM servos like
+  `bb_servo_pca9685`, `bb_servo_pigpio`). Each actuator owns its own GPIO pin or
+  PWM channel, so **each actuator registers and implements `disarm/1`**. Its
+  disarm makes that one channel safe (e.g. zero the pulse width, disable the
+  channel).
+
+- **Controller + actuator** (shared serial bus — e.g. `bb_servo_feetech`,
+  `bb_servo_robotis`). A single controller owns the serial port; the actuators
+  cannot open it independently. So **the controller registers and implements
+  `disarm/1`**, disabling torque on every servo on the bus in one bulk write. The
+  actuators delegate: their `disarm/1` is `def disarm(_opts), do: :ok` and they
+  gate commands on `BB.Safety.armed?/1`.
+
+The rule is the same in both shapes: *whoever owns the hardware connection
+registers and disarms.* A no-op `disarm/1` is only safe when another component —
+the controller that owns the bus — has registered to disarm that hardware. Never
+leave a hardware resource with no registered owner.
+
+See [How to Implement Safety Callbacks](../how-to/implement-safety-callbacks.md)
+and [How to Integrate a Servo Driver](../how-to/integrate-servo-driver.md) for
+worked examples of each shape.
+
 ## Concurrent Execution with Timeouts
 
 Disarm callbacks run concurrently with a 5-second timeout per callback. This design reflects practical constraints:
