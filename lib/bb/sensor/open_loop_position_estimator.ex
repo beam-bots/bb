@@ -239,8 +239,6 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
     {:noreply, state, state.max_silence_ms}
   end
 
-  defp current_position(%{target_position: nil}), do: nil
-
   defp current_position(state) do
     now = System.monotonic_time(:millisecond)
 
