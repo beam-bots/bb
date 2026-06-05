@@ -19,6 +19,11 @@ SPDX-License-Identifier: Apache-2.0
 
 Beam Bots is a framework for building resilient robotics projects in Elixir.
 
+`bb` is the core of a wider ecosystem of packages — servo drivers, sensors,
+inverse kinematics solvers, visualisation tooling and more — that work together
+so you can build your robot with exactly the features you want. Browse the full
+list at [github.com/beam-bots](https://github.com/orgs/beam-bots/repositories).
+
 ## Features
 
 - **Spark DSL** for defining robot topologies (links, joints, sensors, actuators)
@@ -134,16 +139,9 @@ Understanding the architecture:
 
 ## Status
 
-Core functionality is implemented. Companion packages:
-
-- [`bb_kino`](https://github.com/beam-bots/bb_kino) - Livebook widgets for robot control and visualisation
-- [`bb_liveview`](https://github.com/beam-bots/bb_liveview) - Phoenix LiveView dashboard
-- [`bb_ik_fabrik`](https://github.com/beam-bots/bb_ik_fabrik) - FABRIK inverse kinematics solver
-- [`bb_servo_pca9685`](https://github.com/beam-bots/bb_servo_pca9685) - PCA9685 PWM servo driver (I2C, 16-channel)
-- [`bb_servo_pigpio`](https://github.com/beam-bots/bb_servo_pigpio) - pigpio servo driver (Raspberry Pi GPIO)
-- [`bb_servo_robotis`](https://github.com/beam-bots/bb_servo_robotis) - Robotis/Dynamixel servo driver
-
-See [proposals](https://github.com/beam-bots/proposals) for planned features.
+Core functionality is implemented. The companion packages that build on `bb`
+live alongside it at [github.com/beam-bots](https://github.com/orgs/beam-bots/repositories),
+and [proposals](https://github.com/beam-bots/proposals) tracks planned features.
 
 ## Installation
 
