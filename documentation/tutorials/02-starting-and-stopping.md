@@ -6,22 +6,54 @@ SPDX-License-Identifier: Apache-2.0
 
 # Starting and Stopping
 
-In the previous tutorial, we defined a robot using the Beam Bots DSL. Now we'll bring it to life by starting its supervision tree and understanding the process structure.
+In the previous tutorial, we defined a robot using the Beam Bots DSL. Now we'll bring it to life and understand the supervision tree that runs it.
 
 ## Prerequisites
 
 Complete [Your First Robot](01-first-robot.md) first. You should have a `MyRobot.Robot` module defined.
 
-## Starting the Robot
+## Your Robot Starts With Your Application
 
-Start your robot with `BB.Supervisor.start_link/2`:
+When you installed Beam Bots, the installer added your robot to your application's supervision tree. You can see it in `lib/my_robot/application.ex`:
 
 ```elixir
-iex> {:ok, pid} = BB.Supervisor.start_link(MyRobot.Robot)
-{:ok, #PID<0.234.0>}
+defmodule MyRobot.Application do
+  use Application
+
+  @impl true
+  def start(_type, _args) do
+    children = [
+      {MyRobot.Robot, robot_opts()}
+    ]
+
+    opts = [strategy: :one_for_one, name: MyRobot.Supervisor]
+    Supervisor.start_link(children, opts)
+  end
+
+  defp robot_opts do
+    if System.get_env("SIMULATE") do
+      [simulation: :kinematic]
+    else
+      Application.get_env(:my_robot, MyRobot.Robot, [])
+    end
+  end
+end
 ```
 
-Your robot is now running. The supervisor has spawned a tree of processes that mirrors your robot's physical structure.
+So your robot starts automatically whenever your application boots. The generated `robot_opts/0` decides how: set the `SIMULATE` environment variable to boot in kinematic simulation (see [Simulation Mode](10-simulation.md)), otherwise it reads any startup options you've placed in config (see [Parameters](07-parameters.md)). Launch an IEx session with your project loaded:
+
+```sh
+iex -S mix
+```
+
+Your robot is already running. The supervisor has spawned a tree of processes that mirrors your robot's physical structure. Confirm it's alive by asking for its state:
+
+```elixir
+iex> BB.Robot.Runtime.state(MyRobot.Robot)
+:disarmed
+```
+
+> **Note:** Because the robot is already supervised, calling `MyRobot.Robot.start_link/1` yourself returns `{:error, {:already_started, pid}}` rather than starting a second copy. That's expected — there is one robot, and it is already running. See [Starting a Robot Manually](#starting-a-robot-manually) if you want to control startup yourself.
 
 ## Understanding the Process Tree
 
@@ -89,41 +121,47 @@ iex> :observer.start()
 
 Navigate to the Applications tab and find your robot's supervision tree.
 
-## Stopping the Robot
+## Stopping and Restarting
 
-Stop the robot by stopping its supervisor:
+Your robot is a permanent child of your application's supervisor, so stopping it directly just triggers an immediate restart:
 
 ```elixir
 iex> Supervisor.stop(MyRobot.Robot)
 :ok
+iex> BB.Robot.Runtime.state(MyRobot.Robot)
+:disarmed  # MyRobot.Supervisor has already restarted it
 ```
 
-This gracefully shuts down all child processes in reverse order.
-
-## Adding to Your Application
-
-In a real application, you'll want to start the robot as part of your application supervision tree.
-
-In your `application.ex`:
+To stop it and keep it stopped — while experimenting, say — terminate it through its parent supervisor:
 
 ```elixir
-defmodule MyApp.Application do
-  use Application
-
-  @impl true
-  def start(_type, _args) do
-    children = [
-      # Start the robot supervisor
-      MyRobot.Robot
-    ]
-
-    opts = [strategy: :one_for_one, name: MyApp.Supervisor]
-    Supervisor.start_link(children, opts)
-  end
-end
+iex> Supervisor.terminate_child(MyRobot.Supervisor, MyRobot.Robot)
+:ok
 ```
 
-Now your robot starts automatically with your application.
+Start it again with:
+
+```elixir
+iex> Supervisor.restart_child(MyRobot.Supervisor, MyRobot.Robot)
+{:ok, #PID<0.260.0>}
+```
+
+Stopping a supervisor gracefully shuts down all of its child processes in reverse order.
+
+## Starting a Robot Manually
+
+If a robot is *not* part of a supervision tree — in a script, a test, or a fresh `iex` session started without your application — start it yourself:
+
+```elixir
+iex> {:ok, pid} = MyRobot.Robot.start_link()
+{:ok, #PID<0.234.0>}
+```
+
+`MyRobot.Robot.start_link/1` accepts the same options as its child spec, such as `params:` and `simulation:`:
+
+```elixir
+iex> {:ok, pid} = MyRobot.Robot.start_link(simulation: :kinematic)
+```
 
 ## Multiple Robots
 

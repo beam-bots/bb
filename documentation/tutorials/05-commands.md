@@ -39,7 +39,6 @@ BB.Robot.Runtime.operational_state(MyRobot.Robot)  # => :idle (the actual state)
 Query the current state:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
 iex> BB.Robot.Runtime.state(MyRobot.Robot)
 :disarmed
 ```

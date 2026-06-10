@@ -14,11 +14,10 @@ Complete [Your First Robot](01-first-robot.md) and [Starting and Stopping](02-st
 
 ## Starting in Simulation Mode
 
-Start your robot in kinematic simulation mode by passing the `simulation` option:
+Your robot's child spec calls the generated `robot_opts/0` (in `application.ex`), which boots it in kinematic simulation when the `SIMULATE` environment variable is set (see [Starting and Stopping](02-starting-and-stopping.md)). So to run the whole app in simulation, set it when you launch:
 
-```elixir
-iex> {:ok, pid} = MyRobot.Robot.start_link(simulation: :kinematic)
-{:ok, #PID<0.234.0>}
+```sh
+SIMULATE=1 iex -S mix
 ```
 
 The robot is now running entirely in software. Actuators receive commands and publish motion messages, but no hardware communication occurs.
@@ -56,10 +55,9 @@ The existing `OpenLoopPositionEstimator` sensor works unchanged, estimating posi
 
 ## Example: Testing Motion
 
-```elixir
-# Start in simulation
-{:ok, _pid} = MyRobot.Robot.start_link(simulation: :kinematic)
+With your robot running in simulation (see [Starting in Simulation Mode](#starting-in-simulation-mode) above):
 
+```elixir
 # Arm the robot (required even in simulation)
 :ok = BB.Safety.arm(MyRobot.Robot)
 
@@ -148,77 +146,58 @@ This is sufficient for:
 
 ## Future Simulation Modes
 
-The simulation option is an atom to allow future expansion:
+The `simulation` option is an atom to allow future expansion:
 
 ```elixir
 # Current: kinematic simulation
-MyRobot.Robot.start_link(simulation: :kinematic)
+config :my_robot, MyRobot.Robot, simulation: :kinematic
 
 # Future: external physics engine
-MyRobot.Robot.start_link(simulation: :external)
+config :my_robot, MyRobot.Robot, simulation: :external
 
 # Future: built-in physics
-MyRobot.Robot.start_link(simulation: :physics)
+config :my_robot, MyRobot.Robot, simulation: :physics
 ```
 
 ## Environment-Based Mode Selection
 
-To switch between hardware and simulation based on environment:
+The generated `robot_opts/0` already switches on the `SIMULATE` environment variable, so `SIMULATE=1 iex -S mix` runs in simulation and a plain start runs on hardware.
 
-```elixir
-# In your application.ex
-defmodule MyApp.Application do
-  use Application
-
-  @impl true
-  def start(_type, _args) do
-    simulation_mode =
-      if Application.get_env(:my_app, :simulate, false) do
-        :kinematic
-      else
-        nil
-      end
-
-    children = [
-      {MyRobot.Robot, simulation: simulation_mode}
-    ]
-
-    Supervisor.start_link(children, strategy: :one_for_one)
-  end
-end
-```
-
-Then in your config:
+To pin a mode per environment, set the robot's options in config — `robot_opts/0` reads them when `SIMULATE` is unset:
 
 ```elixir
 # config/dev.exs
-config :my_app, simulate: true
+config :my_robot, MyRobot.Robot, simulation: :kinematic
 
-# config/prod.exs (or target.exs for Nerves)
-config :my_app, simulate: false
+# config/prod.exs (or target.exs for Nerves) — hardware is the default
 ```
+
+If you need richer logic, edit `robot_opts/0` in `application.ex` directly.
 
 ## Testing with Simulation
 
-Simulation mode is useful for integration tests:
+Run your robot in simulation for integration tests by selecting the mode in `config/test.exs`:
+
+```elixir
+# config/test.exs
+config :my_robot, MyRobot.Robot, simulation: :kinematic
+```
+
+Your application then starts the robot in simulation for the test run, so tests drive the already-running robot:
 
 ```elixir
 defmodule MyRobotTest do
   use ExUnit.Case
 
   test "robot moves to home position" do
-    {:ok, pid} = MyRobot.Robot.start_link(simulation: :kinematic)
-
     :ok = BB.Safety.arm(MyRobot.Robot)
     :ok = BB.Command.execute(MyRobot.Robot, :home)
 
     # Verify the robot reached home position
-    assert_eventually fn ->
+    assert_eventually(fn ->
       pos = BB.Robot.Runtime.joint_position(MyRobot.Robot, :shoulder)
       abs(pos - 0.0) < 0.01
-    end
-
-    Supervisor.stop(pid)
+    end)
   end
 end
 ```

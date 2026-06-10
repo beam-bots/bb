@@ -205,10 +205,7 @@ The `BB.Motion` module bridges IK solving with actuator commands, making it easy
 ```elixir
 alias BB.Motion
 
-# Start your robot
-{:ok, _pid} = MyRobot.Robot.start_link([])
-
-# Move the end-effector to a target position
+# Move the end-effector to a target position (your robot is already running)
 case Motion.move_to(MyRobot.Robot, :tip, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK) do
   {:ok, meta} ->
     IO.puts("Moved in #{meta.iterations} iterations")

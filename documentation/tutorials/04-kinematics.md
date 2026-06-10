@@ -51,7 +51,6 @@ Positions are in **radians** for revolute joints and **metres** for prismatic jo
 For a running robot, query the Runtime for current joint positions:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
 iex> positions = BB.Robot.Runtime.positions(MyRobot.Robot)
 %{pan_joint: 0.0, tilt_joint: 0.0}
 

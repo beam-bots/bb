@@ -132,7 +132,6 @@ end
 Now when parameters change, you'll see debug output:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
 iex> BB.Parameter.set(MyRobot.Robot, [:max_speed], 2.0)
 [DEBUG] Parameter [:max_speed] changed:
   Old: 1.0
@@ -264,8 +263,6 @@ end
 Access remote parameters through the `BB.Parameter` API:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
-
 # List parameters on the flight controller
 iex> {:ok, params} = BB.Parameter.list_remote(MyRobot.Robot, :fc)
 {:ok, [

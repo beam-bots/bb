@@ -96,38 +96,37 @@ This creates paths like `[:controller, :pid, :kp]`.
 
 ## Passing Parameters at Startup
 
-You can override default values when starting the robot by passing a `params` option. The format is a nested keyword list matching your group structure:
+You override default values with a `params` option passed where the robot starts. The generated `robot_opts/0` reads runtime options from your application config, so set startup params under `config :my_robot, MyRobot.Robot`. The value is a nested keyword list matching your group structure:
 
 ```elixir
+# config/config.exs
+
 # Override a single parameter
-{:ok, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
-  motion: [max_linear_speed: 2.0]
-])
+config :my_robot, MyRobot.Robot,
+  params: [motion: [max_linear_speed: 2.0]]
 
 # Override multiple parameters
-{:ok, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
-  motion: [max_linear_speed: 2.0, max_angular_speed: 1.0],
-  safety: [enabled: false]
-])
+config :my_robot, MyRobot.Robot,
+  params: [
+    motion: [max_linear_speed: 2.0, max_angular_speed: 1.0],
+    safety: [enabled: false]
+  ]
 
 # Nested groups use nested keyword lists
-{:ok, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
-  controller: [pid: [kp: 2.5, ki: 0.2]]
-])
+config :my_robot, MyRobot.Robot,
+  params: [controller: [pid: [kp: 2.5, ki: 0.2]]]
 ```
 
-Startup parameters are validated against the schema. Invalid values or unknown parameter names cause the robot to fail to start:
+Startup parameters are validated against the schema. Invalid values or unknown parameter names cause the robot to fail to start — and because it's a supervised child, your application won't boot:
 
 ```elixir
-# Type mismatch - fails immediately
-{:error, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
-  motion: [max_linear_speed: "fast"]  # Expected float
-])
+# Type mismatch
+config :my_robot, MyRobot.Robot,
+  params: [motion: [max_linear_speed: "fast"]]  # Expected float
 
-# Unknown parameter - fails immediately
-{:error, _} = BB.Supervisor.start_link(MyRobot.Robot, params: [
-  motion: [unknown_param: 1.0]
-])
+# Unknown parameter
+config :my_robot, MyRobot.Robot,
+  params: [motion: [unknown_param: 1.0]]
 ```
 
 The precedence for parameter values is:
@@ -140,10 +139,9 @@ This lets you define sensible defaults in the DSL, persist tuned values across r
 
 ## Reading Parameters
 
-Start your robot and read parameter values:
+Read parameter values:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
 iex> BB.Parameter.get(MyRobot.Robot, [:motion, :max_linear_speed])
 {:ok, 1.0}
 
