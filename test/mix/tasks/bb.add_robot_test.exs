@@ -49,7 +49,11 @@ defmodule Mix.Tasks.Bb.AddRobotTest do
     assert_creates(igniter, "lib/test/application.ex")
 
     {_, source} = Rewrite.source(igniter.rewrite, "lib/test/application.ex")
-    assert source.content =~ "{Test.MyRobot, []}"
+    assert source.content =~ "{Test.MyRobot, robot_opts()}"
+    assert source.content =~ "defp robot_opts do"
+    assert source.content =~ "if System.get_env(\"SIMULATE\") do"
+    assert source.content =~ "[simulation: :kinematic]"
+    assert source.content =~ "Application.get_env(:test, Test.MyRobot, [])"
   end
 
   test "can add multiple robots" do

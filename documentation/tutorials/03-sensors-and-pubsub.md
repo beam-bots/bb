@@ -99,10 +99,9 @@ Key points:
 
 ## Subscribing to Messages
 
-Start your robot and subscribe to sensor messages:
+Your robot is already running (it starts with your application), so subscribe to its sensor messages:
 
 ```elixir
-iex> {:ok, _} = BB.Supervisor.start_link(MyRobot.Robot)
 iex> BB.PubSub.subscribe(MyRobot.Robot, [:sensor])
 {:ok, #PID<0.234.0>}
 ```
