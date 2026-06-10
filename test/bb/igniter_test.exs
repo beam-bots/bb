@@ -114,8 +114,10 @@ defmodule BB.IgniterTest do
       """)
     end
 
-    test "rewrites the robot child spec to read from the application env" do
+    test "rewrites a literal robot child spec to read from the application env" do
       project_with_robot()
+      |> reset_child_opts_to_literal()
+      |> apply_igniter!()
       |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :widget, :speed], 100)
       |> assert_has_patch("lib/test/application.ex", ~s'''
       + |    children = [{Test.Robot, Application.get_env(:test, Test.Robot, [])}]
@@ -216,6 +218,14 @@ defmodule BB.IgniterTest do
     Igniter.Project.Application.add_new_child(igniter, {Test.Robot, []},
       opts_updater: fn zipper ->
         {:ok, Sourceror.Zipper.replace(zipper, Sourceror.parse_string!("robot_opts()"))}
+      end
+    )
+  end
+
+  defp reset_child_opts_to_literal(igniter) do
+    Igniter.Project.Application.add_new_child(igniter, {Test.Robot, []},
+      opts_updater: fn zipper ->
+        {:ok, Sourceror.Zipper.replace(zipper, Sourceror.parse_string!("[]"))}
       end
     )
   end
