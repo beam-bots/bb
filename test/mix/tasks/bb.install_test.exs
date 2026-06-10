@@ -43,7 +43,9 @@ defmodule Mix.Tasks.Bb.InstallTest do
     assert_creates(igniter, "lib/test/application.ex")
 
     {_, source} = Rewrite.source(igniter.rewrite, "lib/test/application.ex")
-    assert source.content =~ "{Test.Robot, []}"
+    assert source.content =~ "{Test.Robot, robot_opts()}"
+    assert source.content =~ "defp robot_opts do"
+    assert source.content =~ "Application.get_env(:test, Test.Robot, [])"
   end
 
   test "adds bb to formatter imports" do
