@@ -206,6 +206,7 @@ defmodule BB.MixProject do
       {:splode, "~> 0.2"},
 
       # dev/test
+      {:benchee, "~> 1.5", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},

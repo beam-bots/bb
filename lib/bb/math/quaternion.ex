@@ -25,6 +25,7 @@ defmodule BB.Math.Quaternion do
       0.0
   """
 
+  alias BB.Math.Defn
   alias BB.Math.Vec3
 
   defstruct [:tensor]
@@ -668,71 +669,7 @@ defmodule BB.Math.Quaternion do
   """
   @spec multiply(t(), t()) :: t()
   def multiply(%__MODULE__{tensor: t1}, %__MODULE__{tensor: t2}) do
-    w1 = t1[0]
-    x1 = t1[1]
-    y1 = t1[2]
-    z1 = t1[3]
-
-    w2 = t2[0]
-    x2 = t2[1]
-    y2 = t2[2]
-    z2 = t2[3]
-
-    # Hamilton product
-    # w = w1*w2 - x1*x2 - y1*y2 - z1*z2
-    w =
-      Nx.subtract(
-        Nx.subtract(
-          Nx.subtract(
-            Nx.multiply(w1, w2),
-            Nx.multiply(x1, x2)
-          ),
-          Nx.multiply(y1, y2)
-        ),
-        Nx.multiply(z1, z2)
-      )
-
-    # x = w1*x2 + x1*w2 + y1*z2 - z1*y2
-    x =
-      Nx.subtract(
-        Nx.add(
-          Nx.add(
-            Nx.multiply(w1, x2),
-            Nx.multiply(x1, w2)
-          ),
-          Nx.multiply(y1, z2)
-        ),
-        Nx.multiply(z1, y2)
-      )
-
-    # y = w1*y2 - x1*z2 + y1*w2 + z1*x2
-    y =
-      Nx.add(
-        Nx.add(
-          Nx.subtract(
-            Nx.multiply(w1, y2),
-            Nx.multiply(x1, z2)
-          ),
-          Nx.multiply(y1, w2)
-        ),
-        Nx.multiply(z1, x2)
-      )
-
-    # z = w1*z2 + x1*y2 - y1*x2 + z1*w2
-    z =
-      Nx.add(
-        Nx.subtract(
-          Nx.add(
-            Nx.multiply(w1, z2),
-            Nx.multiply(x1, y2)
-          ),
-          Nx.multiply(y1, x2)
-        ),
-        Nx.multiply(z1, w2)
-      )
-
-    tensor = Nx.stack([w, x, y, z])
-    %__MODULE__{tensor: normalise_tensor(tensor)}
+    %__MODULE__{tensor: Defn.quaternion_multiply(t1, t2)}
   end
 
   @doc """
@@ -772,16 +709,7 @@ defmodule BB.Math.Quaternion do
     %__MODULE__{tensor: normalise_tensor(t)}
   end
 
-  defp normalise_tensor(tensor) do
-    norm = Nx.LinAlg.norm(tensor)
-    identity = Nx.tensor([1.0, 0.0, 0.0, 0.0], type: :f64)
-
-    Nx.select(
-      Nx.greater(norm, 1.0e-10),
-      Nx.divide(tensor, norm),
-      identity
-    )
-  end
+  defp normalise_tensor(tensor), do: Defn.normalise_quaternion(tensor)
 
   @doc """
   Returns the inverse of a quaternion.
