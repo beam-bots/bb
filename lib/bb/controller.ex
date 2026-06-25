@@ -176,6 +176,43 @@ defmodule BB.Controller do
               | {:stop, reason :: term(), new_state :: term()}
 
   @doc """
+  Handle safety state changes.
+
+  Called when the robot's safety state transitions to `:disarming`, `:disarmed`,
+  or `:error`.
+
+  Unlike a `BB.Command` (which is short-lived and stops on disarm), a controller
+  is **long-lived**: the default implementation returns `{:continue, state}` so
+  the controller keeps running across arm/disarm cycles.
+
+  Because the controller keeps running, it is responsible for **gating its own
+  output** while the robot is not armed — it must stop publishing actuator
+  commands so the downstream floor sees command-silence and reaches its safe
+  state. This is the §05 "disarm = command-silence" contract: the controller is
+  the thing that has to produce the silence.
+
+  The default `{:continue, state}` does **not** itself stop output — it only
+  keeps the controller alive. The framework cannot know what "stop output" means
+  for an arbitrary controller, so it simply notifies the controller and lets the
+  controller decide. A controller that wants to be disarm-safe should override
+  this callback (for example, to set a flag in its state that its control loop
+  checks before publishing):
+
+      @impl BB.Controller
+      def handle_safety_state_change(_new_state, state) do
+        {:continue, %{state | armed?: false}}
+      end
+
+  Return `{:stop, reason, state}` to shut the controller down instead.
+  """
+  @callback handle_safety_state_change(
+              new_state :: :disarming | :disarmed | :error,
+              state :: term()
+            ) ::
+              {:continue, new_state :: term()}
+              | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
   Clean up before termination.
 
   Same semantics as `c:GenServer.terminate/2`.
@@ -194,6 +231,7 @@ defmodule BB.Controller do
   @optional_callbacks [
     disarm: 1,
     handle_options: 2,
+    handle_safety_state_change: 2,
     handle_call: 3,
     handle_cast: 2,
     handle_info: 2,
@@ -214,6 +252,11 @@ defmodule BB.Controller do
       @impl BB.Controller
       def handle_options(_new_opts, state), do: {:ok, state}
 
+      # Controllers are long-lived: the default keeps running across disarm.
+      # Override to gate output (stop publishing) or to stop the controller.
+      @impl BB.Controller
+      def handle_safety_state_change(_new_state, state), do: {:continue, state}
+
       @impl BB.Controller
       def handle_call(_request, _from, state), do: {:reply, {:error, :not_implemented}, state}
 
@@ -230,6 +273,7 @@ defmodule BB.Controller do
       def terminate(_reason, _state), do: :ok
 
       defoverridable handle_options: 2,
+                     handle_safety_state_change: 2,
                      handle_call: 3,
                      handle_cast: 2,
                      handle_info: 2,

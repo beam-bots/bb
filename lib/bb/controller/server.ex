@@ -20,7 +20,9 @@ defmodule BB.Controller.Server do
 
   alias BB.Component.OptionsSchema
   alias BB.Parameter.Changed, as: ParameterChanged
+  alias BB.PubSub
   alias BB.Server.ParamResolution
+  alias BB.StateMachine.Transition
 
   @framework_keys [:bb]
 
@@ -58,6 +60,11 @@ defmodule BB.Controller.Server do
     raw_opts = Keyword.delete(init_arg, :__callback_module__)
     bb = Keyword.fetch!(raw_opts, :bb)
 
+    # Subscribe to safety state changes so the controller can gate its output
+    # when the robot disarms (controllers are long-lived; see
+    # BB.Controller.handle_safety_state_change/2).
+    PubSub.subscribe(bb.robot, [:state_machine])
+
     {param_subscriptions, resolved_opts} =
       ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
 
@@ -91,6 +98,17 @@ defmodule BB.Controller.Server do
   end
 
   @impl GenServer
+  def handle_info({:bb, [:state_machine], %{payload: %Transition{to: new_safety_state}}}, state)
+      when new_safety_state in [:disarming, :disarmed, :error] do
+    case state.callback_module.handle_safety_state_change(new_safety_state, state.user_state) do
+      {:continue, new_user_state} ->
+        {:noreply, %{state | user_state: new_user_state}}
+
+      {:stop, reason, new_user_state} ->
+        {:stop, reason, %{state | user_state: new_user_state}}
+    end
+  end
+
   def handle_info({:bb, [:param | param_path], %{payload: %ParameterChanged{}}}, state) do
     case ParamResolution.handle_change(
            param_path,
