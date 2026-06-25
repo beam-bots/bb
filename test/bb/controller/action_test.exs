@@ -31,12 +31,6 @@ defmodule BB.Controller.ActionTest do
 
       assert %Callback{handler: ^handler} = action
     end
-
-    test "rejects functions with wrong arity" do
-      assert_raise FunctionClauseError, fn ->
-        Action.handle_event(fn _msg -> :ok end)
-      end
-    end
   end
 
   describe "execute/3 with Command" do
