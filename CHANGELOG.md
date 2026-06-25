@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.21.0](https://github.com/beam-bots/bb/compare/v0.20.3...v0.21.0) (2026-06-25)
+
+
+
+
+### Features:
+
+* add shared BB.Error.Invalid.Bridge.* error modules (#145) (#159) by James Harton
+
 ## [v0.20.3](https://github.com/beam-bots/bb/compare/v0.20.2...v0.20.3) (2026-06-10)
 
 
