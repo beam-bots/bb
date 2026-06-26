@@ -495,12 +495,72 @@ defmodule BB.Robot.KinematicsTest do
     end
   end
 
+  describe "all_link_transforms defn matches eager joint composition" do
+    # `all_link_transforms/2` runs the whole tree through
+    # `BB.Robot.Kinematics.Defn.link_transforms/7`. This pins it against the
+    # eager parent-walk it replaced, including a branching robot.
+    cases = [
+      {BB.ExampleRobots.SixDofArm,
+       %{
+         shoulder_pan_joint: 0.3,
+         shoulder_lift_joint: -0.5,
+         elbow_joint: 0.8,
+         wrist_1_joint: -0.4,
+         wrist_2_joint: 0.6,
+         wrist_3_joint: 0.2
+       }},
+      {BB.ExampleRobots.DifferentialDriveRobot, %{left_wheel_joint: 1.2, right_wheel_joint: -0.7}}
+    ]
+
+    for {module, positions} <- cases do
+      test "#{inspect(module)}" do
+        robot = unquote(module).robot()
+        positions = unquote(Macro.escape(positions))
+
+        actual = Kinematics.all_link_transforms(robot, positions)
+        expected = reference_all_links(robot, positions)
+
+        for link_name <- robot.topology.link_order do
+          actual_tensor = Transform.tensor(Map.fetch!(actual, link_name))
+          expected_tensor = Transform.tensor(Map.fetch!(expected, link_name))
+
+          for i <- 0..3, j <- 0..3 do
+            assert_in_delta Nx.to_number(actual_tensor[i][j]),
+                            Nx.to_number(expected_tensor[i][j]),
+                            1.0e-9,
+                            "#{link_name} mismatch at [#{i}][#{j}]"
+          end
+        end
+      end
+    end
+  end
+
   defp reference_chain(robot, positions, target_link) do
     robot
     |> BB.Robot.path_to(target_link)
     |> Enum.filter(&Map.has_key?(robot.joints, &1))
     |> Enum.reduce(Transform.identity(), fn joint_name, acc ->
       Transform.compose(acc, Kinematics.compute_joint_transform(robot, positions, joint_name))
+    end)
+  end
+
+  defp reference_all_links(robot, positions) do
+    Enum.reduce(robot.topology.link_order, %{}, fn link_name, transforms ->
+      transform =
+        case BB.Robot.get_link(robot, link_name) do
+          %{parent_joint: nil} ->
+            Transform.identity()
+
+          %{parent_joint: parent_joint_name} ->
+            parent_link = robot.joints[parent_joint_name].parent_link
+
+            Transform.compose(
+              Map.fetch!(transforms, parent_link),
+              Kinematics.compute_joint_transform(robot, positions, parent_joint_name)
+            )
+        end
+
+      Map.put(transforms, link_name, transform)
     end)
   end
 end

@@ -46,6 +46,41 @@ defmodule BB.Robot.Kinematics.Defn do
     chain_product(batched_matmul(origins, motions))
   end
 
+  @doc """
+  Compute every link's base-frame transform via a topological prefix-product scan.
+
+  One row per link, ordered root-first so a link's parent always precedes it
+  (`parent_idx[i] < i` for every non-root link). `parent_idx` indexes into this
+  same ordering; the root carries its own index and an identity joint transform,
+  so it resolves to the identity. The per-joint inputs follow the same layout as
+  `fk_chain/6`, describing each link's parent joint (identity-valued for the
+  root). Returns `{n, 4, 4}`, one transform per link in input order.
+  """
+  defn link_transforms(
+         positions,
+         origin_rpy,
+         origin_xyz,
+         axes,
+         is_revolute,
+         is_prismatic,
+         parent_idx
+       ) do
+    origins = build_origins(origin_rpy, origin_xyz)
+    motions = build_motions(positions, axes, is_revolute, is_prismatic)
+    joint_mats = batched_matmul(origins, motions)
+
+    n = Nx.axis_size(joint_mats, 0)
+    init = Nx.broadcast(Nx.eye(4, type: :f64), {n, 4, 4})
+
+    {result, _joint_mats, _parent_idx, _i} =
+      while {acc = init, jm = joint_mats, parents = parent_idx, i = 0}, i < n do
+        link_transform = Nx.dot(acc[parents[i]], jm[i])
+        {Nx.put_slice(acc, [i, 0, 0], Nx.new_axis(link_transform, 0)), jm, parents, i + 1}
+      end
+
+    result
+  end
+
   defnp build_origins(rpy, xyz) do
     roll = rpy[[.., 0]]
     pitch = rpy[[.., 1]]
