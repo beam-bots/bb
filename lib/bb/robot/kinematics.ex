@@ -172,6 +172,40 @@ defmodule BB.Robot.Kinematics do
   end
 
   @doc """
+  Compute the spatial (position and orientation) Jacobian of a link.
+
+  Returns a `{6, length(joint_names)}` tensor: the top three rows are the
+  position Jacobian (see `position_jacobian/4`) and the bottom three are the
+  orientation Jacobian — each column the joint's rotation axis in the base
+  frame for revolute joints, zero otherwise. This pairs with an orientation
+  error expressed as a base-frame rotation vector.
+
+  ## Examples
+
+      jacobian = BB.Robot.Kinematics.jacobian(robot, positions, :tool0, joint_names)
+  """
+  @spec jacobian(Robot.t(), State.t() | %{atom() => float()}, atom(), [atom()]) :: Nx.Tensor.t()
+  def jacobian(%Robot{} = robot, %State{} = state, target_link, joint_names) do
+    positions = State.get_all_positions(state)
+    jacobian(robot, positions, target_link, joint_names)
+  end
+
+  def jacobian(%Robot{} = robot, positions, target_link, joint_names) when is_map(positions) do
+    path = Robot.path_to(robot, target_link)
+
+    if is_nil(path) do
+      raise ArgumentError, "Unknown link: #{inspect(target_link)}"
+    end
+
+    chain_joints = Enum.filter(path, &Map.has_key?(robot.joints, &1))
+
+    position = chain_jacobian(robot, positions, chain_joints, joint_names)
+    orientation = chain_orientation_jacobian(robot, positions, chain_joints, joint_names)
+
+    Nx.concatenate([position, orientation], axis: 0)
+  end
+
+  @doc """
   Compute the transform for a single joint given its current position.
 
   This combines the joint's fixed origin transform with the variable
@@ -234,19 +268,36 @@ defmodule BB.Robot.Kinematics do
   end
 
   defp chain_jacobian(robot, positions, chain_joints, joint_names) do
+    {positions_t, rpy, xyz, axes, revolute, prismatic} =
+      chain_tensors(robot, positions, chain_joints)
+
+    Defn.position_jacobian(positions_t, rpy, xyz, axes, revolute, prismatic)
+    |> select_columns(chain_joints, joint_names)
+  end
+
+  defp chain_orientation_jacobian(_robot, _positions, [], joint_names) do
+    Nx.broadcast(Nx.tensor(0.0, type: :f64), {3, length(joint_names)})
+  end
+
+  defp chain_orientation_jacobian(robot, positions, chain_joints, joint_names) do
+    {positions_t, rpy, xyz, axes, revolute, prismatic} =
+      chain_tensors(robot, positions, chain_joints)
+
+    Defn.orientation_jacobian(positions_t, rpy, xyz, axes, revolute, prismatic)
+    |> select_columns(chain_joints, joint_names)
+  end
+
+  defp chain_tensors(robot, positions, chain_joints) do
     joints = Enum.map(chain_joints, &Map.fetch!(robot.joints, &1))
 
-    chain_jac =
-      Defn.position_jacobian(
-        chain_positions(positions, chain_joints),
-        rows(joints, &origin_rpy(&1.origin)),
-        rows(joints, &origin_xyz(&1.origin)),
-        rows(joints, &axis_row(&1.axis)),
-        column(joints, &revolute_mask/1),
-        column(joints, &prismatic_mask/1)
-      )
-
-    select_columns(chain_jac, chain_joints, joint_names)
+    {
+      chain_positions(positions, chain_joints),
+      rows(joints, &origin_rpy(&1.origin)),
+      rows(joints, &origin_xyz(&1.origin)),
+      rows(joints, &axis_row(&1.axis)),
+      column(joints, &revolute_mask/1),
+      column(joints, &prismatic_mask/1)
+    }
   end
 
   defp select_columns(chain_jac, chain_joints, joint_names) do

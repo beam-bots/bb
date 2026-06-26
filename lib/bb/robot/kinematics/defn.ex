@@ -115,6 +115,39 @@ defmodule BB.Robot.Kinematics.Defn do
     Nx.stack([jx, jy, jz])
   end
 
+  @doc """
+  Orientation (angular-velocity) Jacobian of the chain tip.
+
+  Returns `{3, n}` where column `j` is the joint's rotation axis expressed in
+  the base frame (`z_j`) for revolute/continuous joints, and zero for prismatic
+  or fixed joints — the standard geometric angular Jacobian. Stacked beneath the
+  position Jacobian it forms the `{6, n}` spatial Jacobian, paired with a
+  base-frame rotation-vector orientation error.
+
+  Inputs follow the `fk_chain/6` layout. A prefix-product scan walks the chain
+  accumulating the transform up to each joint's axis frame; `grad` is not
+  involved, so the data-dependent `while` is fine here.
+  """
+  defn orientation_jacobian(positions, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic) do
+    origins = build_origins(origin_rpy, origin_xyz)
+    motions = build_motions(positions, axes, is_revolute, is_prismatic)
+    joint_mats = batched_matmul(origins, motions)
+
+    n = Nx.axis_size(origins, 0)
+
+    {axes_in_base, _origins, _joint_mats, _axes, _prefix, _i} =
+      while {acc = Nx.broadcast(Nx.tensor(0.0, type: :f64), {n, 3}), og = origins,
+             jm = joint_mats, ax = axes, prefix = Nx.eye(4, type: :f64), i = 0},
+            i < n do
+        axis_frame = Nx.dot(prefix, og[i])
+        z = Nx.dot(Nx.slice(axis_frame, [0, 0], [3, 3]), ax[i])
+
+        {Nx.put_slice(acc, [i, 0], Nx.new_axis(z, 0)), og, jm, ax, Nx.dot(prefix, jm[i]), i + 1}
+      end
+
+    Nx.transpose(axes_in_base * Nx.new_axis(is_revolute, 1))
+  end
+
   # The tip translation is `fk · [0, 0, 0, 1]ᵀ` (the homogeneous last column);
   # dotting with a one-hot selector picks one coordinate as a scalar. Done with
   # matmul/dot only — `grad` mishandles range/integer tensor indexing.
