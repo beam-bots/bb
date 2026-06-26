@@ -138,6 +138,40 @@ defmodule BB.Robot.Kinematics do
   end
 
   @doc """
+  Compute the position Jacobian of a link with respect to the given joints.
+
+  Returns a `{3, length(joint_names)}` tensor where each column is the partial
+  derivative of the link's base-frame position with respect to that joint's
+  position. Joints that do not lie on the chain to `target_link` (and so do not
+  move it) get a zero column. Columns follow `joint_names` order.
+
+  Computed analytically by differentiating the forward-kinematics `defn`, rather
+  than by finite differences.
+
+  ## Examples
+
+      jacobian = BB.Robot.Kinematics.position_jacobian(robot, positions, :tool0, joint_names)
+  """
+  @spec position_jacobian(Robot.t(), State.t() | %{atom() => float()}, atom(), [atom()]) ::
+          Nx.Tensor.t()
+  def position_jacobian(%Robot{} = robot, %State{} = state, target_link, joint_names) do
+    positions = State.get_all_positions(state)
+    position_jacobian(robot, positions, target_link, joint_names)
+  end
+
+  def position_jacobian(%Robot{} = robot, positions, target_link, joint_names)
+      when is_map(positions) do
+    path = Robot.path_to(robot, target_link)
+
+    if is_nil(path) do
+      raise ArgumentError, "Unknown link: #{inspect(target_link)}"
+    end
+
+    chain_joints = Enum.filter(path, &Map.has_key?(robot.joints, &1))
+    chain_jacobian(robot, positions, chain_joints, joint_names)
+  end
+
+  @doc """
   Compute the transform for a single joint given its current position.
 
   This combines the joint's fixed origin transform with the variable
@@ -193,6 +227,40 @@ defmodule BB.Robot.Kinematics do
         )
         |> Transform.from_tensor()
     end
+  end
+
+  defp chain_jacobian(_robot, _positions, [], joint_names) do
+    Nx.broadcast(Nx.tensor(0.0, type: :f64), {3, length(joint_names)})
+  end
+
+  defp chain_jacobian(robot, positions, chain_joints, joint_names) do
+    joints = Enum.map(chain_joints, &Map.fetch!(robot.joints, &1))
+
+    chain_jac =
+      Defn.position_jacobian(
+        chain_positions(positions, chain_joints),
+        rows(joints, &origin_rpy(&1.origin)),
+        rows(joints, &origin_xyz(&1.origin)),
+        rows(joints, &axis_row(&1.axis)),
+        column(joints, &revolute_mask/1),
+        column(joints, &prismatic_mask/1)
+      )
+
+    select_columns(chain_jac, chain_joints, joint_names)
+  end
+
+  defp select_columns(chain_jac, chain_joints, joint_names) do
+    index_of = chain_joints |> Enum.with_index() |> Map.new()
+    zero = Nx.broadcast(Nx.tensor(0.0, type: :f64), {3})
+
+    joint_names
+    |> Enum.map(fn joint_name ->
+      case Map.fetch(index_of, joint_name) do
+        {:ok, index} -> chain_jac[[.., index]]
+        :error -> zero
+      end
+    end)
+    |> Nx.stack(axis: 1)
   end
 
   defp chain_positions(positions, joint_names) do

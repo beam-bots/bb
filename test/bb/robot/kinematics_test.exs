@@ -6,6 +6,7 @@ defmodule BB.Robot.KinematicsTest do
   use ExUnit.Case, async: true
   import BB.Unit
 
+  alias BB.ExampleRobots.SixDofArm
   alias BB.Math.Transform
   alias BB.Math.Vec3
   alias BB.Robot.{Kinematics, State}
@@ -456,6 +457,59 @@ defmodule BB.Robot.KinematicsTest do
     end
   end
 
+  describe "position_jacobian/4" do
+    @sixdof_joints [
+      :shoulder_pan_joint,
+      :shoulder_lift_joint,
+      :elbow_joint,
+      :wrist_1_joint,
+      :wrist_2_joint,
+      :wrist_3_joint
+    ]
+    @sixdof_positions %{
+      shoulder_pan_joint: 0.3,
+      shoulder_lift_joint: -0.5,
+      elbow_joint: 0.8,
+      wrist_1_joint: -0.4,
+      wrist_2_joint: 0.6,
+      wrist_3_joint: 0.2
+    }
+
+    test "matches central finite differences" do
+      robot = SixDofArm.robot()
+
+      analytical = Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+      finite_diff = finite_difference_jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+
+      for column <- 0..(length(@sixdof_joints) - 1), row <- 0..2 do
+        assert_in_delta Nx.to_number(analytical[row][column]),
+                        Nx.to_number(finite_diff[row][column]),
+                        1.0e-6,
+                        "mismatch at [#{row}][#{column}]"
+      end
+    end
+
+    test "follows joint_names order and zeroes off-chain joints" do
+      robot = SixDofArm.robot()
+
+      reordered = [:elbow_joint, :shoulder_pan_joint]
+      base = Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+      picked = Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, reordered)
+
+      assert Nx.to_flat_list(picked[[.., 0]]) == Nx.to_flat_list(base[[.., 2]])
+      assert Nx.to_flat_list(picked[[.., 1]]) == Nx.to_flat_list(base[[.., 0]])
+
+      # A joint that does not lie on the chain to the target gets a zero column.
+      with_unrelated =
+        Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, [
+          :wrist_3_joint,
+          :not_a_real_joint
+        ])
+
+      assert Nx.to_flat_list(with_unrelated[[.., 1]]) == [0.0, 0.0, 0.0]
+    end
+  end
+
   describe "defn chain matches eager joint composition" do
     # `forward_kinematics/3` runs the chain through `BB.Robot.Kinematics.Defn`.
     # This pins it against the eager per-joint composition it replaced, so the
@@ -533,6 +587,33 @@ defmodule BB.Robot.KinematicsTest do
         end
       end
     end
+  end
+
+  defp finite_difference_jacobian(robot, positions, target_link, joint_names) do
+    epsilon = 1.0e-6
+
+    joint_names
+    |> Enum.map(fn joint_name ->
+      current = Map.get(positions, joint_name, 0.0)
+
+      {xp, yp, zp} =
+        Kinematics.link_position(
+          robot,
+          Map.put(positions, joint_name, current + epsilon),
+          target_link
+        )
+
+      {xm, ym, zm} =
+        Kinematics.link_position(
+          robot,
+          Map.put(positions, joint_name, current - epsilon),
+          target_link
+        )
+
+      [(xp - xm) / (2 * epsilon), (yp - ym) / (2 * epsilon), (zp - zm) / (2 * epsilon)]
+    end)
+    |> Nx.tensor(type: :f64)
+    |> Nx.transpose()
   end
 
   defp reference_chain(robot, positions, target_link) do

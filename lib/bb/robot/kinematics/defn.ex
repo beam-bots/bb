@@ -81,6 +81,57 @@ defmodule BB.Robot.Kinematics.Defn do
     result
   end
 
+  @doc """
+  Position Jacobian of the chain tip with respect to the chain joint positions.
+
+  Computed by differentiating `fk_chain/6`'s tip translation via `grad` — the
+  composable-`defn` payoff #147 is after: no finite differences, no extra
+  forward-kinematics evaluations. Inputs follow the `fk_chain/6` layout. Returns
+  `{3, n}`: row = spatial axis (x, y, z), column = chain joint in input order.
+  """
+  defn position_jacobian(positions, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic) do
+    select_x = Nx.tensor([1.0, 0.0, 0.0, 0.0], type: :f64)
+    select_y = Nx.tensor([0.0, 1.0, 0.0, 0.0], type: :f64)
+    select_z = Nx.tensor([0.0, 0.0, 1.0, 0.0], type: :f64)
+
+    jx =
+      grad(
+        positions,
+        &tip_coordinate(&1, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, select_x)
+      )
+
+    jy =
+      grad(
+        positions,
+        &tip_coordinate(&1, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, select_y)
+      )
+
+    jz =
+      grad(
+        positions,
+        &tip_coordinate(&1, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, select_z)
+      )
+
+    Nx.stack([jx, jy, jz])
+  end
+
+  # The tip translation is `fk · [0, 0, 0, 1]ᵀ` (the homogeneous last column);
+  # dotting with a one-hot selector picks one coordinate as a scalar. Done with
+  # matmul/dot only — `grad` mishandles range/integer tensor indexing.
+  defnp tip_coordinate(
+          positions,
+          origin_rpy,
+          origin_xyz,
+          axes,
+          is_revolute,
+          is_prismatic,
+          selector
+        ) do
+    fk = fk_chain(positions, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic)
+    translation = Nx.dot(fk, Nx.tensor([0.0, 0.0, 0.0, 1.0], type: :f64))
+    Nx.dot(translation, selector)
+  end
+
   defnp build_origins(rpy, xyz) do
     roll = rpy[[.., 0]]
     pitch = rpy[[.., 1]]
@@ -211,14 +262,13 @@ defmodule BB.Robot.Kinematics.Defn do
     Nx.dot(matrices, [2], [0], vectors, [1], [0])
   end
 
-  defnp chain_product(mats) do
-    n = Nx.axis_size(mats, 0)
+  # Unrolled rather than a data-dependent `while`: the chain length is a static
+  # dimension at trace time, so this emits a plain sequence of matmuls. That
+  # keeps the product differentiable — `grad` (used for the Jacobian) misroutes
+  # through a `while` that dynamically gathers `mats[i]`.
+  deftransform chain_product(mats) do
+    last = Nx.axis_size(mats, 0) - 1
 
-    {result, _mats, _i} =
-      while {acc = Nx.eye(4, type: :f64), m = mats, i = 0}, i < n do
-        {Nx.dot(acc, m[i]), m, i + 1}
-      end
-
-    result
+    Enum.reduce(1..last//1, mats[0], fn i, acc -> Nx.dot(acc, mats[i]) end)
   end
 end
