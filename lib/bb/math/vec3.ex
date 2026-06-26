@@ -165,7 +165,7 @@ defmodule BB.Math.Vec3 do
   """
   @spec scale(t(), number()) :: t()
   def scale(%__MODULE__{tensor: t}, scalar) do
-    %__MODULE__{tensor: Nx.multiply(t, scalar)}
+    %__MODULE__{tensor: Nx.multiply(t, Nx.tensor(scalar, type: :f64))}
   end
 
   @doc """
@@ -300,9 +300,11 @@ defmodule BB.Math.Vec3 do
   @spec lerp(t(), t(), number()) :: t()
   def lerp(%__MODULE__{tensor: a}, %__MODULE__{tensor: b}, t) do
     # lerp(a, b, t) = a + t * (b - a) = a * (1 - t) + b * t
+    t = Nx.tensor(t, type: :f64)
+
     result =
       Nx.add(
-        Nx.multiply(a, 1 - t),
+        Nx.multiply(a, Nx.subtract(1, t)),
         Nx.multiply(b, t)
       )
 

@@ -455,4 +455,52 @@ defmodule BB.Robot.KinematicsTest do
       assert_in_delta z, -2.0, 0.0001
     end
   end
+
+  describe "defn chain matches eager joint composition" do
+    # `forward_kinematics/3` runs the chain through `BB.Robot.Kinematics.Defn`.
+    # This pins it against the eager per-joint composition it replaced, so the
+    # two cannot silently diverge.
+    cases = [
+      {BB.ExampleRobots.SixDofArm, :tool0,
+       %{
+         shoulder_pan_joint: 0.3,
+         shoulder_lift_joint: -0.5,
+         elbow_joint: 0.8,
+         wrist_1_joint: -0.4,
+         wrist_2_joint: 0.6,
+         wrist_3_joint: 0.2
+       }},
+      {BB.ExampleRobots.PanTiltCamera, :camera_link, %{pan_joint: 0.4, tilt_joint: -0.6}},
+      {BB.ExampleRobots.LinearActuator, :slider_link, %{slider_joint: 0.15}},
+      {BB.ExampleRobots.CollisionTestArm, :forearm, %{shoulder: 0.7, elbow: -0.9}}
+    ]
+
+    for {module, target, positions} <- cases do
+      test "#{inspect(module)} -> #{target}" do
+        robot = unquote(module).robot()
+        positions = unquote(Macro.escape(positions))
+
+        actual =
+          Transform.tensor(Kinematics.forward_kinematics(robot, positions, unquote(target)))
+
+        expected = Transform.tensor(reference_chain(robot, positions, unquote(target)))
+
+        for i <- 0..3, j <- 0..3 do
+          assert_in_delta Nx.to_number(actual[i][j]),
+                          Nx.to_number(expected[i][j]),
+                          1.0e-9,
+                          "mismatch at [#{i}][#{j}]"
+        end
+      end
+    end
+  end
+
+  defp reference_chain(robot, positions, target_link) do
+    robot
+    |> BB.Robot.path_to(target_link)
+    |> Enum.filter(&Map.has_key?(robot.joints, &1))
+    |> Enum.reduce(Transform.identity(), fn joint_name, acc ->
+      Transform.compose(acc, Kinematics.compute_joint_transform(robot, positions, joint_name))
+    end)
+  end
 end

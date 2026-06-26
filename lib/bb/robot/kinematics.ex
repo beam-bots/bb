@@ -36,6 +36,7 @@ defmodule BB.Robot.Kinematics do
   alias BB.Math.Transform
   alias BB.Math.Vec3
   alias BB.Robot
+  alias BB.Robot.Kinematics.Defn
   alias BB.Robot.State
 
   @doc """
@@ -168,11 +169,46 @@ defmodule BB.Robot.Kinematics do
   defp tuple_to_vec3({x, y, z}), do: Vec3.new(x, y, z)
 
   defp compute_chain_transform(%Robot{} = robot, positions, path) do
-    path
-    |> Enum.filter(&Map.has_key?(robot.joints, &1))
-    |> Enum.reduce(Transform.identity(), fn joint_name, acc ->
-      joint_transform = compute_joint_transform(robot, positions, joint_name)
-      Transform.compose(acc, joint_transform)
-    end)
+    case Enum.filter(path, &Map.has_key?(robot.joints, &1)) do
+      [] ->
+        Transform.identity()
+
+      joint_names ->
+        joints = Enum.map(joint_names, &Map.fetch!(robot.joints, &1))
+
+        Defn.fk_chain(
+          chain_positions(positions, joint_names),
+          rows(joints, &origin_rpy(&1.origin)),
+          rows(joints, &origin_xyz(&1.origin)),
+          rows(joints, &axis_row(&1.axis)),
+          column(joints, &revolute_mask/1),
+          column(joints, &prismatic_mask/1)
+        )
+        |> Transform.from_tensor()
+    end
   end
+
+  defp chain_positions(positions, joint_names) do
+    joint_names
+    |> Enum.map(&(Map.get(positions, &1, 0.0) * 1.0))
+    |> Nx.tensor(type: :f64)
+  end
+
+  defp rows(joints, fun), do: joints |> Enum.map(fun) |> Nx.tensor(type: :f64)
+  defp column(joints, fun), do: joints |> Enum.map(fun) |> Nx.tensor(type: :f64)
+
+  defp origin_rpy(%{orientation: {roll, pitch, yaw}}), do: [roll, pitch, yaw]
+  defp origin_rpy(_), do: [0.0, 0.0, 0.0]
+
+  defp origin_xyz(%{position: {x, y, z}}), do: [x, y, z]
+  defp origin_xyz(_), do: [0.0, 0.0, 0.0]
+
+  defp axis_row({x, y, z}), do: [x, y, z]
+  defp axis_row(_), do: [0.0, 0.0, 1.0]
+
+  defp revolute_mask(%{type: type}) when type in [:revolute, :continuous], do: 1.0
+  defp revolute_mask(_), do: 0.0
+
+  defp prismatic_mask(%{type: :prismatic}), do: 1.0
+  defp prismatic_mask(_), do: 0.0
 end
