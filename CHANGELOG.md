@@ -11,6 +11,14 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [0.22.0](https://github.com/beam-bots/bb/compare/v0.21.0...0.22.0) (2026-06-26)
+
+
+
+### Improvements:
+
+* `defn` math core, FK, all-link transforms, and analytical Jacobians (#147) (#161) by James Harton
+
 ## [v0.21.0](https://github.com/beam-bots/bb/compare/v0.20.3...v0.21.0) (2026-06-25)
 
 
