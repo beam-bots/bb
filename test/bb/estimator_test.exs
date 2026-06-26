@@ -77,23 +77,27 @@ defmodule BB.EstimatorTest do
 
   describe "Verifier - sensor-nested invariants" do
     test "DSL prevents declaring `input` blocks inside a sensor-nested estimator" do
-      assert_raise CompileError, fn ->
-        Code.eval_string("""
-        defmodule BB.EstimatorTest.BadSensorNested do
-          use BB
+      import ExUnit.CaptureIO
 
-          topology do
-            link :base_link do
-              sensor :imu, MySensor do
-                estimator :orientation, EchoEstimator do
-                  input :foo, [:sensor, :base_link, :imu]
+      capture_io(:stderr, fn ->
+        assert_raise CompileError, fn ->
+          Code.eval_string("""
+          defmodule BB.EstimatorTest.BadSensorNested do
+            use BB
+
+            topology do
+              link :base_link do
+                sensor :imu, MySensor do
+                  estimator :orientation, EchoEstimator do
+                    input :foo, [:sensor, :base_link, :imu]
+                  end
                 end
               end
             end
           end
+          """)
         end
-        """)
-      end
+      end)
     end
   end
 
