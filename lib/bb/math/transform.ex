@@ -36,6 +36,7 @@ defmodule BB.Math.Transform do
       [1.0, 2.0, 3.0]
   """
 
+  alias BB.Math.Defn
   alias BB.Math.Quaternion
   alias BB.Math.Vec3
 
@@ -221,7 +222,7 @@ defmodule BB.Math.Transform do
   """
   @spec compose(t(), t()) :: t()
   def compose(%__MODULE__{tensor: a}, %__MODULE__{tensor: b}) do
-    %__MODULE__{tensor: Nx.dot(a, b)}
+    %__MODULE__{tensor: Defn.transform_compose(a, b)}
   end
 
   @doc """

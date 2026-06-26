@@ -92,6 +92,13 @@ defmodule BB.Math.Vec3Test do
 
       assert Vec3.to_list(s) == [-1.0, -2.0, -3.0]
     end
+
+    test "keeps f64 precision for scalars not representable in f32" do
+      v = Vec3.new(0.0, 0.0, 1.0)
+      s = Vec3.scale(v, 0.15)
+
+      assert Vec3.z(s) == 0.15
+    end
   end
 
   describe "dot/2" do

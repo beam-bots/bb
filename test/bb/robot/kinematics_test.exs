@@ -6,6 +6,9 @@ defmodule BB.Robot.KinematicsTest do
   use ExUnit.Case, async: true
   import BB.Unit
 
+  alias BB.ExampleRobots.LinearActuator
+  alias BB.ExampleRobots.SixDofArm
+  alias BB.Math.Quaternion
   alias BB.Math.Transform
   alias BB.Math.Vec3
   alias BB.Robot.{Kinematics, State}
@@ -454,5 +457,260 @@ defmodule BB.Robot.KinematicsTest do
       assert_in_delta x, 0.0, 0.0001
       assert_in_delta z, -2.0, 0.0001
     end
+  end
+
+  describe "position_jacobian/4" do
+    @sixdof_joints [
+      :shoulder_pan_joint,
+      :shoulder_lift_joint,
+      :elbow_joint,
+      :wrist_1_joint,
+      :wrist_2_joint,
+      :wrist_3_joint
+    ]
+    @sixdof_positions %{
+      shoulder_pan_joint: 0.3,
+      shoulder_lift_joint: -0.5,
+      elbow_joint: 0.8,
+      wrist_1_joint: -0.4,
+      wrist_2_joint: 0.6,
+      wrist_3_joint: 0.2
+    }
+
+    test "matches central finite differences" do
+      robot = SixDofArm.robot()
+
+      analytical = Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+      finite_diff = finite_difference_jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+
+      for column <- 0..(length(@sixdof_joints) - 1), row <- 0..2 do
+        assert_in_delta Nx.to_number(analytical[row][column]),
+                        Nx.to_number(finite_diff[row][column]),
+                        1.0e-6,
+                        "mismatch at [#{row}][#{column}]"
+      end
+    end
+
+    test "follows joint_names order and zeroes off-chain joints" do
+      robot = SixDofArm.robot()
+
+      reordered = [:elbow_joint, :shoulder_pan_joint]
+      base = Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+      picked = Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, reordered)
+
+      assert Nx.to_flat_list(picked[[.., 0]]) == Nx.to_flat_list(base[[.., 2]])
+      assert Nx.to_flat_list(picked[[.., 1]]) == Nx.to_flat_list(base[[.., 0]])
+
+      # A joint that does not lie on the chain to the target gets a zero column.
+      with_unrelated =
+        Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, [
+          :wrist_3_joint,
+          :not_a_real_joint
+        ])
+
+      assert Nx.to_flat_list(with_unrelated[[.., 1]]) == [0.0, 0.0, 0.0]
+    end
+  end
+
+  describe "jacobian/4" do
+    test "top rows are the position Jacobian, bottom rows the angular Jacobian" do
+      robot = SixDofArm.robot()
+
+      full = Kinematics.jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+      assert Nx.shape(full) == {6, length(@sixdof_joints)}
+
+      position = Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+      assert Nx.to_flat_list(full[0..2]) == Nx.to_flat_list(position)
+
+      finite_diff =
+        finite_difference_orientation_jacobian(robot, @sixdof_positions, :tool0, @sixdof_joints)
+
+      for column <- 0..(length(@sixdof_joints) - 1), row <- 0..2 do
+        assert_in_delta Nx.to_number(full[3 + row][column]),
+                        Nx.to_number(finite_diff[row][column]),
+                        1.0e-6,
+                        "orientation mismatch at [#{row}][#{column}]"
+      end
+    end
+
+    test "prismatic joints contribute no angular velocity" do
+      robot = LinearActuator.robot()
+
+      full = Kinematics.jacobian(robot, %{slider_joint: 0.1}, :slider_link, [:slider_joint])
+
+      # Bottom three rows (orientation) are zero for a pure translation.
+      assert Nx.to_flat_list(full[3..5]) == [0.0, 0.0, 0.0]
+    end
+  end
+
+  describe "defn chain matches eager joint composition" do
+    # `forward_kinematics/3` runs the chain through `BB.Robot.Kinematics.Defn`.
+    # This pins it against the eager per-joint composition it replaced, so the
+    # two cannot silently diverge.
+    cases = [
+      {BB.ExampleRobots.SixDofArm, :tool0,
+       %{
+         shoulder_pan_joint: 0.3,
+         shoulder_lift_joint: -0.5,
+         elbow_joint: 0.8,
+         wrist_1_joint: -0.4,
+         wrist_2_joint: 0.6,
+         wrist_3_joint: 0.2
+       }},
+      {BB.ExampleRobots.PanTiltCamera, :camera_link, %{pan_joint: 0.4, tilt_joint: -0.6}},
+      {BB.ExampleRobots.LinearActuator, :slider_link, %{slider_joint: 0.15}},
+      {BB.ExampleRobots.CollisionTestArm, :forearm, %{shoulder: 0.7, elbow: -0.9}}
+    ]
+
+    for {module, target, positions} <- cases do
+      test "#{inspect(module)} -> #{target}" do
+        robot = unquote(module).robot()
+        positions = unquote(Macro.escape(positions))
+
+        actual =
+          Transform.tensor(Kinematics.forward_kinematics(robot, positions, unquote(target)))
+
+        expected = Transform.tensor(reference_chain(robot, positions, unquote(target)))
+
+        for i <- 0..3, j <- 0..3 do
+          assert_in_delta Nx.to_number(actual[i][j]),
+                          Nx.to_number(expected[i][j]),
+                          1.0e-9,
+                          "mismatch at [#{i}][#{j}]"
+        end
+      end
+    end
+  end
+
+  describe "all_link_transforms defn matches eager joint composition" do
+    # `all_link_transforms/2` runs the whole tree through
+    # `BB.Robot.Kinematics.Defn.link_transforms/7`. This pins it against the
+    # eager parent-walk it replaced, including a branching robot.
+    cases = [
+      {BB.ExampleRobots.SixDofArm,
+       %{
+         shoulder_pan_joint: 0.3,
+         shoulder_lift_joint: -0.5,
+         elbow_joint: 0.8,
+         wrist_1_joint: -0.4,
+         wrist_2_joint: 0.6,
+         wrist_3_joint: 0.2
+       }},
+      {BB.ExampleRobots.DifferentialDriveRobot, %{left_wheel_joint: 1.2, right_wheel_joint: -0.7}}
+    ]
+
+    for {module, positions} <- cases do
+      test "#{inspect(module)}" do
+        robot = unquote(module).robot()
+        positions = unquote(Macro.escape(positions))
+
+        actual = Kinematics.all_link_transforms(robot, positions)
+        expected = reference_all_links(robot, positions)
+
+        for link_name <- robot.topology.link_order do
+          actual_tensor = Transform.tensor(Map.fetch!(actual, link_name))
+          expected_tensor = Transform.tensor(Map.fetch!(expected, link_name))
+
+          for i <- 0..3, j <- 0..3 do
+            assert_in_delta Nx.to_number(actual_tensor[i][j]),
+                            Nx.to_number(expected_tensor[i][j]),
+                            1.0e-9,
+                            "#{link_name} mismatch at [#{i}][#{j}]"
+          end
+        end
+      end
+    end
+  end
+
+  defp finite_difference_jacobian(robot, positions, target_link, joint_names) do
+    epsilon = 1.0e-6
+
+    joint_names
+    |> Enum.map(fn joint_name ->
+      current = Map.get(positions, joint_name, 0.0)
+
+      {xp, yp, zp} =
+        Kinematics.link_position(
+          robot,
+          Map.put(positions, joint_name, current + epsilon),
+          target_link
+        )
+
+      {xm, ym, zm} =
+        Kinematics.link_position(
+          robot,
+          Map.put(positions, joint_name, current - epsilon),
+          target_link
+        )
+
+      [(xp - xm) / (2 * epsilon), (yp - ym) / (2 * epsilon), (zp - zm) / (2 * epsilon)]
+    end)
+    |> Nx.tensor(type: :f64)
+    |> Nx.transpose()
+  end
+
+  defp finite_difference_orientation_jacobian(robot, positions, target_link, joint_names) do
+    epsilon = 1.0e-6
+    delta = 2 * epsilon
+
+    joint_names
+    |> Enum.map(fn joint_name ->
+      current = Map.get(positions, joint_name, 0.0)
+
+      plus =
+        Kinematics.forward_kinematics(
+          robot,
+          Map.put(positions, joint_name, current + epsilon),
+          target_link
+        )
+
+      minus =
+        Kinematics.forward_kinematics(
+          robot,
+          Map.put(positions, joint_name, current - epsilon),
+          target_link
+        )
+
+      q_diff =
+        Quaternion.multiply(
+          Transform.get_quaternion(plus),
+          Quaternion.conjugate(Transform.get_quaternion(minus))
+        )
+
+      {axis, angle} = Quaternion.to_axis_angle(q_diff)
+      rotation_vector = Vec3.scale(axis, angle / delta)
+      [Vec3.x(rotation_vector), Vec3.y(rotation_vector), Vec3.z(rotation_vector)]
+    end)
+    |> Nx.tensor(type: :f64)
+    |> Nx.transpose()
+  end
+
+  defp reference_chain(robot, positions, target_link) do
+    robot
+    |> BB.Robot.path_to(target_link)
+    |> Enum.filter(&Map.has_key?(robot.joints, &1))
+    |> Enum.reduce(Transform.identity(), fn joint_name, acc ->
+      Transform.compose(acc, Kinematics.compute_joint_transform(robot, positions, joint_name))
+    end)
+  end
+
+  defp reference_all_links(robot, positions) do
+    Enum.reduce(robot.topology.link_order, %{}, fn link_name, transforms ->
+      transform =
+        case BB.Robot.get_link(robot, link_name) do
+          %{parent_joint: nil} ->
+            Transform.identity()
+
+          %{parent_joint: parent_joint_name} ->
+            parent_link = robot.joints[parent_joint_name].parent_link
+
+            Transform.compose(
+              Map.fetch!(transforms, parent_link),
+              Kinematics.compute_joint_transform(robot, positions, parent_joint_name)
+            )
+        end
+
+      Map.put(transforms, link_name, transform)
+    end)
   end
 end
