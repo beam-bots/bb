@@ -1,0 +1,142 @@
+# SPDX-FileCopyrightText: 2026 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Test Third-Party
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    name: Discover third-party packages
+    runs-on: ubuntu-latest
+    if: github.repository == 'beam-bots/bb'
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+      siblings: ${{ steps.discover.outputs.siblings }}
+    steps:
+      - name: Check out bb
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - id: discover
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORG: beam-bots
+        run: |
+          set -euo pipefail
+          # Hand-curated third-party packages built on bb. Indicative only, so
+          # an empty/missing list just yields an empty matrix and skips testing.
+          external_file=".github/external-subprojects.yml"
+          matrix='{"project":[]}'
+          if [ -f "${external_file}" ]; then
+            projects=$(yq -o=json '.repositories // []' "${external_file}" \
+              | jq -c '[.[] | {name: (split("/") | last), repository: .}]')
+            matrix=$(jq -c -n --argjson p "${projects}" '{project: $p}')
+          fi
+
+          # Sibling beam-bots packages with a top-level mix.exs, cloned
+          # alongside so a third-party package's bb-family deps resolve under
+          # BB_VERSION=local (e.g. a consumer of bb_liveview, or bb_so101 ->
+          # feetech).
+          candidates=$(gh api -X GET "/orgs/${ORG}/repos" --paginate \
+            --jq '[.[]
+              | select(.archived == false)
+              | select(.name != "bb")
+              | select(.name != "bb_workspace")
+              | .name]')
+          siblings_array="[]"
+          for name in $(jq -r '.[]' <<<"${candidates}"); do
+            if gh api "/repos/${ORG}/${name}/contents/mix.exs" --silent >/dev/null 2>&1; then
+              siblings_array=$(jq --arg n "${name}" '. + [$n]' <<<"${siblings_array}")
+            else
+              echo "skip ${name} (no top-level mix.exs)"
+            fi
+          done
+          siblings=$(jq -c '.' <<<"${siblings_array}")
+
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          echo "siblings=${siblings}" >> "$GITHUB_OUTPUT"
+          echo "Siblings: ${siblings}"
+          echo "Matrix:   ${matrix}"
+
+  test-third-party:
+    name: ${{ matrix.project.name }}
+    needs: discover
+    runs-on: ubuntu-latest
+    if: needs.discover.outputs.matrix != '{"project":[]}'
+    # Third-party packages are indicative, not required: surface the result but
+    # never fail bb's CI on it.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    env:
+      BB_VERSION: local
+    steps:
+      - name: Check out bb at this ref
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: bb
+
+      - name: Check out ${{ matrix.project.name }}
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ matrix.project.repository }}
+          path: ${{ matrix.project.name }}
+
+      - name: Check out sibling bb_* packages
+        # `BB_VERSION=local` resolves every bb-family dep to `../<package>`, so
+        # any sibling the third-party package depends on needs to be checked out
+        # alongside.
+        env:
+          SIBLINGS: ${{ needs.discover.outputs.siblings }}
+          TARGET: ${{ matrix.project.name }}
+        run: |
+          set -euo pipefail
+          for name in $(jq -r '.[]' <<<"${SIBLINGS}"); do
+            if [ "${name}" = "${TARGET}" ]; then
+              continue
+            fi
+            git clone --depth 1 "https://github.com/beam-bots/${name}.git" "${name}"
+          done
+
+      - id: beam
+        uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
+        with:
+          version-file: bb/.tool-versions
+          version-type: strict
+
+      - name: Cache deps
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ${{ matrix.project.name }}/deps
+          key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-deps-${{ hashFiles(format('{0}/mix.lock', matrix.project.name)) }}
+          restore-keys: |
+            ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-deps-
+
+      - name: Cache _build (compiled deps + PLT)
+        # Dialyxir's PLT lives in _build/<env>/, so this also caches the PLT
+        # across runs. Bust the cache when bb's mix.lock changes, since that
+        # reshuffles which bb transitive deps end up in _build.
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ${{ matrix.project.name }}/_build
+          key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-${{ hashFiles(format('{0}/mix.lock', matrix.project.name), 'bb/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-
+
+      - name: mix deps.get
+        working-directory: ${{ matrix.project.name }}
+        run: mix deps.get
+
+      - name: mix check --no-retry
+        working-directory: ${{ matrix.project.name }}
+        run: mix check --no-retry
