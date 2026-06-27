@@ -108,7 +108,7 @@ jobs:
           version-type: strict
 
       - name: Cache deps
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ matrix.project.name }}/deps
           key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-deps-${{ hashFiles(format('{0}/mix.lock', matrix.project.name)) }}
@@ -119,7 +119,7 @@ jobs:
         # Dialyxir's PLT lives in _build/<env>/, so this also caches the PLT
         # across runs. Bust the cache when bb's mix.lock changes, since that
         # reshuffles which bb transitive deps end up in _build.
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ matrix.project.name }}/_build
           key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-${{ hashFiles(format('{0}/mix.lock', matrix.project.name), 'bb/mix.lock') }}
