@@ -283,9 +283,14 @@ defmodule BB.Robot.RuntimeTest do
       :ok = BB.Safety.arm(RobotWithCommands)
 
       {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      ref = Process.monitor(cmd)
       assert_receive {:executing, ^cmd}, 500
 
       assert :ok = Runtime.cancel(RobotWithCommands)
+
+      # Cancellation is a graceful shutdown, not a crash, so the process exits
+      # with `{:shutdown, :cancelled}` (which OTP does not log as an error report).
+      assert_receive {:DOWN, ^ref, :process, ^cmd, {:shutdown, :cancelled}}, 500
 
       # Task returns cancelled error
       assert {:error, :cancelled} = BB.Command.await(cmd)

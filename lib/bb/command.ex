@@ -307,12 +307,14 @@ defmodule BB.Command do
   @doc """
   Cancel a running command.
 
-  Stops the command server with `:cancelled` reason. Awaiting callers will
-  receive `{:error, :cancelled}` (depending on how `result/1` handles this).
+  Stops the command server with a `{:shutdown, :cancelled}` reason. This is a
+  graceful stop (no crash report), while still being distinguishable from a
+  normal completion. The command's `terminate/2` still runs, so awaiting callers
+  receive whatever `result/1` returns.
   """
   @spec cancel(pid()) :: :ok
   def cancel(pid) do
-    GenServer.stop(pid, :cancelled)
+    GenServer.stop(pid, {:shutdown, :cancelled})
   catch
     :exit, {:noproc, _} -> :ok
   end
@@ -383,7 +385,7 @@ defmodule BB.Command do
 
       @impl BB.Command
       def handle_safety_state_change(_new_state, state) do
-        {:stop, :disarmed, state}
+        {:stop, {:shutdown, :disarmed}, state}
       end
 
       @impl BB.Command
