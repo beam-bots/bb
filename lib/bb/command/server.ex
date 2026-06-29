@@ -243,7 +243,7 @@ defmodule BB.Command.Server do
   end
 
   def handle_info(:command_timeout, state) do
-    {:stop, :timeout, state}
+    {:stop, {:shutdown, :timeout}, state}
   end
 
   def handle_info(msg, state) do
