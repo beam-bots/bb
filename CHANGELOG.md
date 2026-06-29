@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.22.1](https://github.com/beam-bots/bb/compare/v0.22.0...v0.22.1) (2026-06-29)
+
+
+
+
+### Bug Fixes:
+
+* stop commands gracefully so cancellation isn't logged as a crash (#167) by James Harton
+
 ## [0.22.0](https://github.com/beam-bots/bb/compare/v0.21.0...0.22.0) (2026-06-26)
 
 
