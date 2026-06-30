@@ -7,6 +7,6 @@
     {:credo, "mix credo --strict"},
     {:spark_formatter, "mix spark.formatter --check"},
     {:spark_cheat_sheets, "mix spark.cheat_sheets --check"},
-    {:reuse, command: ["pipx", "run", "reuse", "lint", "-q"]}
+    {:reuse, command: ["pipx", "run", "--spec", "reuse[charset-normalizer]", "reuse", "lint", "-q"]}
   ]
 ]
