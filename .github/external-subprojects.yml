@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 James Harton
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Third-party packages built on bb. The "Test Third-Party" workflow checks each
+# of these against the bb ref under test for signal, but they are allowed to
+# fail without blocking bb's CI — they are indicative, not required.
+#
+# Each entry is an "owner/repo" slug. A package only picks up the local bb
+# checkout if its mix.exs honours the BB_VERSION convention; otherwise it is
+# tested against whatever bb it resolves from hex.
+repositories:
+  - mcass19/bb_tui
+  - lostbean/bb_mcuhub
