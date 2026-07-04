@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   CI:
-    uses: beam-bots/.github/.github/workflows/elixir-ci.yml@67c95e4e30643859fd8085fe508b86714f479837 # main
+    uses: beam-bots/.github/.github/workflows/elixir-ci.yml@181288c6b2a1320584e4409e2c7273b7f4859571 # main
     with:
       enable-spark-formatter: true
       enable-spark-cheat-sheets: true
