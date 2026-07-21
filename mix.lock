@@ -45,6 +45,7 @@
   "statistex": {:hex, :statistex, "1.1.1", "73612aa7f79e53c30569be065fd121e380f1cf57bc4c2da5b41be9246da18df9", [:mix], [], "hexpm", "310c4b49b34adf683de3103639006bed233ab54c08a4add65a531448e653857c"},
   "telemetry": {:hex, :telemetry, "1.4.2", "a0cb522801dffb1c49fe6e30561badffc7b6d0e180db1300df759faa22062855", [:rebar3], [], "hexpm", "928f6495066506077862c0d1646609eed891a4326bee3126ba54b60af61febb1"},
   "text_diff": {:hex, :text_diff, "0.1.0", "1caf3175e11a53a9a139bc9339bd607c47b9e376b073d4571c031913317fecaa", [:mix], [], "hexpm", "d1ffaaecab338e49357b6daa82e435f877e0649041ace7755583a0ea3362dbd7"},
+  "usage_rules": {:hex, :usage_rules, "1.2.6", "a7b3f8d6e5d265701139d5714749c37c54bb82230a4c51ec54a12a1e4769b9d1", [:mix], [{:igniter, ">= 0.6.6 and < 1.0.0-0", [hex: :igniter, repo: "hexpm", optional: false]}, {:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: false]}, {:req, "~> 0.5", [hex: :req, repo: "hexpm", optional: false]}], "hexpm", "608411b9876a16a9d62a427dbaf42faf458e4cd0a508b3bd7e5ee71502073582"},
   "yamerl": {:hex, :yamerl, "0.10.0", "4ff81fee2f1f6a46f1700c0d880b24d193ddb74bd14ef42cb0bcf46e81ef2f8e", [:rebar3], [], "hexpm", "346adb2963f1051dc837a2364e4acf6eb7d80097c0f53cbdc3046ec8ec4b4e6e"},
   "yaml_elixir": {:hex, :yaml_elixir, "2.12.0", "30343ff5018637a64b1b7de1ed2a3ca03bc641410c1f311a4dbdc1ffbbf449c7", [:mix], [{:yamerl, "~> 0.10", [hex: :yamerl, repo: "hexpm", optional: false]}], "hexpm", "ca6bacae7bac917a7155dca0ab6149088aa7bc800c94d0fe18c5238f53b313c6"},
 }
