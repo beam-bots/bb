@@ -197,3 +197,25 @@ When adding a new payload, pick the convention that matches its shape rather tha
 ## Proposals
 
 Feature proposals for new packages are tracked in the [proposals repository](https://github.com/beam-bots/proposals). Check there for planned features and their design documents.
+
+## Licensing headers
+
+Every source file must carry an SPDX header — a `#`-style comment for code, an
+HTML comment for Markdown, or a `<file>.license` sidecar for files that can't
+hold comments (binaries, JSON, lockfiles). `mix check` runs `reuse lint` and
+fails the build if one is missing.
+
+When you create a new file, its `SPDX-FileCopyrightText` line must credit **the
+user you are working for** — not you (the agent), and not this repo's original
+author. Take their name from `git config user.name` (add their `user.email` if
+you include one) and use the current year. Match the neighbouring files'
+`SPDX-License-Identifier` (usually `Apache-2.0`):
+
+```
+SPDX-FileCopyrightText: <current year> <your user's name>
+
+SPDX-License-Identifier: Apache-2.0
+```
+
+Never copy an existing file's copyright line onto a new file — that credits the
+wrong person. When you only edit an existing file, leave its headers unchanged.
