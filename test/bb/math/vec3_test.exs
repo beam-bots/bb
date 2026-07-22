@@ -8,6 +8,23 @@ defmodule BB.Math.Vec3Test do
 
   @tolerance 1.0e-6
 
+  describe "Inspect" do
+    test "uses constructor syntax for concrete vectors" do
+      assert inspect(Vec3.new(1, 2, 3)) == "BB.Math.Vec3.new(1.0, 2.0, 3.0)"
+    end
+
+    test "respects the inspection limit" do
+      assert inspect(Vec3.new(1, 2, 3), limit: 2) == "BB.Math.Vec3.new(1.0, 2.0, ...)"
+    end
+
+    test "falls back to typed tensor inspection for templates" do
+      inspected = inspect(%Vec3{tensor: Nx.template({3}, :f64)})
+
+      assert inspected =~ "#BB.Math.Vec3<#Nx.Tensor<"
+      assert inspected =~ "Nx.TemplateBackend"
+    end
+  end
+
   describe "new/3" do
     test "creates vector from components" do
       v = Vec3.new(1, 2, 3)

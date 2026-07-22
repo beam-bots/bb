@@ -10,6 +10,25 @@ defmodule BB.Math.QuaternionTest do
   @pi :math.pi()
   @tolerance 1.0e-6
 
+  describe "Inspect" do
+    test "uses WXYZ constructor syntax for concrete quaternions" do
+      assert inspect(Quaternion.identity()) ==
+               "BB.Math.Quaternion.new(1.0, 0.0, 0.0, 0.0)"
+    end
+
+    test "respects the inspection limit" do
+      assert inspect(Quaternion.identity(), limit: 2) ==
+               "BB.Math.Quaternion.new(1.0, 0.0, ...)"
+    end
+
+    test "falls back to typed tensor inspection for templates" do
+      inspected = inspect(%Quaternion{tensor: Nx.template({4}, :f64)})
+
+      assert inspected =~ "#BB.Math.Quaternion<#Nx.Tensor<"
+      assert inspected =~ "Nx.TemplateBackend"
+    end
+  end
+
   describe "new/4" do
     test "creates a normalised quaternion" do
       q = Quaternion.new(2, 0, 0, 0)
