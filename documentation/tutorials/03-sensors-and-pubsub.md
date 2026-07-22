@@ -199,7 +199,8 @@ Start it with `MySensorSubscriber.start_link(MyRobot.Robot)`. If a process subsc
 
 ## Message Structure
 
-Messages have a standard envelope structure:
+Messages have a standard envelope structure. An IMU message's semantic values
+can be represented as:
 
 ```elixir
 %BB.Message{
@@ -208,24 +209,9 @@ Messages have a standard envelope structure:
   node: :nonode@nohost,
   frame_id: :imu,
   payload: %BB.Message.Sensor.Imu{
-    orientation: %BB.Math.Quaternion{
-      tensor: #Nx.Tensor<
-        f64[4]
-        [1.0, 0.0, 0.0, 0.0]
-      >
-    },
-    angular_velocity: %BB.Math.Vec3{
-      tensor: #Nx.Tensor<
-        f64[3]
-        [0.0, 0.0, 0.0]
-      >
-    },
-    linear_acceleration: %BB.Math.Vec3{
-      tensor: #Nx.Tensor<
-        f64[3]
-        [0.0, 0.0, 9.81]
-      >
-    },
+    orientation: BB.Math.Quaternion.identity(),
+    angular_velocity: BB.Math.Vec3.zero(),
+    linear_acceleration: BB.Math.Vec3.new(0.0, 0.0, 9.81),
     orientation_covariance: nil,
     angular_velocity_covariance: nil,
     linear_acceleration_covariance: nil
