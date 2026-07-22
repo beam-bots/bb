@@ -11,6 +11,9 @@ defmodule BB.Math.Vec3 do
 
   ## Examples
 
+      iex> BB.Math.Vec3.new(1, 2, 3)
+      BB.Math.Vec3.new(1.0, 2.0, 3.0)
+
       iex> v = BB.Math.Vec3.new(1, 2, 3)
       iex> BB.Math.Vec3.x(v)
       1.0
@@ -25,6 +28,33 @@ defmodule BB.Math.Vec3 do
   defstruct [:tensor]
 
   @type t :: %__MODULE__{tensor: Nx.Tensor.t()}
+
+  defimpl Inspect do
+    import Inspect.Algebra
+
+    @spec inspect(@for.t(), Inspect.Opts.t()) :: Inspect.Algebra.t()
+    def inspect(%@for{tensor: %Nx.Tensor{data: %Nx.BinaryBackend{}} = tensor}, opts) do
+      case Nx.shape(tensor) do
+        {3} ->
+          container_doc(
+            "BB.Math.Vec3.new(",
+            Nx.to_flat_list(tensor),
+            ")",
+            opts,
+            &to_doc/2
+          )
+
+        _ ->
+          fallback(tensor, opts)
+      end
+    end
+
+    def inspect(%@for{tensor: tensor}, opts), do: fallback(tensor, opts)
+
+    defp fallback(tensor, opts) do
+      concat(["#BB.Math.Vec3<", to_doc(tensor, opts), ">"])
+    end
+  end
 
   @doc """
   Creates a new vector from x, y, z components.

@@ -14,6 +14,9 @@ defmodule BB.Math.Quaternion do
 
   ## Examples
 
+      iex> BB.Math.Quaternion.new(1, 0, 0, 0)
+      BB.Math.Quaternion.new(1.0, 0.0, 0.0, 0.0)
+
       iex> q = BB.Math.Quaternion.identity()
       iex> BB.Math.Quaternion.w(q)
       1.0
@@ -31,6 +34,33 @@ defmodule BB.Math.Quaternion do
   defstruct [:tensor]
 
   @type t :: %__MODULE__{tensor: Nx.Tensor.t()}
+
+  defimpl Inspect do
+    import Inspect.Algebra
+
+    @spec inspect(@for.t(), Inspect.Opts.t()) :: Inspect.Algebra.t()
+    def inspect(%@for{tensor: %Nx.Tensor{data: %Nx.BinaryBackend{}} = tensor}, opts) do
+      case Nx.shape(tensor) do
+        {4} ->
+          container_doc(
+            "BB.Math.Quaternion.new(",
+            Nx.to_flat_list(tensor),
+            ")",
+            opts,
+            &to_doc/2
+          )
+
+        _ ->
+          fallback(tensor, opts)
+      end
+    end
+
+    def inspect(%@for{tensor: tensor}, opts), do: fallback(tensor, opts)
+
+    defp fallback(tensor, opts) do
+      concat(["#BB.Math.Quaternion<", to_doc(tensor, opts), ">"])
+    end
+  end
 
   @doc """
   Creates a new quaternion from w, x, y, z components.
