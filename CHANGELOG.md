@@ -11,6 +11,17 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.22.2](https://github.com/beam-bots/bb/compare/v0.22.1...v0.22.2) (2026-07-24)
+
+
+
+
+### Improvements:
+
+* add semantic math inspection (#191) by James Harton
+
+* add `test-third-party` CI workflow for external bb consumers (#163) by James Harton
+
 ## [v0.22.1](https://github.com/beam-bots/bb/compare/v0.22.0...v0.22.1) (2026-06-29)
 
 
