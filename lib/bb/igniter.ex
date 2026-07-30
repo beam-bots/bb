@@ -106,20 +106,31 @@ if Code.ensure_loaded?(Igniter) do
     a leaf (rather than the whole opts list) lets independent installers each
     contribute their own defaults without clobbering one another.
 
+    Pass `config_file: "runtime.exs"` to write runtime configuration instead.
+    Values may be `{:code, ast}` for expressions that must be evaluated from the
+    generated configuration file.
+
     The robot's child spec in the application module is rewritten to
     `{<robot_module>, Application.get_env(<app>, <robot_module>, [])}`. If the
     existing child opts are already a non-literal expression — e.g. a
     `robot_opts()` helper call inserted by a composing installer — they're left
     untouched so that switch logic is preserved.
     """
-    @spec set_robot_param_default(Igniter.t(), module(), [atom(), ...], term()) :: Igniter.t()
-    def set_robot_param_default(igniter, robot_module, param_path, value)
+    @spec set_robot_param_default(
+            Igniter.t(),
+            module(),
+            [atom(), ...],
+            term(),
+            Keyword.t()
+          ) :: Igniter.t()
+    def set_robot_param_default(igniter, robot_module, param_path, value, opts \\ [])
         when is_list(param_path) and param_path != [] do
       app_name = Igniter.Project.Application.app_name(igniter)
+      config_file = Keyword.get(opts, :config_file, "config.exs")
 
       igniter
       |> Config.configure(
-        "config.exs",
+        config_file,
         app_name,
         [robot_module, :params | param_path],
         value
