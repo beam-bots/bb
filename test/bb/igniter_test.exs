@@ -104,13 +104,29 @@ defmodule BB.IgniterTest do
     end
   end
 
-  describe "set_robot_param_default/4" do
+  describe "set_robot_param_default" do
     test "writes the default as a config leaf under the robot module" do
       project_with_robot()
       |> BB.Igniter.set_robot_param_default(Test.Robot, [:config, :widget, :speed], 100)
       |> assert_creates("config/config.exs", """
       import Config
       config :test, Test.Robot, params: [config: [widget: [speed: 100]]]
+      """)
+    end
+
+    test "writes runtime code to a custom config file" do
+      device = Sourceror.parse_string!(~s|System.get_env("WIDGET_DEVICE", "/dev/widget0")|)
+
+      project_with_robot()
+      |> BB.Igniter.set_robot_param_default(
+        Test.Robot,
+        [:config, :widget, :device],
+        {:code, device},
+        config_file: "runtime.exs"
+      )
+      |> assert_has_patch("config/runtime.exs", """
+      + |config :test, Test.Robot,
+      + |  params: [config: [widget: [device: System.get_env("WIDGET_DEVICE", "/dev/widget0")]]]
       """)
     end
 
