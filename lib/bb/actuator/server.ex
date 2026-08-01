@@ -128,7 +128,14 @@ defmodule BB.Actuator.Server do
         # Asked after validation, because a driver may derive its accepted
         # payloads from its own options. The same list gates every transport,
         # so narrowing holds for cast and call too, not just the published path.
-        command_payloads = callback_module.command_payloads(resolved_opts)
+        #
+        # `Stop` is always admitted, whatever the driver says. It already
+        # bypasses the arm gate because stopping is the fail-safe direction, and
+        # a driver being able to opt out of the stop command isn't a property
+        # this framework should have. A driver that doesn't model stopping can
+        # ignore it in `handle_command/2`, as it would have before.
+        command_payloads =
+          [Command.Stop | callback_module.command_payloads(resolved_opts)] |> Enum.uniq()
 
         BB.PubSub.subscribe(bb.robot, command_topic, message_types: command_payloads)
 

@@ -308,6 +308,12 @@ defmodule BB.Actuator do
   The result is used for both the actuator's pubsub subscription and its
   dispatch guard, so narrowing holds across all three transports rather than
   only the published one.
+
+  `BB.Message.Actuator.Command.Stop` is always admitted regardless of what this
+  returns. It already bypasses the arm gate — stopping is the fail-safe
+  direction — and a driver shouldn't be able to opt out of being stopped. A
+  driver that doesn't model stopping just ignores it in
+  `c:handle_command/2`.
   """
   @callback command_payloads(opts :: keyword()) :: [module()]
 
