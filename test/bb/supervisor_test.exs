@@ -38,6 +38,9 @@ defmodule BB.SupervisorTest do
     end
 
     @impl BB.Actuator
+    def handle_command(_message, state), do: {:noreply, state}
+
+    @impl BB.Actuator
     def handle_call(:get_state, _from, state) do
       {:reply, state, state}
     end

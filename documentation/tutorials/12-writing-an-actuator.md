@@ -53,23 +53,26 @@ This means each attachment can declare its own relationship to the joint indepen
 ### Inbound: joint-space → motor-space → driver
 
 ```
-BB.Actuator.set_position(MyRobot, [:shoulder, :motor], 1.57)
+BB.Actuator.set_position(MyRobot, [:base, :shoulder, :motor], 1.57)
        │
        │  message published to [:actuator | path]
        ▼
-BB.Actuator.Server  ───►  applies transmission via BB.Transmission.apply_to_command
+BB.Actuator.Server  ───►  refuses the command unless the robot is armed
+       │            ───►  applies transmission via BB.Transmission.apply_to_command
        │
        │  driver receives motor-space command in its callback
        ▼
-MyDriver.handle_cast({:command, motor_space_message}, state)
+MyDriver.handle_command(motor_space_message, state)
 ```
+
+`set_position!/4` and `set_position_sync/5` take the same path — the server subscribes to the actuator's command topic itself and funnels all three transports into `handle_command/2`. Your driver never learns which one was used, and choosing one can't skip the checks.
 
 By the time a `Command.Position`, `Command.Velocity`, `Command.Effort`, or `Command.Trajectory` arrives in your driver's callback, every numeric value is already in motor-space. Your driver does no joint-to-motor maths.
 
 ### Outbound: driver-space (motor) → BB.Actuator → joint-space subscribers
 
 ```
-MyDriver.handle_cast(…, state)
+MyDriver.handle_command(…, state)
        │
        │  builds opts in motor-space, calls
        ▼
@@ -141,13 +144,11 @@ defmodule MyDriver do
   end
 
   @impl BB.Actuator
-  def handle_cast({:command, %Message{payload: %Command.Position{} = cmd}}, state) do
-    if BB.Safety.armed?(state.bb.robot) do
-      do_set_position(cmd, state)
-    else
-      {:noreply, state}
-    end
+  def handle_command(%Message{payload: %Command.Position{} = cmd}, state) do
+    do_set_position(cmd, state)
   end
+
+  def handle_command(%Message{}, state), do: {:noreply, state}
 
   defp do_set_position(cmd, state) do
     target = clamp(cmd.position, state.motor_profile)
@@ -182,6 +183,8 @@ Notice what isn't in there:
 - No call to `BB.Robot.get_joint/2`. The wrapper already looked up the joint.
 - No reference to `BB.Transmission`. The wrapper already applied it on the way in, and `publish_begin_motion/3` applies it on the way out.
 - No code special-casing `reverse?` or asymmetric joint centres. Both are properties of the transmission, which the wrapper handles.
+- No `BB.Safety.armed?/1` check. The wrapper refuses commands to a disarmed robot before they reach you, so a driver can't forget to.
+- No `BB.subscribe/2`. The wrapper owns the actuator's command topic. Subscribe only to topics of your own — those arrive at `handle_info/2` untouched.
 
 ## Validating the motor profile
 

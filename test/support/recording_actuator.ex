@@ -11,10 +11,25 @@ defmodule BB.Test.RecordingActuator do
       :persistent_term.put({BB.Test.RecordingActuator, MyRobot}, self())
 
   The actuator looks up the recipient at init and sends
-  `{:received, kind, message}` for each incoming command. `kind` is one of
-  `:info`, `:cast`, or `:call`.
+  `{:received, :command, message}` for each command, whichever transport
+  delivered it - a driver can't tell, and shouldn't need to.
+
+  It deliberately does not subscribe to its own command topic: the framework
+  owns that subscription, and a double that subscribed for itself would pass
+  the tests whether or not the framework did its job.
+
+  Pass `subscribe_to:` to have it subscribe to some other topic. Messages
+  arriving there are forwarded as `{:received, :info, message}`, which is how
+  the tests check that the server leaves a driver's own subscriptions alone.
   """
-  use BB.Actuator, options_schema: []
+  use BB.Actuator,
+    options_schema: [
+      subscribe_to: [
+        type: {:list, :atom},
+        required: false,
+        doc: "An additional pubsub topic for the actuator to subscribe to itself"
+      ]
+    ]
 
   @impl BB.Actuator
   def disarm(_opts), do: :ok
@@ -23,8 +38,19 @@ defmodule BB.Test.RecordingActuator do
   def init(opts) do
     bb = Keyword.fetch!(opts, :bb)
     recipient = :persistent_term.get({__MODULE__, bb.robot}, nil)
-    BB.subscribe(bb.robot, [:actuator | bb.path])
+
+    case Keyword.get(opts, :subscribe_to) do
+      nil -> :ok
+      topic -> BB.subscribe(bb.robot, topic)
+    end
+
     {:ok, %{recipient: recipient}}
+  end
+
+  @impl BB.Actuator
+  def handle_command(%BB.Message{} = message, state) do
+    forward(state.recipient, :command, message)
+    {:noreply, state}
   end
 
   @impl BB.Actuator
@@ -34,18 +60,6 @@ defmodule BB.Test.RecordingActuator do
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
-
-  @impl BB.Actuator
-  def handle_cast({:command, %BB.Message{} = message}, state) do
-    forward(state.recipient, :cast, message)
-    {:noreply, state}
-  end
-
-  @impl BB.Actuator
-  def handle_call({:command, %BB.Message{} = message}, _from, state) do
-    forward(state.recipient, :call, message)
-    {:reply, {:ok, :accepted}, state}
-  end
 
   defp forward(nil, _kind, _message), do: :ok
   defp forward(pid, kind, message), do: send(pid, {:received, kind, message})

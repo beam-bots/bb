@@ -17,19 +17,7 @@ defmodule BB.Test.MockActuator do
   end
 
   @impl BB.Actuator
-  def handle_cast({:command, _message}, state) do
-    {:noreply, state}
-  end
-
-  @impl BB.Actuator
-  def handle_call({:command, _message}, _from, state) do
-    {:reply, {:ok, :accepted}, state}
-  end
-
-  @impl BB.Actuator
-  def handle_info({:bb, _path, _message}, state) do
-    {:noreply, state}
-  end
+  def handle_command(_message, state), do: {:noreply, state}
 end
 
 # Aliases for various test module names
@@ -46,6 +34,9 @@ defmodule ServoMotor do
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
+
+  @impl BB.Actuator
+  def handle_command(_message, state), do: {:noreply, state}
 end
 
 defmodule MainMotor do
@@ -57,6 +48,9 @@ defmodule MainMotor do
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
+
+  @impl BB.Actuator
+  def handle_command(_message, state), do: {:noreply, state}
 end
 
 defmodule BrakeActuator do
@@ -68,6 +62,9 @@ defmodule BrakeActuator do
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
+
+  @impl BB.Actuator
+  def handle_command(_message, state), do: {:noreply, state}
 end
 
 defmodule ShoulderMotor do
@@ -79,6 +76,9 @@ defmodule ShoulderMotor do
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
+
+  @impl BB.Actuator
+  def handle_command(_message, state), do: {:noreply, state}
 end
 
 defmodule ElbowMotor do
@@ -90,6 +90,9 @@ defmodule ElbowMotor do
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
+
+  @impl BB.Actuator
+  def handle_command(_message, state), do: {:noreply, state}
 end
 
 defmodule MyMotor do
@@ -101,6 +104,9 @@ defmodule MyMotor do
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
+
+  @impl BB.Actuator
+  def handle_command(_message, state), do: {:noreply, state}
 end
 
 defmodule TestActuator do
@@ -116,4 +122,7 @@ defmodule TestActuator do
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
+
+  @impl BB.Actuator
+  def handle_command(_message, state), do: {:noreply, state}
 end

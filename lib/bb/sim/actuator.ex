@@ -9,7 +9,7 @@ defmodule BB.Sim.Actuator do
   This actuator is automatically used in place of real actuators when the robot
   is started with `simulation: :kinematic`. It:
 
-  - Receives position commands via pubsub, cast, and call
+  - Receives position commands from any transport via `handle_command/2`
   - Calculates motion timing from the motor profile's velocity and
     acceleration limits
   - Publishes `BeginMotion` messages (in joint-space, via
@@ -77,40 +77,11 @@ defmodule BB.Sim.Actuator do
   end
 
   @impl BB.Actuator
-  def handle_info({:bb, _path, %Message{payload: %Command.Position{} = cmd}}, state) do
+  def handle_command(%Message{payload: %Command.Position{} = cmd}, state) do
     {:noreply, do_set_position(cmd.position, cmd.command_id, state)}
   end
 
-  def handle_info({:bb, _path, %Message{payload: %Command.Stop{}}}, state) do
-    {:noreply, state}
-  end
-
-  def handle_info({:bb, _path, %Message{payload: %Command.Hold{}}}, state) do
-    {:noreply, state}
-  end
-
-  def handle_info({:bb, _path, _message}, state) do
-    {:noreply, state}
-  end
-
-  @impl BB.Actuator
-  def handle_cast({:command, %Message{payload: %Command.Position{} = cmd}}, state) do
-    {:noreply, do_set_position(cmd.position, cmd.command_id, state)}
-  end
-
-  def handle_cast({:command, _message}, state) do
-    {:noreply, state}
-  end
-
-  @impl BB.Actuator
-  def handle_call({:command, %Message{payload: %Command.Position{} = cmd}}, _from, state) do
-    new_state = do_set_position(cmd.position, cmd.command_id, state)
-    {:reply, {:ok, :accepted}, new_state}
-  end
-
-  def handle_call({:command, _message}, _from, state) do
-    {:reply, {:ok, :accepted}, state}
-  end
+  def handle_command(%Message{}, state), do: {:noreply, state}
 
   defp do_set_position(target_motor_position, command_id, state) do
     now = System.monotonic_time(:millisecond)

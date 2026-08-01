@@ -25,12 +25,14 @@ defmodule BB.Actuator do
   ### Required Callbacks
 
   - `init/1` - Initialise actuator state from resolved options
+  - `handle_command/2` - Act on an inbound command
   - `disarm/1` - Make hardware safe (called without GenServer state)
 
   ### Optional Callbacks
 
   - `handle_options/2` - React to parameter changes at runtime
-  - `handle_call/3`, `handle_cast/2`, `handle_info/2` - Standard GenServer-style callbacks
+  - `handle_call/3`, `handle_cast/2`, `handle_info/2` - Standard GenServer-style
+    callbacks, for the driver's own traffic
   - `handle_continue/2`, `terminate/2` - Lifecycle callbacks
   - `options_schema/0` - Define accepted configuration options
 
@@ -59,8 +61,8 @@ defmodule BB.Actuator do
         end
 
         @impl BB.Actuator
-        def handle_cast({:command, msg}, state) do
-          # Handle actuator commands
+        def handle_command(%BB.Message{payload: %Command.Position{} = cmd}, state) do
+          MyHardware.write(state.channel, cmd.position)
           {:noreply, state}
         end
       end
@@ -74,6 +76,9 @@ defmodule BB.Actuator do
         def init(opts) do
           {:ok, %{bb: opts[:bb]}}
         end
+
+        @impl BB.Actuator
+        def handle_command(_message, state), do: {:noreply, state}
 
         @impl BB.Actuator
         def disarm(_opts), do: :ok
@@ -107,14 +112,17 @@ defmodule BB.Actuator do
   ### Delivery Methods
 
   - **Pubsub** (`set_position/4`, etc.) - Commands published to `[:actuator | path]`.
-    Enables logging, replay, and multi-subscriber patterns. Actuators receive
-    commands via `handle_info/2`.
+    Enables logging, replay, and multi-subscriber patterns.
 
   - **Direct** (`set_position!/4`, etc.) - Commands sent directly via `BB.Process.cast`.
-    Lower latency for time-critical control. Actuators receive via `handle_cast/2`.
+    Lower latency for time-critical control.
 
   - **Synchronous** (`set_position_sync/5`, etc.) - Commands sent via `BB.Process.call`.
-    Returns acknowledgement or error. Actuators respond via `handle_call/3`.
+    Returns acknowledgement or error.
+
+  All three converge on `c:handle_command/2`. Which transport a caller chose
+  is not something a driver has to know about, and choosing one cannot skip
+  the checks `BB.Actuator.Server` applies on the way in.
 
   ### Examples
 
@@ -148,6 +156,36 @@ defmodule BB.Actuator do
               | :ignore
 
   @doc """
+  Act on an inbound command.
+
+  Called for every command that reaches this actuator, whichever transport
+  delivered it. By the time it arrives, `BB.Actuator.Server` has checked that
+  the robot is armed and translated the payload from joint-space into
+  motor-space, so the values are ready to write to hardware.
+
+  The reply is used only by the synchronous transport (`set_position_sync/5`
+  and friends); it is discarded for pubsub and direct delivery. Returning
+  `{:noreply, state}` replies `{:ok, :accepted}` to a synchronous caller.
+
+      @impl BB.Actuator
+      def handle_command(%BB.Message{payload: %Command.Position{} = cmd}, state) do
+        MyHardware.write(state.channel, cmd.position)
+        {:noreply, state}
+      end
+
+  Commands the driver doesn't implement should fall through to a catch-all
+  clause rather than crashing the actuator - a `Command.Trajectory` sent to a
+  position-only servo is a caller error, not a hardware fault.
+  """
+  @callback handle_command(command :: BB.Message.t(), state :: term()) ::
+              {:reply, reply :: term(), new_state :: term()}
+              | {:reply, reply :: term(), new_state :: term(),
+                 timeout() | :hibernate | {:continue, term()}}
+              | {:noreply, new_state :: term()}
+              | {:noreply, new_state :: term(), timeout() | :hibernate | {:continue, term()}}
+              | {:stop, reason :: term(), new_state :: term()}
+
+  @doc """
   Make the hardware safe.
 
   Called with the opts provided at registration. Must work without GenServer state.
@@ -167,9 +205,10 @@ defmodule BB.Actuator do
               {:ok, new_state :: term()} | {:stop, reason :: term()}
 
   @doc """
-  Handle synchronous calls.
+  Handle synchronous calls other than commands.
 
-  Same semantics as `c:GenServer.handle_call/3`.
+  Same semantics as `c:GenServer.handle_call/3`. Commands arrive at
+  `c:handle_command/2` regardless of transport.
   """
   @callback handle_call(request :: term(), from :: GenServer.from(), state :: term()) ::
               {:reply, reply :: term(), new_state :: term()}
@@ -181,9 +220,10 @@ defmodule BB.Actuator do
               | {:stop, reason :: term(), reply :: term(), new_state :: term()}
 
   @doc """
-  Handle asynchronous casts.
+  Handle asynchronous casts other than commands.
 
-  Same semantics as `c:GenServer.handle_cast/2`.
+  Same semantics as `c:GenServer.handle_cast/2`. Commands arrive at
+  `c:handle_command/2` regardless of transport.
   """
   @callback handle_cast(request :: term(), state :: term()) ::
               {:noreply, new_state :: term()}
@@ -193,7 +233,10 @@ defmodule BB.Actuator do
   @doc """
   Handle all other messages.
 
-  Same semantics as `c:GenServer.handle_info/2`.
+  Same semantics as `c:GenServer.handle_info/2`. Messages from topics the
+  driver subscribed to itself arrive here untouched - the server neither
+  transforms nor intercepts them. Commands addressed to this actuator arrive
+  at `c:handle_command/2` instead.
   """
   @callback handle_info(msg :: term(), state :: term()) ::
               {:noreply, new_state :: term()}

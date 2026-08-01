@@ -55,6 +55,9 @@ defmodule BB.Integration.ChildSpecParamRefTest do
       StateTracker.record({:actuator_handle_options, new_max_effort})
       {:ok, %{state | max_effort: new_max_effort}}
     end
+
+    @impl BB.Actuator
+    def handle_command(_message, state), do: {:noreply, state}
   end
 
   defmodule ParamTrackingSensor do

@@ -11,8 +11,8 @@ first (see `bb:safety-and-commands`) — commands to a disarmed robot are
 ignored.
 
 ```elixir
-# By full path within the topology ([joint, actuator]), value in radians:
-BB.Actuator.set_position(MyRobot.Robot, [:pan_joint, :servo], 0.785)
+# By full path within the topology ([link, joint, actuator]), value in radians:
+BB.Actuator.set_position(MyRobot.Robot, [:base_link, :pan_joint, :servo], 0.785)
 
 # By the actuator's unique name (raises on error):
 BB.Actuator.set_position!(MyRobot.Robot, :servo, 0.785)
@@ -21,9 +21,10 @@ BB.Actuator.set_position!(MyRobot.Robot, :servo, 0.785)
 The DSL takes `~u` sigil values; the runtime command functions take plain
 numbers in SI base units (radians here).
 
-- `set_position/4` takes the **full path** (a list) to the actuator;
-  `set_position!/4` takes just the actuator's unique **name**. `set_velocity`
-  and `set_effort` follow the same pair.
+- `set_position/4` takes the **full path** (a list) to the actuator — every
+  link and joint from the root, not just the joint. `set_position!/4` takes
+  just the actuator's unique **name**. `set_velocity` and `set_effort` follow
+  the same pair.
 - Positions are in **radians**, velocities in rad/s — SI base units, the same
   units the compiled robot struct uses.
 - Use `set_position_sync/5` when you need to wait for acknowledgement rather
@@ -39,19 +40,33 @@ in motor-space — the driver does no joint-to-motor maths.
 
 ## Writing an actuator
 
-`use BB.Actuator`, define `init/1`, the GenServer callbacks, and the
-**required** `disarm/1`. Handle command messages in `handle_cast/2`:
+`use BB.Actuator`, define `init/1`, the **required** `handle_command/2`, and
+the **required** `disarm/1`. Every command arrives at `handle_command/2`
+whichever of the three functions above sent it — a driver can't tell, and
+doesn't need to:
 
 ```elixir
 alias BB.Message.Actuator.Command
 
-def handle_cast({:command, %BB.Message{payload: %Command.Position{} = cmd}}, state) do
+def handle_command(%BB.Message{payload: %Command.Position{} = cmd}, state) do
   drive_hardware(cmd, state)
   {:noreply, state}
 end
 
 def disarm(opts), do: cut_power(opts)   # must work without GenServer state
 ```
+
+Return `{:reply, reply, state}` to answer a `set_position_sync/5` caller;
+`{:noreply, state}` replies `{:ok, :accepted}` for you. The reply is discarded
+for the other two transports.
+
+Don't check `BB.Safety.armed?/1` in a driver — `BB.Actuator.Server` refuses
+commands to a disarmed robot before they reach you. `Command.Stop` is the one
+exception and is always delivered.
+
+`handle_info/2`, `handle_cast/2` and `handle_call/3` remain available for the
+driver's own traffic (bus replies, timers, topics it subscribed to itself).
+Those messages are passed through untouched.
 
 To report position back in joint-space, either let BB publish for you
 (`BB.Actuator.publish_begin_motion/3`) or translate with

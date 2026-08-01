@@ -9,31 +9,63 @@ defmodule BB.Actuator.Server do
   This module manages the lifecycle of user-defined actuator modules, handling:
   - Parameter reference resolution at startup
   - Subscription to parameter changes
+  - Subscription to the actuator's own command topic
   - Delegation of GenServer callbacks to user module
   - Automatic safety registration
 
   User modules implement the `BB.Actuator` behaviour and define callbacks.
   This server wraps them, providing the actual GenServer implementation.
+
+  ## The inbound command pipeline
+
+  Commands reach an actuator by three transports - published to
+  `[:actuator | path]`, cast via `BB.Process.cast/3`, or called via
+  `BB.Process.call/4`. All three converge here and pass through the same
+  checks before the driver sees them:
+
+  1. The robot must be armed. `BB.Message.Actuator.Command.Stop` is exempt,
+     since stopping is the fail-safe direction and a supervisor must be able
+     to stop a joint it didn't arm.
+  2. The payload is translated from joint-space into motor-space using the
+     joint's transmission.
+
+  The driver then receives it in `c:BB.Actuator.handle_command/2`, and its
+  reply is routed back to whichever transport delivered the command. Messages
+  from topics the driver subscribed to itself are not part of this pipeline -
+  they reach `c:BB.Actuator.handle_info/2` untouched.
   """
 
   use GenServer
 
   alias BB.Actuator.MotorProfile
   alias BB.Component.OptionsSchema
+  alias BB.Error.State.NotArmed
   alias BB.Message
+  alias BB.Message.Actuator.Command
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Robot
+  alias BB.Safety
   alias BB.Server.ParamResolution
   alias BB.Transmission
   alias BB.Transmission.Resolver, as: TransmissionResolver
 
   @framework_keys [:bb, :motor_profile]
 
+  @command_payloads [
+    Command.Effort,
+    Command.Hold,
+    Command.Position,
+    Command.Stop,
+    Command.Trajectory,
+    Command.Velocity
+  ]
+
   defstruct [
     :callback_module,
     :resolved_opts,
     :raw_opts,
     :param_subscriptions,
+    :command_topic,
     :transmission,
     :transmission_subscriptions,
     :joint,
@@ -48,6 +80,7 @@ defmodule BB.Actuator.Server do
           resolved_opts: keyword(),
           raw_opts: keyword(),
           param_subscriptions: %{[atom()] => atom()},
+          command_topic: [atom()],
           transmission: Transmission.t() | nil,
           transmission_subscriptions: %{atom() => [atom()]},
           joint: map() | nil,
@@ -56,6 +89,8 @@ defmodule BB.Actuator.Server do
           bb: %{robot: module(), path: [atom()]},
           user_state: term()
         }
+
+  @typep transport :: :call | :cast | :pubsub
 
   @doc false
   def start_link(init_arg) do
@@ -75,6 +110,9 @@ defmodule BB.Actuator.Server do
 
     {param_subscriptions, resolved_opts} =
       ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
+
+    command_topic = [:actuator | bb.path]
+    BB.PubSub.subscribe(bb.robot, command_topic, message_types: @command_payloads)
 
     actuator_name = List.last(bb.path)
     {joint, joint_name} = joint_for_actuator(bb)
@@ -99,6 +137,7 @@ defmodule BB.Actuator.Server do
           resolved_opts: resolved_opts,
           raw_opts: raw_opts,
           param_subscriptions: param_subscriptions,
+          command_topic: command_topic,
           transmission: transmission,
           transmission_subscriptions: transmission_subscriptions,
           joint: joint,
@@ -187,9 +226,12 @@ defmodule BB.Actuator.Server do
     end
   end
 
-  def handle_info({:bb, topic, %Message{} = message}, state) do
-    transformed = Transmission.apply_to_command(message, state.transmission)
-    delegate_handle_info({:bb, topic, transformed}, state)
+  def handle_info(
+        {:bb, topic, %Message{payload: %payload_module{}} = message},
+        %__MODULE__{command_topic: topic} = state
+      )
+      when payload_module in @command_payloads do
+    dispatch_command(message, :pubsub, state)
   end
 
   def handle_info(msg, state), do: delegate_handle_info(msg, state)
@@ -208,9 +250,8 @@ defmodule BB.Actuator.Server do
   end
 
   @impl GenServer
-  def handle_call({:command, %Message{} = message}, from, state) do
-    transformed = Transmission.apply_to_command(message, state.transmission)
-    delegate_handle_call({:command, transformed}, from, state)
+  def handle_call({:command, %Message{} = message}, _from, state) do
+    dispatch_command(message, :call, state)
   end
 
   def handle_call(request, from, state), do: delegate_handle_call(request, from, state)
@@ -239,8 +280,7 @@ defmodule BB.Actuator.Server do
 
   @impl GenServer
   def handle_cast({:command, %Message{} = message}, state) do
-    transformed = Transmission.apply_to_command(message, state.transmission)
-    delegate_handle_cast({:command, transformed}, state)
+    dispatch_command(message, :cast, state)
   end
 
   def handle_cast(request, state), do: delegate_handle_cast(request, state)
@@ -257,6 +297,92 @@ defmodule BB.Actuator.Server do
         {:stop, reason, %{state | user_state: new_user_state}}
     end
   end
+
+  @spec dispatch_command(Message.t(), transport(), t()) :: term()
+  defp dispatch_command(message, transport, state) do
+    case authorise(message, state) do
+      :ok ->
+        message
+        |> Transmission.apply_to_command(state.transmission)
+        |> delegate_handle_command(transport, state)
+
+      {:error, reason, error} ->
+        refuse(message, reason, error, transport, state)
+    end
+  end
+
+  defp authorise(%Message{payload: %Command.Stop{}}, _state), do: :ok
+
+  defp authorise(%Message{payload: %payload_module{}}, state) do
+    if Safety.armed?(state.bb.robot) do
+      :ok
+    else
+      {:error, :disarmed,
+       NotArmed.exception(
+         robot: state.bb.robot,
+         actuator: state.actuator_name,
+         command: payload_module
+       )}
+    end
+  end
+
+  defp refuse(message, reason, error, transport, state) do
+    :telemetry.execute(
+      [:bb, :actuator, :rejected],
+      %{count: 1},
+      %{
+        robot: state.bb.robot,
+        actuator: state.actuator_name,
+        transport: transport,
+        payload_module: message.payload.__struct__,
+        reason: reason
+      }
+    )
+
+    command_reply(transport, {:error, error}, state)
+  end
+
+  defp delegate_handle_command(message, transport, state) do
+    case state.callback_module.handle_command(message, state.user_state) do
+      {:reply, reply, new_user_state} ->
+        command_reply(transport, reply, %{state | user_state: new_user_state})
+
+      {:reply, reply, new_user_state, timeout_or_continue} ->
+        command_reply(
+          transport,
+          reply,
+          %{state | user_state: new_user_state},
+          timeout_or_continue
+        )
+
+      {:noreply, new_user_state} ->
+        command_reply(transport, {:ok, :accepted}, %{state | user_state: new_user_state})
+
+      {:noreply, new_user_state, timeout_or_continue} ->
+        command_reply(
+          transport,
+          {:ok, :accepted},
+          %{state | user_state: new_user_state},
+          timeout_or_continue
+        )
+
+      {:stop, reason, new_user_state} ->
+        {:stop, reason, %{state | user_state: new_user_state}}
+    end
+  end
+
+  # Only the synchronous transport has anywhere to put a reply; the others are
+  # fire-and-forget and the server is answering `handle_cast`/`handle_info`.
+  defp command_reply(transport, reply, state, timeout_or_continue \\ nil)
+  defp command_reply(:call, reply, state, nil), do: {:reply, reply, state}
+
+  defp command_reply(:call, reply, state, timeout_or_continue),
+    do: {:reply, reply, state, timeout_or_continue}
+
+  defp command_reply(_transport, _reply, state, nil), do: {:noreply, state}
+
+  defp command_reply(_transport, _reply, state, timeout_or_continue),
+    do: {:noreply, state, timeout_or_continue}
 
   @impl GenServer
   def handle_continue(continue_arg, state) do
