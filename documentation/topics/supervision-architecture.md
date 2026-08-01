@@ -110,8 +110,15 @@ defmodule MyRobot.Robot do
     # Joint-level processes
     link :base_link do
       joint :shoulder do
-        actuator :servo, {...}
-        sensor :position, {...}
+        type :revolute
+
+        limit effort: ~u(5 newton_meter), velocity: ~u(60 degree_per_second)
+
+        actuator :servo, {BB.Servo.PCA9685.Actuator, channel: 0, controller: :pca9685}
+        sensor :position, {BB.Sensor.OpenLoopPositionEstimator, actuator: :servo}
+
+        link :upper_arm do
+        end
       end
     end
   end

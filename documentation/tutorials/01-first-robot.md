@@ -106,6 +106,9 @@ defmodule MyRobot.Robot do
         axis do
         end
 
+        # Revolute joints must declare their limits — Step 3 covers these.
+        limit effort: ~u(5 newton_meter), velocity: ~u(60 degree_per_second)
+
         link :pan_link do
         end
       end

@@ -5,6 +5,7 @@
 [
   tools: [
     {:credo, "mix credo --strict"},
+    {:verify_docs, "mix bb.verify_docs"},
     {:spark_formatter, "mix spark.formatter --check"},
     {:spark_cheat_sheets, "mix spark.cheat_sheets --check"},
     {:reuse, command: ["pipx", "run", "--spec", "reuse[charset-normalizer]", "reuse", "lint", "-q"]}

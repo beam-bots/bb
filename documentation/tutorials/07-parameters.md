@@ -260,7 +260,9 @@ Controllers, sensors, and actuators can define inline parameters:
 ```elixir
 topology do
   link :base_link do
-    joint :shoulder, type: :revolute do
+    joint :shoulder do
+      type :revolute
+
       controller :position, {MyPIDController, []} do
         param :kp, type: :float, default: 1.0, min: 0.0
         param :ki, type: :float, default: 0.1, min: 0.0
@@ -408,12 +410,26 @@ defmodule TuneableRobot do
     link :base do
       sensor :lidar, MyLidarSensor
 
-      joint :left_wheel, type: :continuous do
-        actuator :motor, MyMotor
+      joint :left_wheel do
+        type :continuous
+
+        limit effort: ~u(5 newton_meter), velocity: ~u(60 degree_per_second)
+
+        actuator :left_motor, MyMotor
+
+        link :left_wheel_link do
+        end
       end
 
-      joint :right_wheel, type: :continuous do
-        actuator :motor, MyMotor
+      joint :right_wheel do
+        type :continuous
+
+        limit effort: ~u(5 newton_meter), velocity: ~u(60 degree_per_second)
+
+        actuator :right_motor, MyMotor
+
+        link :right_wheel_link do
+        end
       end
     end
   end

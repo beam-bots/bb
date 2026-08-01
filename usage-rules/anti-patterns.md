@@ -33,9 +33,18 @@ BB.Safety.arm(MyRobot.Robot)
 ### Don't use bare numbers for physical quantities in the DSL
 
 ```elixir
-limit lower: -1.57, upper: 1.57                        # Bad — ambiguous units
-limit lower: ~u(-90 degree), upper: ~u(90 degree)      # Good
+# Bad — ambiguous units, and no effort/velocity
+limit lower: -1.57, upper: 1.57
+
+# Good
+limit lower: ~u(-90 degree),
+      upper: ~u(90 degree),
+      effort: ~u(5 newton_meter),
+      velocity: ~u(60 degree_per_second)
 ```
+
+`effort` and `velocity` are required on every `limit`; `lower`, `upper` and
+`acceleration` are optional. See `bb:dsl-topology`.
 
 ### Don't hand-roll supervision
 

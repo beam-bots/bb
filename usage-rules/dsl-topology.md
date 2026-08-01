@@ -44,6 +44,24 @@ This is a Spark DSL — every entity is a macro. Follow the house style:
   - `entity <positional>, <options as a keyword list>`
   - `entity <positional> do <options as nested calls> end`
   - `entity do <positional and options as nested calls> end`
+- **Pick one form — you can't combine a keyword list with a block.**
+  `joint :pan, type: :revolute do … end` looks natural and is the most common
+  mistake, but Elixir reads it as `joint/3` and Spark only defines `/1` and
+  `/2`, so it fails with `undefined function joint/3`. Put `type` inside the
+  block instead:
+
+  ```elixir
+  # Bad — keyword options and a block together
+  joint :pan, type: :revolute do
+    limit effort: ~u(5 newton_meter), velocity: ~u(60 degree_per_second)
+  end
+
+  # Good
+  joint :pan do
+    type :revolute
+    limit effort: ~u(5 newton_meter), velocity: ~u(60 degree_per_second)
+  end
+  ```
 - **Prefer the keyword-list form** unless the entity contains *nested DSL* that
   needs a `do`/`end` block. So `limit lower: ~u(...), upper: ~u(...)` (plain
   options), but `link`/`joint` take a block because they nest other entities.
@@ -61,9 +79,13 @@ This is a Spark DSL — every entity is a macro. Follow the house style:
   `roll`/`pitch`/`yaw`, e.g. `axis roll: ~u(90 degree)`.
 - **Attach components as `{Module, opts}`** in an actuator/sensor slot:
   `actuator :servo, {MyDriver, servo_id: 1}`. A bare `Module` works when it
-  needs no options. Names must be unique across the whole robot — BB registers
-  each process under its name. Add a `do`/`end` block only to nest further DSL
-  such as `transmission`.
+  needs no options. Add a `do`/`end` block only to nest further DSL such as
+  `transmission`.
+- **Names must be unique across the whole robot**, and the namespace is shared
+  by *every* component kind — BB registers each process under its name. Two
+  joints can't both hold an `actuator :servo`, and a `controller :feetech`
+  rules out a `bridge :feetech`. Name them for what they are:
+  `:shoulder_servo`, `:elbow_servo`, `:feetech_params`.
 - **Per-attachment `transmission`** describes how *that* actuator/sensor maps
   joint-space to its hardware (`reversed?`, `offset`, gearing). It belongs on
   the attachment, not the joint, because several devices can share one joint.
