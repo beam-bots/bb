@@ -42,12 +42,12 @@ defmodule BB.Message.Actuator.Command.Effort do
         doc: "Target effort (Nm or N)"
       ],
       duration: [
-        type: :pos_integer,
+        type: {:or, [nil, :pos_integer]},
         required: false,
         doc: "Duration (milliseconds), nil = until stopped"
       ],
       command_id: [
-        type: :reference,
+        type: {:or, [nil, :reference]},
         required: false,
         doc: "Correlation ID for feedback"
       ]

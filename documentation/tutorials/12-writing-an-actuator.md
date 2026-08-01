@@ -178,6 +178,36 @@ defmodule MyDriver do
 end
 ```
 
+## Stopping
+
+The skeleton above handles `Command.Position` and nothing else, which is fine
+for the commands a driver chooses not to model — with one exception.
+
+`Command.Stop` is a *motion* command: cease travelling and become passive. It's
+the counterpart to `Command.Hold`, which maintains position and actively resists
+external force. Its `:decelerate` mode makes the distinction plain — nothing
+that slows down smoothly is an emergency stop.
+
+Making hardware safe is `disarm/1`, which is robot-wide, runs without GenServer
+state, and leaves the robot unable to move until re-armed. Don't reach for
+`Stop` to do that job.
+
+The default `command_payloads/1` includes `Stop`, so unless you narrow it away
+your driver will receive it — and should act on it rather than let a catch-all
+swallow it:
+
+```elixir
+@impl BB.Actuator
+def handle_command(%Message{payload: %Command.Stop{}}, state) do
+  MyHardware.cut_drive(state.channel)
+  {:noreply, state}
+end
+```
+
+What "stop" means is hardware-specific — cutting the drive signal, commanding
+the present position as the new goal. What it must not be is a silent no-op,
+because then a stop reports success while the joint keeps moving.
+
 Notice what isn't in there:
 
 - No call to `BB.Robot.get_joint/2`. The wrapper already looked up the joint.

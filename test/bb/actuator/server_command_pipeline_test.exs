@@ -162,13 +162,16 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       refute_receive {:received, :command, _message}, 200
     end
 
-    test "Stop commands are exempt from the arm gate" do
+    test "Stop is refused while disarmed, like every other command" do
+      # Stop means "cease travelling and go passive", not "make the hardware
+      # safe" — that's `disarm`. A disarmed actuator isn't being driven, so
+      # there's nothing for it to do, and no reason to exempt it from the gate.
       :ok = BB.cast(DisarmedRobot, :motor, {:command, Message.new!(Command.Stop, :motor, [])})
 
-      assert_receive {:received, :command, %Message{payload: %Command.Stop{}}}, 500
+      refute_receive {:received, :command, _message}, 200
     end
 
-    test "Hold commands are not exempt from the arm gate" do
+    test "Hold is refused while disarmed too" do
       :ok = BB.cast(DisarmedRobot, :motor, {:command, Message.new!(Command.Hold, :motor, [])})
 
       refute_receive {:received, :command, _message}, 200
