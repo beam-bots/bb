@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.24.0](https://github.com/beam-bots/bb/compare/v0.23.0...v0.24.0) (2026-08-01)
+
+
+
+
+### Features:
+
+* address actuators by name or by full path (#205) by James Harton
+
 ## [v0.23.0](https://github.com/beam-bots/bb/compare/v0.22.3...v0.23.0) (2026-08-01)
 ### Breaking Changes:
 
