@@ -67,8 +67,23 @@ Return `{:reply, reply, state}` to answer a `set_position_sync/5` caller;
 for the other two transports.
 
 Don't check `BB.Safety.armed?/1` in a driver — `BB.Actuator.Server` refuses
-commands to a disarmed robot before they reach you. `Command.Stop` is the one
-exception and is always delivered.
+commands to a disarmed robot before they reach you.
+
+**`Command.Stop` is the exception, and you must handle it.** It bypasses the arm
+check and can't be excluded by `command_payloads/1`, because stopping is the
+fail-safe direction. That guarantee is worthless if your driver drops it, so
+give it its own clause rather than letting a catch-all swallow it:
+
+```elixir
+def handle_command(%BB.Message{payload: %Command.Stop{}}, state) do
+  cut_drive(state)
+  {:noreply, state}
+end
+```
+
+`Stop` is not `disarm/1`: disarm is robot-wide, runs without GenServer state,
+and leaves the robot unable to move until re-armed. `Stop` targets one actuator
+and leaves the robot armed.
 
 `handle_info/2`, `handle_cast/2` and `handle_call/3` remain available for the
 driver's own traffic (bus replies, timers, topics it subscribed to itself).

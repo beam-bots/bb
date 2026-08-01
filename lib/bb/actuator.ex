@@ -188,6 +188,29 @@ defmodule BB.Actuator do
   Commands the driver doesn't implement should fall through to a catch-all
   clause rather than crashing the actuator - a `Command.Trajectory` sent to a
   position-only servo is a caller error, not a hardware fault.
+
+  > #### Always handle `Command.Stop` {: .warning}
+  >
+  > `BB.Message.Actuator.Command.Stop` is the one command that always reaches
+  > you. It bypasses the arm gate, and `c:command_payloads/1` cannot exclude it,
+  > because stopping is the fail-safe direction: a safety supervisor has to be
+  > able to stop a joint it neither owns nor armed.
+  >
+  > That guarantee is only worth anything if your driver acts on it. A catch-all
+  > clause that quietly returns `{:noreply, state}` will swallow it, and the
+  > stop will look like it succeeded while the hardware keeps driving. Give it
+  > its own clause and make the hardware safe:
+  >
+  > ```elixir
+  > def handle_command(%BB.Message{payload: %Command.Stop{}}, state) do
+  >   MyHardware.cut_drive(state.channel)
+  >   {:noreply, state}
+  > end
+  > ```
+  >
+  > `Stop` differs from `c:disarm/1`: disarm is robot-wide, runs without
+  > GenServer state, and ends with the robot unable to move until re-armed.
+  > `Stop` targets one actuator and leaves the robot armed and commandable.
   """
   @callback handle_command(command :: BB.Message.t(), state :: term()) ::
               {:reply, reply :: term(), new_state :: term()}
