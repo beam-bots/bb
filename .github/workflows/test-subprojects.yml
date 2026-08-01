@@ -118,11 +118,15 @@ jobs:
       - name: Cache _build (compiled deps + PLT)
         # Dialyxir's PLT lives in _build/<env>/, so this also caches the PLT
         # across runs. Bust the cache when bb's mix.lock changes, since that
-        # reshuffles which bb transitive deps end up in _build.
+        # reshuffles which bb transitive deps end up in _build — and when bb's
+        # own source changes, because the PLT describes bb's modules too.
+        # `BB_VERSION=local` makes bb a path dep, so its source moves on every
+        # PR while its mix.lock sits still; without hashing lib/ a stale PLT
+        # reports `call_to_missing` for any function bb has newly exported.
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ matrix.project.name }}/_build
-          key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-${{ hashFiles(format('{0}/mix.lock', matrix.project.name), 'bb/mix.lock') }}
+          key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-${{ hashFiles(format('{0}/mix.lock', matrix.project.name), 'bb/mix.lock', 'bb/lib/**/*.ex') }}
           restore-keys: |
             ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-
 
