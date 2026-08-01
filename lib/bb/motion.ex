@@ -412,7 +412,7 @@ defmodule BB.Motion do
   end
 
   defp send_position_to_actuator(robot_module, robot, actuator_name, position, :pubsub, opts) do
-    path = actuator_path(robot, actuator_name)
+    path = BB.Robot.actuator_path(robot, actuator_name)
     Actuator.set_position(robot_module, path, position, opts)
   end
 
@@ -424,19 +424,6 @@ defmodule BB.Motion do
     case Actuator.set_position_sync(robot_module, actuator_name, position, opts) do
       {:ok, _} -> :ok
       {:error, reason} -> raise "Actuator #{actuator_name} rejected position: #{inspect(reason)}"
-    end
-  end
-
-  defp actuator_path(robot, actuator_name) do
-    case Map.get(robot.actuators, actuator_name) do
-      nil ->
-        [actuator_name]
-
-      %{joint: joint_name} ->
-        case BB.Robot.path_to(robot, joint_name) do
-          nil -> [actuator_name]
-          joint_path -> joint_path ++ [actuator_name]
-        end
     end
   end
 end

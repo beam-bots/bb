@@ -53,9 +53,9 @@ This means each attachment can declare its own relationship to the joint indepen
 ### Inbound: joint-space → motor-space → driver
 
 ```
-BB.Actuator.set_position(MyRobot, [:base, :shoulder, :motor], 1.57)
+BB.Actuator.set_position(MyRobot, :motor, 1.57)
        │
-       │  message published to [:actuator | path]
+       │  name resolved to [:base, :shoulder, :motor], published to [:actuator | path]
        ▼
 BB.Actuator.Server  ───►  refuses the command unless the robot is armed
        │            ───►  applies transmission via BB.Transmission.apply_to_command

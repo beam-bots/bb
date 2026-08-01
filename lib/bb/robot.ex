@@ -133,6 +133,30 @@ defmodule BB.Robot do
   end
 
   @doc """
+  Get the full path from root to an actuator.
+
+  Actuator names are unique per robot, so the path is derivable: an actuator
+  always hangs off a joint, and the joint's own path gives the links and joints
+  above it. The result matches the `:path` the framework injects into the
+  actuator's `:bb` option, and therefore the topic its commands are published
+  to — `[:actuator | actuator_path(robot, name)]`.
+
+  Returns `nil` if no actuator by that name exists.
+
+      BB.Robot.actuator_path(robot, :pan_servo)
+      #=> [:base, :pan, :pan_servo]
+  """
+  @spec actuator_path(t(), atom()) :: [atom()] | nil
+  def actuator_path(%__MODULE__{actuators: actuators} = robot, name) do
+    with %{joint: joint_name} <- Map.get(actuators, name),
+         joint_path when is_list(joint_path) <- path_to(robot, joint_name) do
+      joint_path ++ [name]
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
   Get all links in topological order (root first).
   """
   @spec links_in_order(t()) :: [Link.t()]

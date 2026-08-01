@@ -11,20 +11,26 @@ first (see `bb:safety-and-commands`) — commands to a disarmed robot are
 ignored.
 
 ```elixir
-# By full path within the topology ([link, joint, actuator]), value in radians:
+# By the actuator's unique name, value in radians:
+BB.Actuator.set_position(MyRobot.Robot, :servo, 0.785)
+
+# Or by its full path through the topology ([link, joint, actuator]):
 BB.Actuator.set_position(MyRobot.Robot, [:base_link, :pan_joint, :servo], 0.785)
 
-# By the actuator's unique name (raises on error):
+# Bypassing pubsub, for time-critical control:
 BB.Actuator.set_position!(MyRobot.Robot, :servo, 0.785)
 ```
 
 The DSL takes `~u` sigil values; the runtime command functions take plain
 numbers in SI base units (radians here).
 
-- `set_position/4` takes the **full path** (a list) to the actuator — every
-  link and joint from the root, not just the joint. `set_position!/4` takes
-  just the actuator's unique **name**. `set_velocity` and `set_effort` follow
-  the same pair.
+- Every function accepts **either** the actuator's unique name or its full
+  path — a name is resolved with `BB.Robot.actuator_path/2`. Naming an
+  actuator the robot doesn't have raises rather than publishing to a topic
+  nothing listens on. A full path must be complete: every link and joint from
+  the root, not just the joint.
+- `set_position/4` publishes via pubsub; `set_position!/4` bypasses it for
+  lower latency. `set_velocity` and `set_effort` follow the same pair.
 - Positions are in **radians**, velocities in rad/s — SI base units, the same
   units the compiled robot struct uses.
 - Use `set_position_sync/5` when you need to wait for acknowledgement rather

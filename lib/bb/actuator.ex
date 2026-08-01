@@ -124,10 +124,22 @@ defmodule BB.Actuator do
   is not something a driver has to know about, and choosing one cannot skip
   the checks `BB.Actuator.Server` applies on the way in.
 
+  ### Addressing
+
+  Every function accepts either the actuator's unique name or its full path
+  through the topology. Names are resolved against the robot with
+  `BB.Robot.actuator_path/2`, so the two are interchangeable:
+
+      BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57)
+      BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :shoulder_servo], 1.57)
+
+  Naming an actuator the robot doesn't have raises `ArgumentError` rather than
+  publishing to a topic nothing is listening on.
+
   ### Examples
 
       # Pubsub delivery (for kinematics/orchestration)
-      BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :servo], 1.57)
+      BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57)
 
       # Direct delivery (for time-critical control)
       BB.Actuator.set_position!(MyRobot, :shoulder_servo, 1.57)
@@ -324,8 +336,15 @@ defmodule BB.Actuator do
   alias BB.Message
   alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Actuator.Command
+  alias BB.Robot
   alias BB.Transmission
   alias BB.Transmission.Resolver, as: TransmissionResolver
+
+  @typedoc """
+  How to address an actuator: its unique name, or its full path through the
+  topology. Every function below accepts either.
+  """
+  @type target :: atom() | [atom()]
 
   # ----------------------------------------------------------------------------
   # Outbound publishing
@@ -405,8 +424,9 @@ defmodule BB.Actuator do
       BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :servo], 1.57)
       BB.Actuator.set_position(MyRobot, [:shoulder, :servo], 1.57, velocity: 0.5)
   """
-  @spec set_position(module(), [atom()], number(), keyword()) :: :ok
-  def set_position(robot, path, position, opts \\ []) do
+  @spec set_position(module(), target(), number(), keyword()) :: :ok
+  def set_position(robot, target, position, opts \\ []) do
+    path = actuator_path!(robot, target)
     message = build_position_message(path, position, opts)
     BB.publish(robot, [:actuator | path], message)
   end
@@ -421,8 +441,9 @@ defmodule BB.Actuator do
 
   Same as `set_position/4`.
   """
-  @spec set_position!(module(), atom(), number(), keyword()) :: :ok
-  def set_position!(robot, actuator_name, position, opts \\ []) do
+  @spec set_position!(module(), target(), number(), keyword()) :: :ok
+  def set_position!(robot, target, position, opts \\ []) do
+    actuator_name = actuator_name!(robot, target)
     message = build_position_message(actuator_name, position, opts)
     BB.cast(robot, actuator_name, {:command, message})
   end
@@ -444,9 +465,10 @@ defmodule BB.Actuator do
   - `{:ok, :accepted, map()}` - Command accepted with additional info
   - `{:error, reason}` - Command rejected
   """
-  @spec set_position_sync(module(), atom(), number(), keyword(), timeout()) ::
+  @spec set_position_sync(module(), target(), number(), keyword(), timeout()) ::
           {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def set_position_sync(robot, actuator_name, position, opts \\ [], timeout \\ 5000) do
+  def set_position_sync(robot, target, position, opts \\ [], timeout \\ 5000) do
+    actuator_name = actuator_name!(robot, target)
     message = build_position_message(actuator_name, position, opts)
     BB.call(robot, actuator_name, {:command, message}, timeout)
   end
@@ -474,8 +496,9 @@ defmodule BB.Actuator do
   - `:duration` - Duration (milliseconds), nil = until stopped
   - `:command_id` - Correlation ID for feedback tracking
   """
-  @spec set_velocity(module(), [atom()], number(), keyword()) :: :ok
-  def set_velocity(robot, path, velocity, opts \\ []) do
+  @spec set_velocity(module(), target(), number(), keyword()) :: :ok
+  def set_velocity(robot, target, velocity, opts \\ []) do
+    path = actuator_path!(robot, target)
     message = build_velocity_message(path, velocity, opts)
     BB.publish(robot, [:actuator | path], message)
   end
@@ -483,8 +506,9 @@ defmodule BB.Actuator do
   @doc """
   Send a velocity command directly to an actuator (bypasses pubsub).
   """
-  @spec set_velocity!(module(), atom(), number(), keyword()) :: :ok
-  def set_velocity!(robot, actuator_name, velocity, opts \\ []) do
+  @spec set_velocity!(module(), target(), number(), keyword()) :: :ok
+  def set_velocity!(robot, target, velocity, opts \\ []) do
+    actuator_name = actuator_name!(robot, target)
     message = build_velocity_message(actuator_name, velocity, opts)
     BB.cast(robot, actuator_name, {:command, message})
   end
@@ -492,9 +516,10 @@ defmodule BB.Actuator do
   @doc """
   Send a velocity command and wait for acknowledgement.
   """
-  @spec set_velocity_sync(module(), atom(), number(), keyword(), timeout()) ::
+  @spec set_velocity_sync(module(), target(), number(), keyword(), timeout()) ::
           {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def set_velocity_sync(robot, actuator_name, velocity, opts \\ [], timeout \\ 5000) do
+  def set_velocity_sync(robot, target, velocity, opts \\ [], timeout \\ 5000) do
+    actuator_name = actuator_name!(robot, target)
     message = build_velocity_message(actuator_name, velocity, opts)
     BB.call(robot, actuator_name, {:command, message}, timeout)
   end
@@ -521,8 +546,9 @@ defmodule BB.Actuator do
   - `:duration` - Duration (milliseconds), nil = until stopped
   - `:command_id` - Correlation ID for feedback tracking
   """
-  @spec set_effort(module(), [atom()], number(), keyword()) :: :ok
-  def set_effort(robot, path, effort, opts \\ []) do
+  @spec set_effort(module(), target(), number(), keyword()) :: :ok
+  def set_effort(robot, target, effort, opts \\ []) do
+    path = actuator_path!(robot, target)
     message = build_effort_message(path, effort, opts)
     BB.publish(robot, [:actuator | path], message)
   end
@@ -530,8 +556,9 @@ defmodule BB.Actuator do
   @doc """
   Send an effort command directly to an actuator (bypasses pubsub).
   """
-  @spec set_effort!(module(), atom(), number(), keyword()) :: :ok
-  def set_effort!(robot, actuator_name, effort, opts \\ []) do
+  @spec set_effort!(module(), target(), number(), keyword()) :: :ok
+  def set_effort!(robot, target, effort, opts \\ []) do
+    actuator_name = actuator_name!(robot, target)
     message = build_effort_message(actuator_name, effort, opts)
     BB.cast(robot, actuator_name, {:command, message})
   end
@@ -539,9 +566,10 @@ defmodule BB.Actuator do
   @doc """
   Send an effort command and wait for acknowledgement.
   """
-  @spec set_effort_sync(module(), atom(), number(), keyword(), timeout()) ::
+  @spec set_effort_sync(module(), target(), number(), keyword(), timeout()) ::
           {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def set_effort_sync(robot, actuator_name, effort, opts \\ [], timeout \\ 5000) do
+  def set_effort_sync(robot, target, effort, opts \\ [], timeout \\ 5000) do
+    actuator_name = actuator_name!(robot, target)
     message = build_effort_message(actuator_name, effort, opts)
     BB.call(robot, actuator_name, {:command, message}, timeout)
   end
@@ -576,8 +604,9 @@ defmodule BB.Actuator do
   - `:repeat` - Number of repetitions: positive integer or `:forever` (default 1)
   - `:command_id` - Correlation ID for feedback tracking
   """
-  @spec follow_trajectory(module(), [atom()], [keyword() | map()], keyword()) :: :ok
-  def follow_trajectory(robot, path, waypoints, opts \\ []) do
+  @spec follow_trajectory(module(), target(), [keyword() | map()], keyword()) :: :ok
+  def follow_trajectory(robot, target, waypoints, opts \\ []) do
+    path = actuator_path!(robot, target)
     message = build_trajectory_message(path, waypoints, opts)
     BB.publish(robot, [:actuator | path], message)
   end
@@ -585,8 +614,9 @@ defmodule BB.Actuator do
   @doc """
   Send a trajectory command directly to an actuator (bypasses pubsub).
   """
-  @spec follow_trajectory!(module(), atom(), [keyword() | map()], keyword()) :: :ok
-  def follow_trajectory!(robot, actuator_name, waypoints, opts \\ []) do
+  @spec follow_trajectory!(module(), target(), [keyword() | map()], keyword()) :: :ok
+  def follow_trajectory!(robot, target, waypoints, opts \\ []) do
+    actuator_name = actuator_name!(robot, target)
     message = build_trajectory_message(actuator_name, waypoints, opts)
     BB.cast(robot, actuator_name, {:command, message})
   end
@@ -594,9 +624,10 @@ defmodule BB.Actuator do
   @doc """
   Send a trajectory command and wait for acknowledgement.
   """
-  @spec follow_trajectory_sync(module(), atom(), [keyword() | map()], keyword(), timeout()) ::
+  @spec follow_trajectory_sync(module(), target(), [keyword() | map()], keyword(), timeout()) ::
           {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def follow_trajectory_sync(robot, actuator_name, waypoints, opts \\ [], timeout \\ 5000) do
+  def follow_trajectory_sync(robot, target, waypoints, opts \\ [], timeout \\ 5000) do
+    actuator_name = actuator_name!(robot, target)
     message = build_trajectory_message(actuator_name, waypoints, opts)
     BB.call(robot, actuator_name, {:command, message}, timeout)
   end
@@ -635,8 +666,9 @@ defmodule BB.Actuator do
   - `:mode` - `:immediate` (default) or `:decelerate`
   - `:command_id` - Correlation ID for feedback tracking
   """
-  @spec stop(module(), [atom()], keyword()) :: :ok
-  def stop(robot, path, opts \\ []) do
+  @spec stop(module(), target(), keyword()) :: :ok
+  def stop(robot, target, opts \\ []) do
+    path = actuator_path!(robot, target)
     message = build_stop_message(path, opts)
     BB.publish(robot, [:actuator | path], message)
   end
@@ -644,8 +676,9 @@ defmodule BB.Actuator do
   @doc """
   Send a stop command directly to an actuator (bypasses pubsub).
   """
-  @spec stop!(module(), atom(), keyword()) :: :ok
-  def stop!(robot, actuator_name, opts \\ []) do
+  @spec stop!(module(), target(), keyword()) :: :ok
+  def stop!(robot, target, opts \\ []) do
+    actuator_name = actuator_name!(robot, target)
     message = build_stop_message(actuator_name, opts)
     BB.cast(robot, actuator_name, {:command, message})
   end
@@ -653,9 +686,10 @@ defmodule BB.Actuator do
   @doc """
   Send a stop command and wait for acknowledgement.
   """
-  @spec stop_sync(module(), atom(), keyword(), timeout()) ::
+  @spec stop_sync(module(), target(), keyword(), timeout()) ::
           {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def stop_sync(robot, actuator_name, opts \\ [], timeout \\ 5000) do
+  def stop_sync(robot, target, opts \\ [], timeout \\ 5000) do
+    actuator_name = actuator_name!(robot, target)
     message = build_stop_message(actuator_name, opts)
     BB.call(robot, actuator_name, {:command, message}, timeout)
   end
@@ -682,8 +716,9 @@ defmodule BB.Actuator do
 
   - `:command_id` - Correlation ID for feedback tracking
   """
-  @spec hold(module(), [atom()], keyword()) :: :ok
-  def hold(robot, path, opts \\ []) do
+  @spec hold(module(), target(), keyword()) :: :ok
+  def hold(robot, target, opts \\ []) do
+    path = actuator_path!(robot, target)
     message = build_hold_message(path, opts)
     BB.publish(robot, [:actuator | path], message)
   end
@@ -691,8 +726,9 @@ defmodule BB.Actuator do
   @doc """
   Send a hold command directly to an actuator (bypasses pubsub).
   """
-  @spec hold!(module(), atom(), keyword()) :: :ok
-  def hold!(robot, actuator_name, opts \\ []) do
+  @spec hold!(module(), target(), keyword()) :: :ok
+  def hold!(robot, target, opts \\ []) do
+    actuator_name = actuator_name!(robot, target)
     message = build_hold_message(actuator_name, opts)
     BB.cast(robot, actuator_name, {:command, message})
   end
@@ -700,9 +736,10 @@ defmodule BB.Actuator do
   @doc """
   Send a hold command and wait for acknowledgement.
   """
-  @spec hold_sync(module(), atom(), keyword(), timeout()) ::
+  @spec hold_sync(module(), target(), keyword(), timeout()) ::
           {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def hold_sync(robot, actuator_name, opts \\ [], timeout \\ 5000) do
+  def hold_sync(robot, target, opts \\ [], timeout \\ 5000) do
+    actuator_name = actuator_name!(robot, target)
     message = build_hold_message(actuator_name, opts)
     BB.call(robot, actuator_name, {:command, message}, timeout)
   end
@@ -711,4 +748,33 @@ defmodule BB.Actuator do
     frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
     Message.new!(Command.Hold, frame_id, command_id: opts[:command_id])
   end
+
+  # ----------------------------------------------------------------------------
+  # Addressing
+  # ----------------------------------------------------------------------------
+
+  # Pubsub delivery needs the actuator's full path, because that is the topic its
+  # server subscribes to. A bare name is resolved against the robot rather than
+  # passed through: `[:actuator | :servo]` is an improper list, which slips past
+  # `BB.publish/3`'s `is_list` guard and then dies inside `Enum.scan/3`.
+  @spec actuator_path!(module(), target()) :: [atom()]
+  defp actuator_path!(_robot, path) when is_list(path), do: path
+
+  defp actuator_path!(robot, name) when is_atom(name) do
+    case Robot.actuator_path(robot.robot(), name) do
+      nil ->
+        raise ArgumentError,
+              "#{inspect(robot)} has no actuator named #{inspect(name)}. " <>
+                "Known actuators: #{inspect(Map.keys(robot.robot().actuators))}"
+
+      path ->
+        path
+    end
+  end
+
+  # Direct and synchronous delivery go through the registry, which is keyed by
+  # the actuator's unique name.
+  @spec actuator_name!(module(), target()) :: atom()
+  defp actuator_name!(_robot, name) when is_atom(name), do: name
+  defp actuator_name!(_robot, path) when is_list(path), do: List.last(path)
 end
