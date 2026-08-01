@@ -85,19 +85,32 @@ defmodule MyRobotFirmware.Robot do
 
   topology do
     link :base do
-      joint :pan, type: :revolute do
-        limit lower: ~u(-90 degree), upper: ~u(90 degree), velocity: ~u(60 degree_per_second)
+      joint :pan do
+        type :revolute
 
-        # Add actuator and sensor for each joint
-        actuator :servo, {BB.Servo.PCA9685.Actuator, channel: 0, controller: :pca9685}
-        sensor :position, {BB.Sensor.OpenLoopPositionEstimator, actuator: :servo}
+        limit lower: ~u(-90 degree), upper: ~u(90 degree),
+              velocity: ~u(60 degree_per_second), effort: ~u(1 newton_meter)
+
+        # Add actuator and sensor for each joint. Names are unique across the
+        # whole robot, so they carry the joint.
+        actuator :pan_servo, {BB.Servo.PCA9685.Actuator, channel: 0, controller: :pca9685}
+        sensor :pan_position, {BB.Sensor.OpenLoopPositionEstimator, actuator: :pan_servo}
+
+        link :pan_link do
+        end
       end
 
-      joint :tilt, type: :revolute do
-        limit lower: ~u(-45 degree), upper: ~u(45 degree), velocity: ~u(60 degree_per_second)
+      joint :tilt do
+        type :revolute
 
-        actuator :servo, {BB.Servo.PCA9685.Actuator, channel: 1, controller: :pca9685}
-        sensor :position, {BB.Sensor.OpenLoopPositionEstimator, actuator: :servo}
+        limit lower: ~u(-45 degree), upper: ~u(45 degree),
+              velocity: ~u(60 degree_per_second), effort: ~u(1 newton_meter)
+
+        actuator :tilt_servo, {BB.Servo.PCA9685.Actuator, channel: 1, controller: :pca9685}
+        sensor :tilt_position, {BB.Sensor.OpenLoopPositionEstimator, actuator: :tilt_servo}
+
+        link :tilt_link do
+        end
       end
     end
   end

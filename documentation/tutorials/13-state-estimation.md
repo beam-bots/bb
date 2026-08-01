@@ -35,7 +35,7 @@ defmodule MyRobot.Robot do
 
   topology do
     link :base_link do
-      sensor :imu, MyImuSensor, bus: "i2c-1", address: 0x68 do
+      sensor :imu, {MyImuSensor, bus: "i2c-1", address: 0x68} do
         estimator :tilt, {TiltSmoother, alpha: 0.95}
       end
     end

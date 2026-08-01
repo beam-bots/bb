@@ -23,10 +23,6 @@ defmodule MyRobot.Robot do
   topology do
     link :base_link do
       sensor :imu, MyImuSensor
-
-      joint :pan_joint do
-        # ... rest of robot
-      end
     end
   end
 end

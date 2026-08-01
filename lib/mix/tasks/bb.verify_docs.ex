@@ -2,22 +2,66 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Extracts every ```elixir block containing `use BB` from the given markdown
-# files and compiles it, so a robot definition in the docs can't silently rot.
-#
-#     mix run verify_docs.exs ../bb_servo_pca9685/documentation/tutorials/*.md
+defmodule Mix.Tasks.Bb.VerifyDocs do
+  @moduledoc """
+  Compiles every robot definition embedded in a set of markdown files.
 
-defmodule DocVerifier do
-  def run(paths) do
+  A documented robot that no longer compiles is worse than no example, and
+  nothing else in the build ever reads the docs — so this reads them.
+
+      mix bb.verify_docs                       # this package's docs
+      mix bb.verify_docs ../bb_servo_pigpio    # somebody else's
+
+  Given directories, every `.md` beneath them is searched. Only fenced
+  `elixir` blocks defining a module with `use BB` are considered, and only the
+  `defmodule … end` spans within them are compiled — a block that also shows
+  calls against the robot won't have those calls executed.
+
+  Examples referencing modules this package doesn't depend on (a servo driver,
+  say) still compile, but Spark can't run its behaviour and options checks over
+  them and says so on stderr. Those examples get the DSL's structural checks
+  only, which is still enough to catch a malformed topology.
+  """
+  @shortdoc "Compile the robot definitions embedded in the documentation"
+
+  use Mix.Task
+
+  @default_paths ["README.md", "documentation", "usage-rules"]
+
+  @impl Mix.Task
+  def run(args) do
+    Mix.Task.run("app.start")
+
+    args
+    |> case do
+      [] -> @default_paths
+      paths -> paths
+    end
+    |> Enum.flat_map(&expand/1)
+    |> verify()
+  end
+
+  defp expand(path) do
+    cond do
+      File.dir?(path) -> path |> Path.join("**/*.md") |> Path.wildcard()
+      File.exists?(path) -> [path]
+      true -> []
+    end
+  end
+
+  defp verify(paths) do
     results = Enum.flat_map(paths, &check_file/1)
     {ok, bad} = Enum.split_with(results, &match?({:ok, _, _}, &1))
 
     Enum.each(bad, fn {:error, path, line, message} ->
-      IO.puts("\nFAIL #{path}:#{line}\n#{message}")
+      Mix.shell().error("\nFAIL #{path}:#{line}\n#{message}")
     end)
 
-    IO.puts("\n#{length(ok)} robot definitions compiled, #{length(bad)} failed")
-    if bad != [], do: System.halt(1)
+    Mix.shell().info("\n#{length(ok)} robot definitions compiled, #{length(bad)} failed")
+
+    if bad != [] do
+      Mix.raise("#{length(bad)} documented robot definition(s) failed to compile")
+    end
   end
 
   defp check_file(path) do
@@ -34,11 +78,17 @@ defmodule DocVerifier do
     |> String.split("\n")
     |> Enum.with_index(1)
     |> Enum.reduce({[], nil, []}, fn
-      {"```elixir", line}, {blocks, nil, _} -> {blocks, line, []}
+      {"```elixir", line}, {blocks, nil, _} ->
+        {blocks, line, []}
+
       {"```", _}, {blocks, start, acc} when is_integer(start) ->
         {[{start, acc |> Enum.reverse() |> Enum.join("\n")} | blocks], nil, []}
-      {text, _}, {blocks, start, acc} when is_integer(start) -> {blocks, start, [text | acc]}
-      _, state -> state
+
+      {text, _}, {blocks, start, acc} when is_integer(start) ->
+        {blocks, start, [text | acc]}
+
+      _, state ->
+        state
     end)
     |> elem(0)
     |> Enum.reverse()
@@ -81,5 +131,3 @@ defmodule DocVerifier do
     end
   end
 end
-
-DocVerifier.run(System.argv())
