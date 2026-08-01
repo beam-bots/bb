@@ -11,6 +11,13 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.23.0](https://github.com/beam-bots/bb/compare/v0.22.3...v0.23.0) (2026-08-01)
+### Breaking Changes:
+
+* unify actuator command delivery behind `handle_command/2` (#204) by James Harton
+
+
+
 ## [v0.22.3](https://github.com/beam-bots/bb/compare/v0.22.2...v0.22.3) (2026-07-30)
 
 
