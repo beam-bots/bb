@@ -40,6 +40,7 @@ defmodule BB.Actuator.Server do
   alias BB.Actuator.MotorProfile
   alias BB.Component.OptionsSchema
   alias BB.Error.State.NotArmed
+  alias BB.Error.State.UnsupportedCommand
   alias BB.Message
   alias BB.Message.Actuator.Command
   alias BB.Parameter.Changed, as: ParameterChanged
@@ -51,21 +52,13 @@ defmodule BB.Actuator.Server do
 
   @framework_keys [:bb, :motor_profile]
 
-  @command_payloads [
-    Command.Effort,
-    Command.Hold,
-    Command.Position,
-    Command.Stop,
-    Command.Trajectory,
-    Command.Velocity
-  ]
-
   defstruct [
     :callback_module,
     :resolved_opts,
     :raw_opts,
     :param_subscriptions,
     :command_topic,
+    :command_payloads,
     :transmission,
     :transmission_subscriptions,
     :joint,
@@ -81,6 +74,7 @@ defmodule BB.Actuator.Server do
           raw_opts: keyword(),
           param_subscriptions: %{[atom()] => atom()},
           command_topic: [atom()],
+          command_payloads: [module()],
           transmission: Transmission.t() | nil,
           transmission_subscriptions: %{atom() => [atom()]},
           joint: map() | nil,
@@ -112,7 +106,6 @@ defmodule BB.Actuator.Server do
       ParamResolution.resolve_and_subscribe(raw_opts, bb.robot)
 
     command_topic = [:actuator | bb.path]
-    BB.PubSub.subscribe(bb.robot, command_topic, message_types: @command_payloads)
 
     actuator_name = List.last(bb.path)
     {joint, joint_name} = joint_for_actuator(bb)
@@ -132,12 +125,20 @@ defmodule BB.Actuator.Server do
         {:stop, error}
 
       {:ok, resolved_opts} ->
+        # Asked after validation, because a driver may derive its accepted
+        # payloads from its own options. The same list gates every transport,
+        # so narrowing holds for cast and call too, not just the published path.
+        command_payloads = callback_module.command_payloads(resolved_opts)
+
+        BB.PubSub.subscribe(bb.robot, command_topic, message_types: command_payloads)
+
         base = %__MODULE__{
           callback_module: callback_module,
           resolved_opts: resolved_opts,
           raw_opts: raw_opts,
           param_subscriptions: param_subscriptions,
           command_topic: command_topic,
+          command_payloads: command_payloads,
           transmission: transmission,
           transmission_subscriptions: transmission_subscriptions,
           joint: joint,
@@ -227,11 +228,14 @@ defmodule BB.Actuator.Server do
   end
 
   def handle_info(
-        {:bb, topic, %Message{payload: %payload_module{}} = message},
+        {:bb, topic, %Message{} = message} = msg,
         %__MODULE__{command_topic: topic} = state
-      )
-      when payload_module in @command_payloads do
-    dispatch_command(message, :pubsub, state)
+      ) do
+    if command?(message, state) do
+      dispatch_command(message, :pubsub, state)
+    else
+      delegate_handle_info(msg, state)
+    end
   end
 
   def handle_info(msg, state), do: delegate_handle_info(msg, state)
@@ -252,6 +256,10 @@ defmodule BB.Actuator.Server do
   @impl GenServer
   def handle_call({:command, %Message{} = message}, _from, state) do
     dispatch_command(message, :call, state)
+  end
+
+  def handle_call({:command, _other}, _from, state) do
+    {:reply, {:error, :not_a_command}, state}
   end
 
   def handle_call(request, from, state), do: delegate_handle_call(request, from, state)
@@ -298,6 +306,12 @@ defmodule BB.Actuator.Server do
     end
   end
 
+  # Only payloads this actuator accepts are commands. Anything else on the topic
+  # is somebody else's traffic and belongs to the driver's `handle_info/2`.
+  @spec command?(Message.t(), t()) :: boolean()
+  defp command?(%Message{payload: %payload_module{}}, state),
+    do: payload_module in state.command_payloads
+
   @spec dispatch_command(Message.t(), transport(), t()) :: term()
   defp dispatch_command(message, transport, state) do
     case authorise(message, state) do
@@ -311,9 +325,23 @@ defmodule BB.Actuator.Server do
     end
   end
 
-  defp authorise(%Message{payload: %Command.Stop{}}, _state), do: :ok
+  defp authorise(%Message{payload: %payload_module{}} = message, state) do
+    if payload_module in state.command_payloads do
+      authorise_armed(message, state)
+    else
+      {:error, :unsupported_command,
+       UnsupportedCommand.exception(
+         robot: state.bb.robot,
+         actuator: state.actuator_name,
+         command: payload_module,
+         supported: state.command_payloads
+       )}
+    end
+  end
 
-  defp authorise(%Message{payload: %payload_module{}}, state) do
+  defp authorise_armed(%Message{payload: %Command.Stop{}}, _state), do: :ok
+
+  defp authorise_armed(%Message{payload: %payload_module{}}, state) do
     if Safety.armed?(state.bb.robot) do
       :ok
     else

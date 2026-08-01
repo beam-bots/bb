@@ -81,7 +81,7 @@ defmodule BB.Message.Actuator.Command.Trajectory do
         doc: "Number of times to repeat (positive integer or :forever)"
       ],
       command_id: [
-        type: :reference,
+        type: {:or, [nil, :reference]},
         required: false,
         doc: "Correlation ID for feedback"
       ]

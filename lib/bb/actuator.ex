@@ -281,7 +281,38 @@ defmodule BB.Actuator do
   """
   @callback options_schema() :: Spark.Options.t()
 
+  @doc """
+  The command payloads this actuator accepts.
+
+  Defaults to `default_command_payloads/0` — the six built-in
+  `BB.Message.Actuator.Command.*` types — which is right for almost every
+  driver. Override it to either end of the range:
+
+  - **Widen it.** A driver whose hardware speaks a command BB doesn't model can
+    name its own payload module here, and it will arrive through the same gated
+    pipeline as any other command. Without that it would have to subscribe to
+    `[:actuator | path]` itself, and those messages reach the driver having
+    skipped the arm check.
+  - **Narrow it.** A port that only ever accepts `Command.Effort` can say so,
+    and the framework refuses everything else before the driver sees it.
+
+  Called once at `init`, with the resolved options, because the answer isn't
+  always known at compile time — it may depend on a port or channel named in
+  the driver's own options.
+
+      @impl BB.Actuator
+      def command_payloads(opts) do
+        [opts |> Keyword.fetch!(:port) |> MyDriver.command_struct()]
+      end
+
+  The result is used for both the actuator's pubsub subscription and its
+  dispatch guard, so narrowing holds across all three transports rather than
+  only the published one.
+  """
+  @callback command_payloads(opts :: keyword()) :: [module()]
+
   @optional_callbacks [
+    command_payloads: 1,
     handle_options: 2,
     handle_call: 3,
     handle_cast: 2,
@@ -289,6 +320,25 @@ defmodule BB.Actuator do
     handle_continue: 2,
     terminate: 2
   ]
+
+  @default_command_payloads [
+    BB.Message.Actuator.Command.Effort,
+    BB.Message.Actuator.Command.Hold,
+    BB.Message.Actuator.Command.Position,
+    BB.Message.Actuator.Command.Stop,
+    BB.Message.Actuator.Command.Trajectory,
+    BB.Message.Actuator.Command.Velocity
+  ]
+
+  @doc """
+  The command payloads an actuator accepts unless it says otherwise.
+
+  These are the payload types `BB.Actuator`'s own API can produce, so they are
+  the set every driver is expected to understand — or at least to ignore
+  gracefully.
+  """
+  @spec default_command_payloads() :: [module()]
+  def default_command_payloads, do: @default_command_payloads
 
   alias BB.Component.OptionsSchema
 
@@ -300,6 +350,9 @@ defmodule BB.Actuator do
       @behaviour BB.Actuator
 
       # Default implementations - all overridable
+      @impl BB.Actuator
+      def command_payloads(_opts), do: BB.Actuator.default_command_payloads()
+
       @impl BB.Actuator
       def handle_options(_new_opts, state), do: {:ok, state}
 
@@ -318,7 +371,8 @@ defmodule BB.Actuator do
       @impl BB.Actuator
       def terminate(_reason, _state), do: :ok
 
-      defoverridable handle_options: 2,
+      defoverridable command_payloads: 1,
+                     handle_options: 2,
                      handle_call: 3,
                      handle_cast: 2,
                      handle_info: 2,
