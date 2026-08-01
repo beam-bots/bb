@@ -94,22 +94,11 @@ defmodule MyServo.Actuator do
   end
 
   @impl BB.Actuator
-  def handle_cast({:command, %Message{payload: %Command.Position{} = cmd}}, state) do
-    if BB.Safety.armed?(state.bb.robot) do
-      do_set_position(cmd, state)
-    else
-      {:noreply, state}
-    end
+  def handle_command(%Message{payload: %Command.Position{} = cmd}, state) do
+    do_set_position(cmd, state)
   end
 
-  @impl BB.Actuator
-  def handle_info({:bb, _path, %Message{payload: %Command.Position{} = cmd}}, state) do
-    if BB.Safety.armed?(state.bb.robot) do
-      do_set_position(cmd, state)
-    else
-      {:noreply, state}
-    end
-  end
+  def handle_command(%Message{}, state), do: {:noreply, state}
 
   defp do_set_position(%Command.Position{} = cmd, state) do
     target = clamp(cmd.position, state.motor_profile)
@@ -328,7 +317,6 @@ defmodule MyServo.ActuatorTest do
   end
 
   test "publishes BeginMotion with motor-space values" do
-    stub(BB.Safety, :armed?, fn _ -> true end)
     stub(MyServo.Hardware, :write, fn _, _ -> :ok end)
 
     expect(BB.Actuator, :publish_begin_motion, fn _robot, _path, opts ->
@@ -345,7 +333,7 @@ defmodule MyServo.ActuatorTest do
 
     {:ok, state} = Actuator.init(opts)
     msg = %Message{payload: %Command.Position{position: 0.5}}
-    Actuator.handle_cast({:command, msg}, state)
+    Actuator.handle_command(msg, state)
   end
 end
 ```

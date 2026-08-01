@@ -29,4 +29,7 @@ defmodule BB.Test.FailingActuator do
 
     {:ok, %{}}
   end
+
+  @impl BB.Actuator
+  def handle_command(_message, state), do: {:noreply, state}
 end
