@@ -189,17 +189,20 @@ defmodule BB.Actuator do
   clause rather than crashing the actuator - a `Command.Trajectory` sent to a
   position-only servo is a caller error, not a hardware fault.
 
-  > #### Always handle `Command.Stop` {: .warning}
+  > #### `Command.Stop` is a motion command, not a safety one {: .info}
   >
-  > `BB.Message.Actuator.Command.Stop` is the one command that always reaches
-  > you. It bypasses the arm gate, and `c:command_payloads/1` cannot exclude it,
-  > because stopping is the fail-safe direction: a safety supervisor has to be
-  > able to stop a joint it neither owns nor armed.
+  > `Stop` means *cease travelling and become passive* — it's the counterpart to
+  > `Command.Hold`, which maintains position and resists external force. Its
+  > `:decelerate` mode makes that plain: nothing that slows down smoothly is an
+  > emergency stop.
   >
-  > That guarantee is only worth anything if your driver acts on it. A catch-all
-  > clause that quietly returns `{:noreply, state}` will swallow it, and the
-  > stop will look like it succeeded while the hardware keeps driving. Give it
-  > its own clause and make the hardware safe:
+  > Making hardware safe is `c:disarm/1`, which is robot-wide, runs without
+  > GenServer state, and leaves the robot unable to move until re-armed. Don't
+  > reach for `Stop` to do that job.
+  >
+  > If you declare `Stop` in `c:command_payloads/1` — and the default does —
+  > give it a clause that genuinely stops driving, rather than letting a
+  > catch-all swallow it and report success while the joint keeps moving:
   >
   > ```elixir
   > def handle_command(%BB.Message{payload: %Command.Stop{}}, state) do
@@ -208,9 +211,6 @@ defmodule BB.Actuator do
   > end
   > ```
   >
-  > `Stop` differs from `c:disarm/1`: disarm is robot-wide, runs without
-  > GenServer state, and ends with the robot unable to move until re-armed.
-  > `Stop` targets one actuator and leaves the robot armed and commandable.
   """
   @callback handle_command(command :: BB.Message.t(), state :: term()) ::
               {:reply, reply :: term(), new_state :: term()}
@@ -332,11 +332,9 @@ defmodule BB.Actuator do
   dispatch guard, so narrowing holds across all three transports rather than
   only the published one.
 
-  `BB.Message.Actuator.Command.Stop` is always admitted regardless of what this
-  returns. It already bypasses the arm gate — stopping is the fail-safe
-  direction — and a driver shouldn't be able to opt out of being stopped. A
-  driver that doesn't model stopping just ignores it in
-  `c:handle_command/2`.
+  Nothing is admitted outside this list, `Stop` included. A driver is never
+  handed a payload it didn't declare, so it can't be crashed by one it has no
+  clause for.
   """
   @callback command_payloads(opts :: keyword()) :: [module()]
 

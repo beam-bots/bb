@@ -69,10 +69,18 @@ for the other two transports.
 Don't check `BB.Safety.armed?/1` in a driver — `BB.Actuator.Server` refuses
 commands to a disarmed robot before they reach you.
 
-**`Command.Stop` is the exception, and you must handle it.** It bypasses the arm
-check and can't be excluded by `command_payloads/1`, because stopping is the
-fail-safe direction. That guarantee is worthless if your driver drops it, so
-give it its own clause rather than letting a catch-all swallow it:
+A command only reaches your driver if you declared it in `command_payloads/1`
+**and** the robot is armed. Nothing is exempt, so a driver can't be handed a
+payload it has no clause for.
+
+`Command.Stop` is a *motion* command — cease travelling and go passive — and the
+counterpart to `Command.Hold`, which maintains position and resists force. Its
+`:decelerate` mode is the giveaway: nothing that slows smoothly is an emergency
+stop. Making hardware safe is `disarm/1`, which is robot-wide and leaves the
+robot unable to move until re-armed.
+
+The default payload list includes `Stop`, so unless you narrow it, give it a
+clause that actually stops driving rather than letting a catch-all swallow it:
 
 ```elixir
 def handle_command(%BB.Message{payload: %Command.Stop{}}, state) do
@@ -80,10 +88,6 @@ def handle_command(%BB.Message{payload: %Command.Stop{}}, state) do
   {:noreply, state}
 end
 ```
-
-`Stop` is not `disarm/1`: disarm is robot-wide, runs without GenServer state,
-and leaves the robot unable to move until re-armed. `Stop` targets one actuator
-and leaves the robot armed.
 
 `handle_info/2`, `handle_cast/2` and `handle_call/3` remain available for the
 driver's own traffic (bus replies, timers, topics it subscribed to itself).

@@ -168,20 +168,16 @@ defmodule BB.Actuator.CommandPayloadsTest do
       assert Exception.message(error) =~ "Command.Effort"
     end
 
-    test "Stop is admitted even though the driver didn't list it" do
+    test "Stop is refused too — nothing is exempt from the declared list" do
+      # Stop is a motion command, not a safety mechanism, so it has no special
+      # standing here. A driver that never declared it can't be handed it.
       :ok = BB.Actuator.stop(Robot, :narrow)
-      assert_receive {:commanded, %Command.Stop{}}, 500
+      refute_receive {:commanded, _}, 200
     end
 
-    test "Stop is admitted on the direct transport too" do
-      :ok = BB.Actuator.stop!(Robot, :narrow)
-      assert_receive {:commanded, %Command.Stop{}}, 500
-    end
-
-    test "Stop still reaches a narrowed actuator while disarmed" do
-      :ok = BB.Safety.disarm(Robot)
-      :ok = BB.Actuator.stop(Robot, :narrow)
-      assert_receive {:commanded, %Command.Stop{}}, 500
+    test "and is refused on the direct transport with a structured error" do
+      assert {:error, %UnsupportedCommand{command: Command.Stop}} =
+               BB.Actuator.stop_sync(Robot, :narrow, [], 500)
     end
 
     test "refusal is observable" do

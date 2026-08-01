@@ -23,10 +23,11 @@ defmodule BB.Actuator.Server do
   `BB.Process.call/4`. All three converge here and pass through the same
   checks before the driver sees them:
 
-  1. The robot must be armed. `BB.Message.Actuator.Command.Stop` is exempt,
-     since stopping is the fail-safe direction and a supervisor must be able
-     to stop a joint it didn't arm.
-  2. The payload is translated from joint-space into motor-space using the
+  1. The actuator must accept the payload — see
+     `c:BB.Actuator.command_payloads/1`. A driver is never handed a command it
+     didn't declare, so it can't be crashed by one it has no clause for.
+  2. The robot must be armed.
+  3. The payload is translated from joint-space into motor-space using the
      joint's transmission.
 
   The driver then receives it in `c:BB.Actuator.handle_command/2`, and its
@@ -42,7 +43,6 @@ defmodule BB.Actuator.Server do
   alias BB.Error.State.NotArmed
   alias BB.Error.State.UnsupportedCommand
   alias BB.Message
-  alias BB.Message.Actuator.Command
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Robot
   alias BB.Safety
@@ -129,13 +129,7 @@ defmodule BB.Actuator.Server do
         # payloads from its own options. The same list gates every transport,
         # so narrowing holds for cast and call too, not just the published path.
         #
-        # `Stop` is always admitted, whatever the driver says. It already
-        # bypasses the arm gate because stopping is the fail-safe direction, and
-        # a driver being able to opt out of the stop command isn't a property
-        # this framework should have. A driver that doesn't model stopping can
-        # ignore it in `handle_command/2`, as it would have before.
-        command_payloads =
-          [Command.Stop | callback_module.command_payloads(resolved_opts)] |> Enum.uniq()
+        command_payloads = callback_module.command_payloads(resolved_opts)
 
         BB.PubSub.subscribe(bb.robot, command_topic, message_types: command_payloads)
 
@@ -345,8 +339,6 @@ defmodule BB.Actuator.Server do
        )}
     end
   end
-
-  defp authorise_armed(%Message{payload: %Command.Stop{}}, _state), do: :ok
 
   defp authorise_armed(%Message{payload: %payload_module{}}, state) do
     if Safety.armed?(state.bb.robot) do
