@@ -206,6 +206,7 @@ defmodule BB.MixProject do
       {:nx, "~> 0.10"},
       {:spark, "~> 2.3"},
       {:splode, "~> 0.2"},
+      {:telemetry, "~> 1.0"},
 
       # dev/test
       {:benchee, "~> 1.5", only: [:dev, :test], runtime: false},
