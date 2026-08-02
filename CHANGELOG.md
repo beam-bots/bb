@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.25.0](https://github.com/beam-bots/bb/compare/v0.24.0...v0.25.0) (2026-08-02)
+
+
+
+
+### Features:
+
+* let an actuator declare the command payloads it accepts (#209) by James Harton
+
 ## [v0.24.0](https://github.com/beam-bots/bb/compare/v0.23.0...v0.24.0) (2026-08-01)
 
 
