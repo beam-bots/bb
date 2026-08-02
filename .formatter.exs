@@ -136,6 +136,6 @@ spark_locals_without_parens = [
   plugins: [Spark.Formatter],
   locals_without_parens: spark_locals_without_parens,
   export: [
-    locals_without_parems: spark_locals_without_parens
+    locals_without_parens: spark_locals_without_parens
   ]
 ]
