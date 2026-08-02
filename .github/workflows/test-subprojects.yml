@@ -118,21 +118,28 @@ jobs:
       - name: Cache _build (compiled deps + PLT)
         # Dialyxir's PLT lives in _build/<env>/, so this also caches the PLT
         # across runs. Bust the cache when bb's mix.lock changes, since that
-        # reshuffles which bb transitive deps end up in _build — and when bb's
-        # own source changes, because the PLT describes bb's modules too.
-        # `BB_VERSION=local` makes bb a path dep, so its source moves on every
-        # PR while its mix.lock sits still; without hashing lib/ a stale PLT
-        # reports `call_to_missing` for any function bb has newly exported.
+        # reshuffles which bb transitive deps end up in _build.
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ matrix.project.name }}/_build
-          key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-${{ hashFiles(format('{0}/mix.lock', matrix.project.name), 'bb/mix.lock', 'bb/lib/**/*.ex') }}
+          key: ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-${{ hashFiles(format('{0}/mix.lock', matrix.project.name), 'bb/mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ matrix.project.name }}-build-
 
       - name: mix deps.get
         working-directory: ${{ matrix.project.name }}
         run: mix deps.get
+
+      - name: Force a PLT re-check
+        # Dialyxir decides a cached PLT is current by hashing the subproject's
+        # mix.lock plus its app list. `BB_VERSION=local` makes bb a path dep, so
+        # bb's source moves on every PR while that lock sits still — the hash
+        # matches, the check is skipped, and dialyzer runs against a PLT that
+        # predates bb's newest exports, reporting `call_to_missing` for them.
+        # Dropping the hash forces the check, which is incremental (seconds)
+        # rather than a full rebuild.
+        working-directory: ${{ matrix.project.name }}
+        run: rm -f _build/*/*.plt.hash
 
       - name: mix check --no-retry
         working-directory: ${{ matrix.project.name }}
