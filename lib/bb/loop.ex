@@ -265,14 +265,28 @@ defmodule BB.Loop do
   @doc """
   Cancel any pending tick.
 
-  Call from `terminate/2`. A no-op on an externally-clocked loop, or one that
-  was never armed.
+  Call from `terminate/2`, and before replacing a running loop with one at a
+  different rate. A no-op on an externally-clocked loop, or one that was never
+  armed.
+
+  If the timer had already fired, the delivered `:tick` is discarded too.
+  Leaving it queued would make the next `arm/1` deliver a tick immediately with
+  a delta of roughly zero - the exact thing this module exists to keep out of a
+  control loop - and would leave a second timer in flight that a later
+  `cancel/1` could not clean up.
   """
   @spec cancel(t()) :: t()
   def cancel(%__MODULE__{tick_ref: nil} = loop), do: loop
 
   def cancel(%__MODULE__{tick_ref: tick_ref} = loop) do
-    Process.cancel_timer(tick_ref)
+    if Process.cancel_timer(tick_ref) == false do
+      receive do
+        @tick_message -> :ok
+      after
+        0 -> :ok
+      end
+    end
+
     %{loop | tick_ref: nil}
   end
 

@@ -281,6 +281,30 @@ defmodule BB.LoopTest do
       assert Loop.cancel(loop) == loop
     end
 
+    test "discards a tick that had already been delivered" do
+      loop = Loop.arm(rate_loop())
+      Process.sleep(3 * @period_ms)
+
+      # The timer has fired and :tick is sitting in the mailbox. Left there, the
+      # next arm/1 would give the loop two independent tick chains.
+      Loop.cancel(loop)
+
+      refute_receive :tick, 50
+    end
+
+    test "a re-armed loop does not tick immediately" do
+      armed = Loop.arm(rate_loop())
+      Process.sleep(3 * @period_ms)
+
+      armed
+      |> Loop.cancel()
+      |> Loop.arm()
+
+      # Without the discard, the stale tick would be waiting already.
+      refute_receive :tick, 2
+      assert_receive :tick, @receive_timeout
+    end
+
     test "is a no-op for an external clock" do
       loop = external_loop()
 
