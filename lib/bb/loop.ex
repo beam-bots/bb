@@ -186,7 +186,7 @@ defmodule BB.Loop do
       BB.Loop.new(bb, clock: :external)
   """
   @spec new(bb(), keyword()) :: t()
-  def new(bb, opts) do
+  def new(%{robot: _, path: _} = bb, opts) do
     clock = Keyword.fetch!(opts, :clock)
 
     %__MODULE__{

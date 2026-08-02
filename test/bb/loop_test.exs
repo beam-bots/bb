@@ -59,6 +59,18 @@ defmodule BB.LoopTest do
       assert_raise FunctionClauseError, fn -> Loop.new(@bb, clock: {:rate, -1}) end
     end
 
+    test "rejects a bb map missing robot or path" do
+      # Caught here rather than on the first tick, where the telemetry metadata
+      # would otherwise be the first thing to notice. Built with Map.delete/2
+      # so the type checker can't narrow it: a real `bb` comes out of
+      # `Keyword.fetch!/2` at runtime, where it can't be checked statically.
+      for key <- [:robot, :path] do
+        bb = Map.delete(@bb, key)
+
+        assert_raise FunctionClauseError, fn -> Loop.new(bb, clock: :external) end
+      end
+    end
+
     test "an external clock has no period" do
       loop = external_loop()
 
