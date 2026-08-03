@@ -11,6 +11,21 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [0.26.0](https://github.com/beam-bots/bb/compare/v0.25.0...0.26.0) (2026-08-03)
+
+
+
+
+### Bug Fixes:
+
+* discard an already-delivered tick in `BB.Loop.cancel/1` (#214) by James Harton
+
+* export `locals_without_parens` from `.formatter.exs` (#211) by James Harton
+
+### Improvements:
+
+* add `BB.Loop` for periodic component timing and health (#212) by James Harton
+
 ## [v0.25.0](https://github.com/beam-bots/bb/compare/v0.24.0...v0.25.0) (2026-08-02)
 
 
