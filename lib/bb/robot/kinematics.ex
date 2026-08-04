@@ -55,14 +55,14 @@ defmodule BB.Robot.Kinematics do
 
       robot = MyRobot.robot()
       {:ok, state} = BB.Robot.State.new(robot)
-      BB.Robot.State.set_joint_position(state, :shoulder, :math.pi() / 4)
+      BB.Robot.State.set_configuration(state, :shoulder, :math.pi() / 4)
 
       transform = BB.Robot.Kinematics.forward_kinematics(robot, state, :forearm)
       pos = BB.Math.Transform.get_translation(transform)
   """
   @spec forward_kinematics(Robot.t(), State.t() | %{atom() => float()}, atom()) :: Transform.t()
   def forward_kinematics(%Robot{} = robot, %State{} = state, target_link) do
-    positions = State.get_all_positions(state)
+    positions = State.get_all_configurations(state)
     forward_kinematics(robot, positions, target_link)
   end
 
@@ -83,7 +83,7 @@ defmodule BB.Robot.Kinematics do
   @spec all_link_transforms(Robot.t(), State.t() | %{atom() => float()}) ::
           %{atom() => Transform.t()}
   def all_link_transforms(%Robot{} = robot, %State{} = state) do
-    positions = State.get_all_positions(state)
+    positions = State.get_all_configurations(state)
     all_link_transforms(robot, positions)
   end
 
@@ -149,7 +149,7 @@ defmodule BB.Robot.Kinematics do
   @spec position_jacobian(Robot.t(), State.t() | %{atom() => float()}, atom(), [atom()]) ::
           Nx.Tensor.t()
   def position_jacobian(%Robot{} = robot, %State{} = state, target_link, joint_names) do
-    positions = State.get_all_positions(state)
+    positions = State.get_all_configurations(state)
     position_jacobian(robot, positions, target_link, joint_names)
   end
 
@@ -174,7 +174,7 @@ defmodule BB.Robot.Kinematics do
   """
   @spec jacobian(Robot.t(), State.t() | %{atom() => float()}, atom(), [atom()]) :: Nx.Tensor.t()
   def jacobian(%Robot{} = robot, %State{} = state, target_link, joint_names) do
-    positions = State.get_all_positions(state)
+    positions = State.get_all_configurations(state)
     jacobian(robot, positions, target_link, joint_names)
   end
 

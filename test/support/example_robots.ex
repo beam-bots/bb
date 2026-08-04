@@ -1059,4 +1059,98 @@ defmodule BB.ExampleRobots do
       end
     end
   end
+
+  defmodule PlanarRover do
+    @moduledoc """
+    A rover whose base moves in the ground plane, plus a revolute mast.
+
+    The `:base` joint is `:planar` with a vertical surface normal, so the chassis
+    has three degrees of freedom — two in-plane translations and yaw. The mast
+    above it is an ordinary revolute joint, which makes this a chain where a
+    multi-DoF joint and a single-DoF joint compose.
+    """
+    use BB
+    import BB.Unit
+
+    settings do
+      name(:planar_rover)
+    end
+
+    topology do
+      link :odom do
+        joint :base do
+          type(:planar)
+
+          axis do
+          end
+
+          link :chassis do
+            joint :mast do
+              type(:revolute)
+
+              origin do
+                z(~u(0.2 meter))
+              end
+
+              axis do
+              end
+
+              limit do
+                effort(~u(10 newton_meter))
+                velocity(~u(90 degree_per_second))
+              end
+
+              link(:sensor_head)
+            end
+          end
+        end
+      end
+    end
+  end
+
+  defmodule FloatingDrone do
+    @moduledoc """
+    An airframe with a fully free base, plus a revolute gimbal.
+
+    The `:base` joint is `:floating`, so the airframe has all six degrees of
+    freedom. The gimbal below it is revolute, and its origin is deliberately
+    offset on two axes so that composing the two does not commute.
+    """
+    use BB
+    import BB.Unit
+
+    settings do
+      name(:floating_drone)
+    end
+
+    topology do
+      link :world do
+        joint :base do
+          type(:floating)
+
+          link :airframe do
+            joint :gimbal do
+              type(:revolute)
+
+              origin do
+                x(~u(0.1 meter))
+                z(~u(-0.05 meter))
+              end
+
+              axis do
+                roll(~u(-90 degree))
+              end
+
+              limit do
+                effort(~u(2 newton_meter))
+                velocity(~u(180 degree_per_second))
+              end
+
+              link(:camera)
+            end
+          end
+        end
+      end
+    end
+  end
 end

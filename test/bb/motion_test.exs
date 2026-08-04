@@ -182,16 +182,16 @@ defmodule BB.MotionTest do
 
       assert meta.reached == true
 
-      assert RobotState.get_joint_position(robot_state, :shoulder_joint) == 0.5
-      assert RobotState.get_joint_position(robot_state, :elbow_joint) == 0.3
+      assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 0.5}
+      assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.3}
     end
 
     test "does not update state on error" do
       robot = MotionTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
 
-      RobotState.set_joint_position(robot_state, :shoulder_joint, 1.0)
-      RobotState.set_joint_position(robot_state, :elbow_joint, 1.0)
+      RobotState.set_configuration(robot_state, :shoulder_joint, 1.0)
+      RobotState.set_configuration(robot_state, :elbow_joint, 1.0)
 
       MockSolver.set_result(
         {:error, MockSolver.unreachable_error(:tip, iterations: 50, residual: 0.5)}
@@ -207,8 +207,8 @@ defmodule BB.MotionTest do
       {:error, %Unreachable{}} =
         Motion.move_to(context, :tip, {10.0, 0.0, 0.0}, solver: MockSolver)
 
-      assert RobotState.get_joint_position(robot_state, :shoulder_joint) == 1.0
-      assert RobotState.get_joint_position(robot_state, :elbow_joint) == 1.0
+      assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 1.0}
+      assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 1.0}
     end
   end
 
@@ -229,8 +229,8 @@ defmodule BB.MotionTest do
       positions = %{shoulder_joint: 0.7, elbow_joint: 0.4}
       :ok = Motion.send_positions(context, positions)
 
-      assert RobotState.get_joint_position(robot_state, :shoulder_joint) == 0.7
-      assert RobotState.get_joint_position(robot_state, :elbow_joint) == 0.4
+      assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 0.7}
+      assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.4}
     end
   end
 

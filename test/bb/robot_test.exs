@@ -6,11 +6,14 @@ defmodule BB.RobotTest do
   use ExUnit.Case, async: true
   import BB.Unit
 
+  alias BB.Error.Invalid.JointConfig
   alias BB.Error.Kinematics.NoParentJoint
   alias BB.Error.Kinematics.NotAnAncestor
   alias BB.Error.Kinematics.UnknownJoint
   alias BB.Error.Kinematics.UnknownLink
+  alias BB.ExampleRobots.DifferentialDriveRobot
   alias BB.Math.Transform
+  alias BB.Math.Transform2D
   alias BB.Math.Vec3
   alias BB.Robot
   alias BB.Robot.{Joint, Kinematics, Link, State, Topology}
@@ -231,7 +234,7 @@ defmodule BB.RobotTest do
     # A single chain can't produce a branch point, so the sibling case needs a
     # topology that actually branches.
     test "path_between/3 names the branch point for two siblings" do
-      robot = BB.ExampleRobots.DifferentialDriveRobot.robot()
+      robot = DifferentialDriveRobot.robot()
 
       assert {:error,
               %NotAnAncestor{
@@ -242,7 +245,7 @@ defmodule BB.RobotTest do
     end
 
     test "path_between/3 descends into one branch without picking up the others" do
-      robot = BB.ExampleRobots.DifferentialDriveRobot.robot()
+      robot = DifferentialDriveRobot.robot()
 
       assert Robot.path_between(robot, :base_link, :right_wheel) ==
                {:ok, [:base_link, :right_wheel_joint, :right_wheel]}
@@ -491,92 +494,90 @@ defmodule BB.RobotTest do
   end
 
   describe "State" do
-    test "new/1 creates state with zero positions" do
-      robot = SimpleArm.robot()
-      {:ok, state} = State.new(robot)
+    # The table is owned by the test process and freed when it exits, so there is
+    # nothing to tear down.
+    setup do
+      {:ok, state} = State.new(SimpleArm.robot())
 
-      assert State.get_joint_position(state, :shoulder) == 0.0
-      assert State.get_joint_position(state, :elbow) == 0.0
-      assert State.get_joint_position(state, :wrist) == 0.0
-
-      State.delete(state)
+      %{state: state}
     end
 
-    test "set_joint_position/3 and get_joint_position/2" do
-      robot = SimpleArm.robot()
-      {:ok, state} = State.new(robot)
-
-      State.set_joint_position(state, :shoulder, 0.5)
-      assert State.get_joint_position(state, :shoulder) == 0.5
-
-      State.delete(state)
+    test "new/1 creates state with zero configurations", %{state: state} do
+      assert State.get_configuration(state, :shoulder) == {:ok, 0.0}
+      assert State.get_configuration(state, :elbow) == {:ok, 0.0}
+      assert State.get_configuration(state, :wrist) == {:ok, 0.0}
     end
 
-    test "set_joint_velocity/3 and get_joint_velocity/2" do
-      robot = SimpleArm.robot()
-      {:ok, state} = State.new(robot)
-
-      State.set_joint_velocity(state, :shoulder, 1.5)
-      assert State.get_joint_velocity(state, :shoulder) == 1.5
-
-      State.delete(state)
+    test "set_configuration/3 and get_configuration/2", %{state: state} do
+      assert :ok = State.set_configuration(state, :shoulder, 0.5)
+      assert State.get_configuration(state, :shoulder) == {:ok, 0.5}
     end
 
-    test "get_all_positions/1 returns all joint positions" do
-      robot = SimpleArm.robot()
-      {:ok, state} = State.new(robot)
-
-      State.set_joint_position(state, :shoulder, 0.1)
-      State.set_joint_position(state, :elbow, 0.2)
-      State.set_joint_position(state, :wrist, 0.3)
-
-      positions = State.get_all_positions(state)
-      assert positions == %{shoulder: 0.1, elbow: 0.2, wrist: 0.3}
-
-      State.delete(state)
+    test "set_velocity/3 and get_velocity/2", %{state: state} do
+      assert :ok = State.set_velocity(state, :shoulder, 1.5)
+      assert State.get_velocity(state, :shoulder) == {:ok, 1.5}
     end
 
-    test "set_positions/2 sets multiple positions at once" do
-      robot = SimpleArm.robot()
-      {:ok, state} = State.new(robot)
-
-      State.set_positions(state, %{shoulder: 0.5, elbow: 1.0})
-
-      assert State.get_joint_position(state, :shoulder) == 0.5
-      assert State.get_joint_position(state, :elbow) == 1.0
-
-      State.delete(state)
+    test "accessors report an unknown joint rather than returning nil", %{state: state} do
+      assert {:error, %UnknownJoint{joint: :nope}} = State.get_configuration(state, :nope)
+      assert {:error, %UnknownJoint{joint: :nope}} = State.get_velocity(state, :nope)
+      assert {:error, %UnknownJoint{joint: :nope}} = State.set_configuration(state, :nope, 0.5)
+      assert {:error, %UnknownJoint{joint: :nope}} = State.set_velocity(state, :nope, 0.5)
     end
 
-    test "reset/1 resets all positions to zero" do
-      robot = SimpleArm.robot()
-      {:ok, state} = State.new(robot)
+    test "get_all_configurations/1 returns every joint", %{state: state} do
+      :ok = State.set_configuration(state, :shoulder, 0.1)
+      :ok = State.set_configuration(state, :elbow, 0.2)
+      :ok = State.set_configuration(state, :wrist, 0.3)
 
-      State.set_joint_position(state, :shoulder, 0.5)
-      State.reset(state)
-
-      assert State.get_joint_position(state, :shoulder) == 0.0
-
-      State.delete(state)
+      assert State.get_all_configurations(state) == %{shoulder: 0.1, elbow: 0.2, wrist: 0.3}
     end
 
-    test "get_chain_positions/2 returns positions along path" do
-      robot = SimpleArm.robot()
-      {:ok, state} = State.new(robot)
+    test "set_configurations/2 sets multiple configurations at once", %{state: state} do
+      assert :ok = State.set_configurations(state, %{shoulder: 0.5, elbow: 1.0})
 
-      State.set_joint_position(state, :shoulder, 0.1)
-      State.set_joint_position(state, :elbow, 0.2)
-      State.set_joint_position(state, :wrist, 0.3)
+      assert State.get_configuration(state, :shoulder) == {:ok, 0.5}
+      assert State.get_configuration(state, :elbow) == {:ok, 1.0}
+    end
 
-      positions = State.get_chain_positions(state, :end_effector)
+    # A bulk write that applied its valid half would leave the robot in a
+    # configuration nobody asked for.
+    test "set_configurations/2 writes nothing when any entry is rejected", %{state: state} do
+      :ok = State.set_configuration(state, :shoulder, 0.5)
 
-      assert positions == [
+      assert {:error, %UnknownJoint{}} =
+               State.set_configurations(state, %{elbow: 1.0, nope: 2.0})
+
+      assert State.get_configuration(state, :shoulder) == {:ok, 0.5}
+      assert State.get_configuration(state, :elbow) == {:ok, 0.0}
+    end
+
+    test "reset/1 resets all configurations to zero", %{state: state} do
+      :ok = State.set_configuration(state, :shoulder, 0.5)
+      :ok = State.reset(state)
+
+      assert State.get_configuration(state, :shoulder) == {:ok, 0.0}
+    end
+
+    test "get_chain_configurations/2 returns configurations along path", %{state: state} do
+      :ok = State.set_configuration(state, :shoulder, 0.1)
+      :ok = State.set_configuration(state, :elbow, 0.2)
+      :ok = State.set_configuration(state, :wrist, 0.3)
+
+      assert State.get_chain_configurations(state, :end_effector) == [
                {:shoulder, 0.1},
                {:elbow, 0.2},
                {:wrist, 0.3}
              ]
+    end
 
-      State.delete(state)
+    test "rejects a value whose shape doesn't match the joint type", %{state: state} do
+      assert {:error,
+              %JointConfig{
+                joint: :shoulder,
+                field: :configuration,
+                expected: :float
+              }} = State.set_configuration(state, :shoulder, Transform2D.new(1.0, 2.0, 0.3))
     end
   end
 
@@ -599,7 +600,7 @@ defmodule BB.RobotTest do
       robot = SimpleArm.robot()
       {:ok, state} = State.new(robot)
 
-      State.set_joint_position(state, :shoulder, :math.pi() / 2)
+      State.set_configuration(state, :shoulder, :math.pi() / 2)
 
       transform = Kinematics.forward_kinematics(robot, state, :upper_arm)
       pos = Transform.get_translation(transform)

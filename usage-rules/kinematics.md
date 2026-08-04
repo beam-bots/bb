@@ -10,25 +10,28 @@ SPDX-License-Identifier: Apache-2.0
 
 `BB.Robot.Kinematics` works on the **compiled `%BB.Robot{}` struct**, not the
 robot module. Get the struct with `MyRobot.Robot.robot()`, and current joint
-positions from the runtime with `BB.Robot.Runtime.positions/1`:
+configurations from the runtime with `BB.Robot.Runtime.configurations/1`:
 
 ```elixir
 robot = MyRobot.Robot.robot()
-positions = BB.Robot.Runtime.positions(MyRobot.Robot)   # %{joint_name => radians}
+configurations = BB.Robot.Runtime.configurations(MyRobot.Robot)
 
 # Cartesian position of a link:
-{x, y, z} = BB.Robot.Kinematics.link_position(robot, positions, :camera_link)
+{x, y, z} = BB.Robot.Kinematics.link_position(robot, configurations, :camera_link)
 
 # Full 4x4 pose (position + orientation):
-transform = BB.Robot.Kinematics.forward_kinematics(robot, positions, :camera_link)
+transform = BB.Robot.Kinematics.forward_kinematics(robot, configurations, :camera_link)
 
 # Every link at once (more efficient than repeated calls):
-transforms = BB.Robot.Kinematics.all_link_transforms(robot, positions)
+transforms = BB.Robot.Kinematics.all_link_transforms(robot, configurations)
 ```
 
-You can also pass an explicit `%{joint => radians}` map instead of the live
-positions to ask "where *would* this link be". Transforms are
-`BB.Math.Transform` 4x4 matrices; angles are radians throughout.
+You can also pass an explicit configuration map instead of the live one to ask
+"where *would* this link be". A single-DoF joint's configuration is a bare float
+— radians for revolute, metres for prismatic — while `:planar` and `:floating`
+joints carry a `BB.Math.Transform2D` and a `BB.Math.Transform` respectively. See
+`BB.Robot.State` for the full table. Transforms are `BB.Math.Transform` 4x4
+matrices; angles are radians throughout.
 
 ## Inverse kinematics — "what joint angles reach this point?"
 

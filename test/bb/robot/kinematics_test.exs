@@ -391,8 +391,8 @@ defmodule BB.Robot.KinematicsTest do
       robot = PlanarArm.robot()
       {:ok, state} = State.new(robot)
 
-      State.set_joint_position(state, :joint1, :math.pi() / 4)
-      State.set_joint_position(state, :joint2, :math.pi() / 6)
+      State.set_configuration(state, :joint1, :math.pi() / 4)
+      State.set_configuration(state, :joint2, :math.pi() / 6)
 
       all_transforms = Kinematics.all_link_transforms(robot, state)
 

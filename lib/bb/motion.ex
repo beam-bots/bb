@@ -135,7 +135,7 @@ defmodule BB.Motion do
       fn ->
         case solver.solve(robot, robot_state, target_link, target, solver_opts) do
           {:ok, positions, meta} ->
-            RobotState.set_positions(robot_state, positions)
+            RobotState.set_configurations(robot_state, positions)
             send_positions_to_actuators(robot_module, robot, positions, delivery)
 
             result = {:ok, meta}
@@ -261,7 +261,7 @@ defmodule BB.Motion do
         {robot_module, robot, robot_state} = extract_context(robot_or_context)
 
         all_positions = merge_all_positions(results)
-        RobotState.set_positions(robot_state, all_positions)
+        RobotState.set_configurations(robot_state, all_positions)
         send_positions_to_actuators(robot_module, robot, all_positions, delivery)
 
         {:ok, results}
@@ -360,7 +360,7 @@ defmodule BB.Motion do
       [:bb, :motion, :send_positions],
       %{robot: robot.name, joint_count: map_size(positions), delivery: delivery},
       fn ->
-        RobotState.set_positions(robot_state, positions)
+        RobotState.set_configurations(robot_state, positions)
         send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
         {:ok, %{}}
       end
