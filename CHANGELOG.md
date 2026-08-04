@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.27.0](https://github.com/beam-bots/bb/compare/v0.26.0...v0.27.0) (2026-08-04)
+
+
+
+
+### Breaking Changes:
+
+* implement multi-DoF (`:planar` and `:floating`) joints (#217)
+
 ## [0.26.0](https://github.com/beam-bots/bb/compare/v0.25.0...0.26.0) (2026-08-03)
 
 
