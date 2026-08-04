@@ -503,7 +503,13 @@ defmodule BB.Dsl do
         %{
           @axis
           | describe: """
-            The joint axis specified in the joint frame. This is the axis of rotation for revolute joints, the axis of translation for prismatic joints, and the surface normal for planar joints. The axis is specified in the joint frame of reference. Fixed and floating joints do not use the axis field
+            The joint axis specified in the joint frame.
+
+            What it means depends on the joint type:
+
+            - `:revolute` and `:continuous` rotate about it; `:prismatic` translates along it. Optional for all three, defaulting to Z.
+            - `:planar` uses it as the **surface normal** of the plane the joint moves in, so it is **required** — an empty `axis` block gives the horizontal plane a ground vehicle wants.
+            - `:fixed` and `:floating` do not use it, and providing one is an error. A floating joint has all six degrees of freedom and no distinguished direction, so there would be nothing for an axis to describe.
             """
         }
       ],
@@ -522,7 +528,13 @@ defmodule BB.Dsl do
       ],
       type: [
         type: {:in, [:revolute, :continuous, :prismatic, :fixed, :floating, :planar]},
-        doc: "Specifies the type of joint"
+        doc: """
+        Specifies the type of joint, which determines its degrees of freedom:
+        `:fixed` has none, `:revolute`, `:continuous` and `:prismatic` have one,
+        `:planar` has three (two in-plane translations and a rotation about the
+        plane normal), and `:floating` has all six. See `BB.Robot.State` for the
+        configuration shape each type carries.
+        """
       ]
     ]
   }

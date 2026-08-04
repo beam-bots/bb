@@ -6,6 +6,8 @@ defmodule BB.Robot.KinematicsTest do
   use ExUnit.Case, async: true
   import BB.Unit
 
+  alias BB.Error.Kinematics.UnknownJoint
+  alias BB.ExampleRobots.DifferentialDriveRobot
   alias BB.ExampleRobots.LinearActuator
   alias BB.ExampleRobots.SixDofArm
   alias BB.Math.Quaternion
@@ -391,8 +393,8 @@ defmodule BB.Robot.KinematicsTest do
       robot = PlanarArm.robot()
       {:ok, state} = State.new(robot)
 
-      State.set_joint_position(state, :joint1, :math.pi() / 4)
-      State.set_joint_position(state, :joint2, :math.pi() / 6)
+      State.set_configuration(state, :joint1, :math.pi() / 4)
+      State.set_configuration(state, :joint2, :math.pi() / 6)
 
       all_transforms = Kinematics.all_link_transforms(robot, state)
 
@@ -500,15 +502,34 @@ defmodule BB.Robot.KinematicsTest do
 
       assert Nx.to_flat_list(picked[[.., 0]]) == Nx.to_flat_list(base[[.., 2]])
       assert Nx.to_flat_list(picked[[.., 1]]) == Nx.to_flat_list(base[[.., 0]])
+    end
 
-      # A joint that does not lie on the chain to the target gets a zero column.
-      with_unrelated =
+    test "a real joint off the chain to the target gets a zero column" do
+      robot = DifferentialDriveRobot.robot()
+
+      configurations = %{left_wheel_joint: 0.3, right_wheel_joint: -0.4}
+
+      jacobian =
+        Kinematics.position_jacobian(robot, configurations, :right_wheel, [
+          :right_wheel_joint,
+          :left_wheel_joint
+        ])
+
+      assert Nx.to_flat_list(jacobian[[.., 1]]) == [0.0, 0.0, 0.0]
+    end
+
+    # Previously a name the robot didn't have quietly produced one zero column,
+    # which hid a typo. It cannot survive per-DoF columns either: there is no way
+    # to know how wide a joint that doesn't exist should be.
+    test "a joint the robot doesn't have is an error, not a zero column" do
+      robot = SixDofArm.robot()
+
+      assert_raise UnknownJoint, ~r/Unknown joint: :not_a_real_joint/, fn ->
         Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, [
           :wrist_3_joint,
           :not_a_real_joint
         ])
-
-      assert Nx.to_flat_list(with_unrelated[[.., 1]]) == [0.0, 0.0, 0.0]
+      end
     end
   end
 
@@ -686,8 +707,9 @@ defmodule BB.Robot.KinematicsTest do
   end
 
   defp reference_chain(robot, positions, target_link) do
-    robot
-    |> BB.Robot.path_to(target_link)
+    {:ok, path} = BB.Robot.path_to(robot, target_link)
+
+    path
     |> Enum.filter(&Map.has_key?(robot.joints, &1))
     |> Enum.reduce(Transform.identity(), fn joint_name, acc ->
       Transform.compose(acc, Kinematics.compute_joint_transform(robot, positions, joint_name))
@@ -698,10 +720,10 @@ defmodule BB.Robot.KinematicsTest do
     Enum.reduce(robot.topology.link_order, %{}, fn link_name, transforms ->
       transform =
         case BB.Robot.get_link(robot, link_name) do
-          %{parent_joint: nil} ->
+          {:ok, %{parent_joint: nil}} ->
             Transform.identity()
 
-          %{parent_joint: parent_joint_name} ->
+          {:ok, %{parent_joint: parent_joint_name}} ->
             parent_link = robot.joints[parent_joint_name].parent_link
 
             Transform.compose(

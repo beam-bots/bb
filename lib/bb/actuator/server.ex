@@ -168,8 +168,10 @@ defmodule BB.Actuator.Server do
     actuator_name = List.last(path)
     robot = robot_module.robot()
 
-    case Map.get(robot.actuators, actuator_name) do
-      %{joint: joint_name} -> {Robot.get_joint(robot, joint_name), joint_name}
+    with %{joint: joint_name} <- Map.get(robot.actuators, actuator_name),
+         {:ok, joint} <- Robot.get_joint(robot, joint_name) do
+      {joint, joint_name}
+    else
       _ -> {nil, nil}
     end
   end

@@ -23,9 +23,9 @@ defmodule BB.Robot.LifecycleTest do
         |> Enum.into(%{})
         |> Map.take([:shoulder, :elbow])
 
-      :ok = RobotState.set_positions(context.robot_state, positions)
+      :ok = RobotState.set_configurations(context.robot_state, positions)
 
-      new_positions = RobotState.get_all_positions(context.robot_state)
+      new_positions = RobotState.get_all_configurations(context.robot_state)
       {:stop, :normal, %{state | result: {:ok, new_positions}}}
     end
 

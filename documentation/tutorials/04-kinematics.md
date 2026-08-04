@@ -48,14 +48,14 @@ Positions are in **radians** for revolute joints and **metres** for prismatic jo
 
 ## Querying a Running Robot
 
-For a running robot, query the Runtime for current joint positions:
+For a running robot, query the Runtime for current joint configurations:
 
 ```elixir
-iex> positions = BB.Robot.Runtime.positions(MyRobot.Robot)
+iex> configurations = BB.Robot.Runtime.configurations(MyRobot.Robot)
 %{pan_joint: 0.0, tilt_joint: 0.0}
 
 iex> robot = MyRobot.Robot.robot()
-iex> {x, y, z} = Kinematics.link_position(robot, positions, :camera_link)
+iex> {x, y, z} = Kinematics.link_position(robot, configurations, :camera_link)
 ```
 
 The Runtime maintains joint positions based on sensor feedback. See [Commands and State Machine](05-commands.md) for how sensors update positions.

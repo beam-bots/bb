@@ -18,12 +18,14 @@ defmodule BB.Command.MoveTo do
   Required:
   - `target` - Target position as `BB.Vec3.t()` in metres
   - `target_link` - Name of the link to move (end-effector)
+  - `source_link` - Name of the link the chain starts at
   - `solver` - Module implementing `BB.IK.Solver` behaviour
 
   ### Multi-Target Mode
 
   Required:
   - `targets` - Map of link names to target positions: `%{link: BB.Vec3.t()}`
+  - `source_link` - Name of the link the chain starts at
   - `solver` - Module implementing `BB.IK.Solver` behaviour
 
   ### Optional (both modes)
@@ -42,6 +44,7 @@ defmodule BB.Command.MoveTo do
       {:ok, cmd} = MyRobot.move_to(%{
         target: Vec3.new(0.3, 0.2, 0.1),
         target_link: :gripper,
+        source_link: :base_link,
         solver: BB.IK.FABRIK
       })
       {:ok, meta} = BB.Command.await(cmd)
@@ -53,6 +56,7 @@ defmodule BB.Command.MoveTo do
           left_foot: Vec3.new(0.1, 0.0, 0.0),
           right_foot: Vec3.new(-0.1, 0.0, 0.0)
         },
+        source_link: :body,
         solver: BB.IK.FABRIK
       })
       {:ok, results} = BB.Command.await(cmd)
@@ -116,8 +120,9 @@ defmodule BB.Command.MoveTo do
   defp handle_single_target(goal, context) do
     with {:ok, target} <- fetch_required(goal, :target),
          {:ok, target_link} <- fetch_required(goal, :target_link),
-         {:ok, solver} <- fetch_required(goal, :solver) do
-      opts = build_opts(goal, solver)
+         {:ok, solver} <- fetch_required(goal, :solver),
+         {:ok, source_link} <- fetch_required(goal, :source_link) do
+      opts = build_opts(goal, source_link, solver)
       target = normalize_target(target)
 
       case Motion.move_to(context, target_link, target, opts) do
@@ -132,8 +137,9 @@ defmodule BB.Command.MoveTo do
 
   defp handle_multi_target(goal, context) do
     with {:ok, targets} <- fetch_required(goal, :targets),
-         {:ok, solver} <- fetch_required(goal, :solver) do
-      opts = build_opts(goal, solver)
+         {:ok, solver} <- fetch_required(goal, :solver),
+         {:ok, source_link} <- fetch_required(goal, :source_link) do
+      opts = build_opts(goal, source_link, solver)
 
       case Motion.move_to_multi(context, targets, opts) do
         {:ok, results} ->
@@ -160,9 +166,10 @@ defmodule BB.Command.MoveTo do
     end
   end
 
-  defp build_opts(goal, solver) do
+  defp build_opts(goal, source_link, solver) do
     [
       solver: solver,
+      source_link: source_link,
       max_iterations: Map.get(goal, :max_iterations),
       tolerance: Map.get(goal, :tolerance),
       respect_limits: Map.get(goal, :respect_limits),

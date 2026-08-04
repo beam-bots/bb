@@ -24,13 +24,43 @@ defmodule BB.Robot.Kinematics.Defn do
   - `axes` — `{n, 3}` per-joint motion axis (unit vector)
   - `is_revolute` — `{n}` `1.0` for revolute/continuous joints, else `0.0`
   - `is_prismatic` — `{n}` `1.0` for prismatic joints, else `0.0`
+  - `stored` — `{n, 4, 4}` per-joint multi-DoF motion, identity for single-DoF joints
+  - `deltas` — `{n, 6}` per-joint local perturbation, always passed as zeros
 
-  The result is the `{4, 4}` base-to-tip homogeneous transform. The per-joint
-  transform reproduces `BB.Math.Transform.from_origin/1` composed with the
-  motion transform: `origin = Rx · Ry · Rz · T(xyz)` and the motion is a
-  Rodrigues rotation about `axis` (revolute) or a translation along `axis`
-  (prismatic). Fixed/floating/planar joints carry both masks at `0.0`, leaving
-  an identity motion.
+  The result is the `{4, 4}` base-to-tip homogeneous transform. Each joint
+  contributes
+
+      origin · scalar_motion(q) · stored · (I + hat(delta))
+
+  where `origin = Rx · Ry · Rz · T(xyz)` reproduces
+  `BB.Math.Transform.from_origin/1`, and `scalar_motion` is a Rodrigues rotation
+  about `axis` (revolute) or a translation along `axis` (prismatic).
+
+  ## Why multi-DoF joints arrive as a matrix and a zero perturbation
+
+  A `:floating` joint's configuration is a `BB.Math.Transform` and a `:planar`
+  joint's is a `BB.Math.Transform2D` lifted into one. Neither can be handed to
+  this kernel as scalars without decomposing the rotation into three angles about
+  three axes — an Euler decomposition, which is lossy, non-unique and
+  gimbal-locked. So the matrix arrives verbatim in `stored`, and forward
+  kinematics is bit-exact.
+
+  The Jacobian still needs a differentiable parameter, which is what `deltas` is.
+  It is **only ever evaluated at zero**, and that makes the first-order factor
+  `I + hat(delta)` exactly right for both jobs:
+
+  - at zero it *is* the identity, so it contributes nothing to forward kinematics;
+  - `exp(delta) = I + hat(delta) + O(delta²)`, so its derivative at zero matches
+    the true exponential's. The dropped terms are never evaluated.
+
+  Differentiating at the identity also means an Euler chart's singularities are
+  never visited, so there is no gimbal lock to regularise — and unlike a genuine
+  `se(3)` exponential there is no `(1 - cos θ)/θ²` to blow up at `theta = 0`.
+
+  A single-DoF joint carries `stored = I` and `delta = 0`, so its motion reduces
+  to the scalar form. A multi-DoF joint carries both masks at `0.0`, so its
+  `scalar_motion` is the identity and its motion reduces to `stored`. One code
+  path serves both.
   """
 
   import Nx.Defn
@@ -40,10 +70,28 @@ defmodule BB.Robot.Kinematics.Defn do
 
   See the module documentation for the tensor layout.
   """
-  defn fk_chain(positions, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic) do
-    origins = build_origins(origin_rpy, origin_xyz)
-    motions = build_motions(positions, axes, is_revolute, is_prismatic)
-    chain_product(batched_matmul(origins, motions))
+  defn fk_chain(
+         positions,
+         origin_rpy,
+         origin_xyz,
+         axes,
+         is_revolute,
+         is_prismatic,
+         stored,
+         deltas
+       ) do
+    chain_product(
+      joint_matrices(
+        positions,
+        origin_rpy,
+        origin_xyz,
+        axes,
+        is_revolute,
+        is_prismatic,
+        stored,
+        deltas
+      )
+    )
   end
 
   @doc """
@@ -63,11 +111,21 @@ defmodule BB.Robot.Kinematics.Defn do
          axes,
          is_revolute,
          is_prismatic,
+         stored,
+         deltas,
          parent_idx
        ) do
-    origins = build_origins(origin_rpy, origin_xyz)
-    motions = build_motions(positions, axes, is_revolute, is_prismatic)
-    joint_mats = batched_matmul(origins, motions)
+    joint_mats =
+      joint_matrices(
+        positions,
+        origin_rpy,
+        origin_xyz,
+        axes,
+        is_revolute,
+        is_prismatic,
+        stored,
+        deltas
+      )
 
     n = Nx.axis_size(joint_mats, 0)
     init = Nx.broadcast(Nx.eye(4, type: :f64), {n, 4, 4})
@@ -82,37 +140,64 @@ defmodule BB.Robot.Kinematics.Defn do
   end
 
   @doc """
-  Position Jacobian of the chain tip with respect to the chain joint positions.
+  Position Jacobian of the chain tip with respect to each single-DoF joint position.
 
-  Computed by differentiating `fk_chain/6`'s tip translation via `grad` — the
+  Computed by differentiating `fk_chain/8`'s tip translation via `grad` — the
   composable-`defn` payoff #147 is after: no finite differences, no extra
-  forward-kinematics evaluations. Inputs follow the `fk_chain/6` layout. Returns
+  forward-kinematics evaluations. Inputs follow the `fk_chain/8` layout. Returns
   `{3, n}`: row = spatial axis (x, y, z), column = chain joint in input order.
+
+  Multi-DoF joints get a zero column here, since their motion does not depend on
+  `positions`. Their columns come from `position_jacobian_deltas/8`.
   """
-  defn position_jacobian(positions, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic) do
-    select_x = Nx.tensor([1.0, 0.0, 0.0, 0.0], type: :f64)
-    select_y = Nx.tensor([0.0, 1.0, 0.0, 0.0], type: :f64)
-    select_z = Nx.tensor([0.0, 0.0, 1.0, 0.0], type: :f64)
+  defn position_jacobian(
+         positions,
+         origin_rpy,
+         origin_xyz,
+         axes,
+         is_revolute,
+         is_prismatic,
+         stored,
+         deltas
+       ) do
+    args = {origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, stored, deltas}
 
-    jx =
-      grad(
-        positions,
-        &tip_coordinate(&1, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, select_x)
-      )
+    Nx.stack([
+      position_gradient(positions, args, select_x()),
+      position_gradient(positions, args, select_y()),
+      position_gradient(positions, args, select_z())
+    ])
+  end
 
-    jy =
-      grad(
-        positions,
-        &tip_coordinate(&1, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, select_y)
-      )
+  @doc """
+  Position Jacobian of the chain tip with respect to each joint's local perturbation.
 
-    jz =
-      grad(
-        positions,
-        &tip_coordinate(&1, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, select_z)
-      )
+  Returns `{3, n, 6}`: row = spatial axis, then chain joint in input order, then
+  the six components of that joint's local perturbation — three translations
+  followed by three rotations, in the frame the joint's motion leaves behind.
 
-    Nx.stack([jx, jy, jz])
+  A single-DoF joint's block is meaningless and is discarded by the caller; only
+  `:planar` and `:floating` joints draw their columns from here, projected onto
+  the degrees of freedom they actually have. See the module documentation for why
+  differentiating at `deltas = 0` is exact.
+  """
+  defn position_jacobian_deltas(
+         positions,
+         origin_rpy,
+         origin_xyz,
+         axes,
+         is_revolute,
+         is_prismatic,
+         stored,
+         deltas
+       ) do
+    args = {origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, stored, positions}
+
+    Nx.stack([
+      delta_gradient(deltas, args, select_x()),
+      delta_gradient(deltas, args, select_y()),
+      delta_gradient(deltas, args, select_z())
+    ])
   end
 
   @doc """
@@ -128,24 +213,119 @@ defmodule BB.Robot.Kinematics.Defn do
   accumulating the transform up to each joint's axis frame; `grad` is not
   involved, so the data-dependent `while` is fine here.
   """
-  defn orientation_jacobian(positions, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic) do
+  defn orientation_jacobian(
+         positions,
+         origin_rpy,
+         origin_xyz,
+         axes,
+         is_revolute,
+         is_prismatic,
+         stored,
+         deltas
+       ) do
+    {axes_in_base, _rotations} =
+      orientation_frames(
+        positions,
+        origin_rpy,
+        origin_xyz,
+        axes,
+        is_revolute,
+        is_prismatic,
+        stored,
+        deltas
+      )
+
+    Nx.transpose(axes_in_base * Nx.new_axis(is_revolute, 1))
+  end
+
+  @doc """
+  Orientation Jacobian of the chain tip with respect to each joint's local perturbation.
+
+  Returns `{3, n, 6}`, matching `position_jacobian_deltas/8`'s layout. A
+  perturbation's three translation components produce no angular velocity, so
+  those blocks are zero; its three rotation components produce the columns of the
+  rotation taking the joint's post-motion frame into the base frame.
+
+  That frame is the right one because the perturbation is applied *after* the
+  joint's origin and stored motion — see the module documentation.
+  """
+  defn orientation_jacobian_deltas(
+         positions,
+         origin_rpy,
+         origin_xyz,
+         axes,
+         is_revolute,
+         is_prismatic,
+         stored,
+         deltas
+       ) do
+    {_axes_in_base, rotations} =
+      orientation_frames(
+        positions,
+        origin_rpy,
+        origin_xyz,
+        axes,
+        is_revolute,
+        is_prismatic,
+        stored,
+        deltas
+      )
+
+    n = Nx.axis_size(rotations, 0)
+    zeros = Nx.broadcast(Nx.tensor(0.0, type: :f64), {n, 3, 3})
+
+    # `rotations` is {n, 3, 3} with the frame's basis vectors as columns, which is
+    # already {spatial, dof} per joint. Concatenating zeros for the translation
+    # half gives {n, 3, 6}, then transposing lifts the spatial axis to the front.
+    Nx.transpose(Nx.concatenate([zeros, rotations], axis: 2), axes: [1, 0, 2])
+  end
+
+  # Walks the chain once, returning both the per-joint rotation axis in the base
+  # frame (for the revolute angular Jacobian) and the rotation of each joint's
+  # post-motion frame (which is the frame a local perturbation acts in). `grad` is
+  # not involved, so the data-dependent `while` is fine here.
+  defnp orientation_frames(
+          positions,
+          origin_rpy,
+          origin_xyz,
+          axes,
+          is_revolute,
+          is_prismatic,
+          stored,
+          deltas
+        ) do
     origins = build_origins(origin_rpy, origin_xyz)
-    motions = build_motions(positions, axes, is_revolute, is_prismatic)
-    joint_mats = batched_matmul(origins, motions)
+
+    joint_mats =
+      joint_matrices(
+        positions,
+        origin_rpy,
+        origin_xyz,
+        axes,
+        is_revolute,
+        is_prismatic,
+        stored,
+        deltas
+      )
 
     n = Nx.axis_size(origins, 0)
 
-    {axes_in_base, _origins, _joint_mats, _axes, _prefix, _i} =
-      while {acc = Nx.broadcast(Nx.tensor(0.0, type: :f64), {n, 3}), og = origins,
+    {axes_in_base, rotations, _og, _jm, _ax, _prefix, _i} =
+      while {acc = Nx.broadcast(Nx.tensor(0.0, type: :f64), {n, 3}),
+             rots = Nx.broadcast(Nx.tensor(0.0, type: :f64), {n, 3, 3}), og = origins,
              jm = joint_mats, ax = axes, prefix = Nx.eye(4, type: :f64), i = 0},
             i < n do
         axis_frame = Nx.dot(prefix, og[i])
         z = Nx.dot(Nx.slice(axis_frame, [0, 0], [3, 3]), ax[i])
 
-        {Nx.put_slice(acc, [i, 0], Nx.new_axis(z, 0)), og, jm, ax, Nx.dot(prefix, jm[i]), i + 1}
+        post = Nx.dot(prefix, jm[i])
+        rotation = Nx.slice(post, [0, 0], [3, 3])
+
+        {Nx.put_slice(acc, [i, 0], Nx.new_axis(z, 0)),
+         Nx.put_slice(rots, [i, 0, 0], Nx.new_axis(rotation, 0)), og, jm, ax, post, i + 1}
       end
 
-    Nx.transpose(axes_in_base * Nx.new_axis(is_revolute, 1))
+    {axes_in_base, rotations}
   end
 
   # The tip translation is `fk · [0, 0, 0, 1]ᵀ` (the homogeneous last column);
@@ -158,12 +338,114 @@ defmodule BB.Robot.Kinematics.Defn do
           axes,
           is_revolute,
           is_prismatic,
+          stored,
+          deltas,
           selector
         ) do
-    fk = fk_chain(positions, origin_rpy, origin_xyz, axes, is_revolute, is_prismatic)
+    fk =
+      fk_chain(
+        positions,
+        origin_rpy,
+        origin_xyz,
+        axes,
+        is_revolute,
+        is_prismatic,
+        stored,
+        deltas
+      )
+
     translation = Nx.dot(fk, Nx.tensor([0.0, 0.0, 0.0, 1.0], type: :f64))
     Nx.dot(translation, selector)
   end
+
+  # `origin · scalar_motion(q) · stored · (I + hat(delta))` per joint.
+  defnp joint_matrices(
+          positions,
+          origin_rpy,
+          origin_xyz,
+          axes,
+          is_revolute,
+          is_prismatic,
+          stored,
+          deltas
+        ) do
+    origins = build_origins(origin_rpy, origin_xyz)
+    motions = build_motions(positions, axes, is_revolute, is_prismatic)
+
+    origins
+    |> batched_matmul(motions)
+    |> batched_matmul(stored)
+    |> batched_matmul(augment(deltas))
+  end
+
+  # `I + hat(delta)`, the first-order rigid motion. Exactly the identity at
+  # `delta = 0`, and its derivative there matches `exp(delta)`'s — which is all
+  # that is asked of it, since `delta` is never evaluated anywhere else.
+  defnp augment(deltas) do
+    vx = deltas[[.., 0]]
+    vy = deltas[[.., 1]]
+    vz = deltas[[.., 2]]
+    wx = deltas[[.., 3]]
+    wy = deltas[[.., 4]]
+    wz = deltas[[.., 5]]
+
+    z = vx * 0.0
+    o = z + 1.0
+
+    Nx.stack(
+      [
+        Nx.stack([o, -wz, wy, vx], axis: 1),
+        Nx.stack([wz, o, -wx, vy], axis: 1),
+        Nx.stack([-wy, wx, o, vz], axis: 1),
+        Nx.stack([z, z, z, o], axis: 1)
+      ],
+      axis: 1
+    )
+  end
+
+  # The three grads are written out rather than mapped: `Enum.map/2` cannot be
+  # called inside `defn`, and the chain length is static at trace time anyway.
+  defnp position_gradient(positions, args, selector) do
+    {origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, stored, deltas} = args
+
+    grad(
+      positions,
+      &tip_coordinate(
+        &1,
+        origin_rpy,
+        origin_xyz,
+        axes,
+        is_revolute,
+        is_prismatic,
+        stored,
+        deltas,
+        selector
+      )
+    )
+  end
+
+  defnp delta_gradient(deltas, args, selector) do
+    {origin_rpy, origin_xyz, axes, is_revolute, is_prismatic, stored, positions} = args
+
+    grad(
+      deltas,
+      &tip_coordinate(
+        positions,
+        origin_rpy,
+        origin_xyz,
+        axes,
+        is_revolute,
+        is_prismatic,
+        stored,
+        &1,
+        selector
+      )
+    )
+  end
+
+  defnp(select_x, do: Nx.tensor([1.0, 0.0, 0.0, 0.0], type: :f64))
+  defnp(select_y, do: Nx.tensor([0.0, 1.0, 0.0, 0.0], type: :f64))
+  defnp(select_z, do: Nx.tensor([0.0, 0.0, 1.0, 0.0], type: :f64))
 
   defnp build_origins(rpy, xyz) do
     roll = rpy[[.., 0]]

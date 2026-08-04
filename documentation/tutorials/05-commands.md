@@ -151,11 +151,11 @@ defmodule MyMoveJointCommand do
     joint = Map.fetch!(goal, :joint)
     position = Map.fetch!(goal, :position)
 
-    # Update joint position
-    :ok = RobotState.set_joint_position(context.robot_state, joint, position)
+    # Update joint configuration
+    :ok = RobotState.set_configuration(context.robot_state, joint, position)
 
-    # Get the new position and store result
-    new_position = RobotState.get_joint_position(context.robot_state, joint)
+    # Get the new configuration and store result
+    {:ok, new_position} = RobotState.get_configuration(context.robot_state, joint)
     {:stop, :normal, %{state | result: {:ok, %{joint: joint, position: new_position}}}}
   end
 
@@ -249,7 +249,7 @@ end
 
 ## State vs Physical Movement
 
-**Important:** Calling `RobotState.set_joint_position/3` only updates Beam Bots' internal representation of where joints are. It does **not** move physical hardware.
+**Important:** Calling `RobotState.set_configuration/3` only updates Beam Bots' internal representation of where joints are. It does **not** move physical hardware.
 
 To actually move a robot, you need:
 
@@ -436,9 +436,9 @@ defmodule SimpleArm do
         |> Enum.into(%{})
         |> Map.take([:shoulder, :elbow])
 
-      :ok = RobotState.set_positions(context.robot_state, positions)
+      :ok = RobotState.set_configurations(context.robot_state, positions)
 
-      new_positions = RobotState.get_all_positions(context.robot_state)
+      new_positions = RobotState.get_all_configurations(context.robot_state)
       {:stop, :normal, %{state | result: {:ok, new_positions}}}
     end
 

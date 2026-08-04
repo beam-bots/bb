@@ -268,33 +268,36 @@ defmodule BB.Robot.Runtime do
   end
 
   @doc """
-  Get all joint positions as a map.
+  Get all joint configurations as a map.
 
-  Reads directly from ETS for fast concurrent access. Returns a map of
-  joint names to their current positions (in radians for revolute joints,
-  metres for prismatic joints).
+  Reads directly from ETS for fast concurrent access. Returns a map of joint
+  names to their current configurations, each shaped to its joint's type — a
+  float for single-DoF joints, a `BB.Math.Transform2D` for planar and a
+  `BB.Math.Transform` for floating. See `BB.Robot.State` for the full table.
 
-  Positions are updated automatically by the Runtime when sensors publish
+  Configurations are updated automatically by the Runtime when sensors publish
   `JointState` messages.
 
   ## Examples
 
-      iex> BB.Robot.Runtime.positions(MyRobot)
+      iex> BB.Robot.Runtime.configurations(MyRobot)
       %{pan_joint: 0.0, tilt_joint: 0.0}
 
   """
-  @spec positions(module()) :: %{atom() => float()}
-  def positions(robot_module) do
+  @spec configurations(module()) :: %{atom() => RobotState.configuration()}
+  def configurations(robot_module) do
     robot_state = get_robot_state(robot_module)
-    RobotState.get_all_positions(robot_state)
+    RobotState.get_all_configurations(robot_state)
   end
 
   @doc """
   Get all joint velocities as a map.
 
-  Reads directly from ETS for fast concurrent access. Returns a map of
-  joint names to their current velocities (in rad/s for revolute joints,
-  m/s for prismatic joints).
+  Reads directly from ETS for fast concurrent access. Returns a map of joint
+  names to their current velocities, each shaped to its joint's type — a float
+  for single-DoF joints, a `BB.Message.Geometry.Twist2D` for planar and a
+  `BB.Message.Geometry.Twist` for floating. See `BB.Robot.State` for the full
+  table.
 
   Velocities are updated automatically by the Runtime when sensors publish
   `JointState` messages.
@@ -305,7 +308,7 @@ defmodule BB.Robot.Runtime do
       %{pan_joint: 0.0, tilt_joint: 0.0}
 
   """
-  @spec velocities(module()) :: %{atom() => float()}
+  @spec velocities(module()) :: %{atom() => RobotState.velocity()}
   def velocities(robot_module) do
     robot_state = get_robot_state(robot_module)
     RobotState.get_all_velocities(robot_state)
@@ -996,23 +999,18 @@ defmodule BB.Robot.Runtime do
     %{state | operational_state: new_robot_state}
   end
 
+  # A publisher can name a joint this robot doesn't have, or report a value whose
+  # shape doesn't match the joint's type. Neither is grounds for taking the
+  # runtime down, so a rejected entry is dropped and the rest are applied.
   defp update_joint_state(robot_state, %JointState{} = joint_state) do
     names = joint_state.names || []
-    positions = joint_state.positions || []
-    velocities = joint_state.velocities || []
 
-    # Update positions
-    names
-    |> Enum.zip(positions)
-    |> Enum.each(fn {name, position} ->
-      RobotState.set_joint_position(robot_state, name, position)
+    Enum.each(names |> Enum.zip(joint_state.positions || []), fn {name, configuration} ->
+      RobotState.set_configuration(robot_state, name, configuration)
     end)
 
-    # Update velocities
-    names
-    |> Enum.zip(velocities)
-    |> Enum.each(fn {name, velocity} ->
-      RobotState.set_joint_velocity(robot_state, name, velocity)
+    Enum.each(names |> Enum.zip(joint_state.velocities || []), fn {name, velocity} ->
+      RobotState.set_velocity(robot_state, name, velocity)
     end)
   end
 

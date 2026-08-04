@@ -112,4 +112,24 @@ defmodule BB.Robot.Joint do
   @spec movable?(t()) :: boolean()
   def movable?(%__MODULE__{type: :fixed}), do: false
   def movable?(%__MODULE__{}), do: true
+
+  @doc """
+  How many degrees of freedom this joint has.
+
+  This is the number of Jacobian columns the joint contributes, and the size of
+  its configuration — see `BB.Robot.State` for the shape each type carries.
+
+  ## Examples
+
+      iex> BB.Robot.Joint.dof(%BB.Robot.Joint{type: :revolute})
+      1
+
+      iex> BB.Robot.Joint.dof(%BB.Robot.Joint{type: :floating})
+      6
+  """
+  @spec dof(t()) :: 0 | 1 | 3 | 6
+  def dof(%__MODULE__{type: :fixed}), do: 0
+  def dof(%__MODULE__{type: :planar}), do: 3
+  def dof(%__MODULE__{type: :floating}), do: 6
+  def dof(%__MODULE__{}), do: 1
 end

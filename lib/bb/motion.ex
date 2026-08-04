@@ -35,28 +35,32 @@ defmodule BB.Motion do
   ## Examples
 
       # Single target
-      case BB.Motion.move_to(MyRobot, :gripper, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK) do
+      case BB.Motion.move_to(MyRobot, :gripper, {0.3, 0.2, 0.1},
+             source_link: :base_link, solver: BB.IK.FABRIK) do
         {:ok, meta} -> IO.puts("Reached target in \#{meta.iterations} iterations")
         {:error, %{class: :kinematics} = error} -> IO.puts("Failed: \#{BB.Error.message(error)}")
       end
 
       # Multiple targets (for gait, coordinated motion)
       targets = %{left_foot: {0.1, 0.0, 0.0}, right_foot: {-0.1, 0.0, 0.0}}
-      case BB.Motion.move_to_multi(MyRobot, targets, solver: BB.IK.FABRIK) do
+      case BB.Motion.move_to_multi(MyRobot, targets,
+             source_link: :body, solver: BB.IK.FABRIK) do
         {:ok, results} -> IO.puts("All targets reached")
         {:error, failed_link, error, _results} -> IO.puts("Failed: \#{failed_link}")
       end
 
       # In a custom command handler
       def handle_command(%{target: target}, context) do
-        case BB.Motion.move_to(context, :gripper, target, solver: BB.IK.FABRIK) do
+        case BB.Motion.move_to(context, :gripper, target,
+               source_link: :base_link, solver: BB.IK.FABRIK) do
           {:ok, meta} -> {:ok, %{residual: meta.residual}}
           {:error, error} -> {:error, error}
         end
       end
 
       # Just solve without moving (for validation)
-      case BB.Motion.solve_only(MyRobot, :gripper, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK) do
+      case BB.Motion.solve_only(MyRobot, :gripper, {0.3, 0.2, 0.1},
+             source_link: :base_link, solver: BB.IK.FABRIK) do
         {:ok, positions, meta} -> IO.inspect(positions, label: "Would set")
         {:error, %BB.Error.Kinematics.Unreachable{}} -> IO.puts("Cannot reach target")
       end
@@ -99,6 +103,9 @@ defmodule BB.Motion do
 
   Required:
   - `:solver` - Module implementing `BB.IK.Solver` behaviour
+  - `:source_link` - The link the chain starts at. No default: the root is right
+    for a fixed-base arm and silently wrong for a robot whose base floats, so
+    pass `BB.Robot.root_link(robot)` when you do mean the whole tree
 
   Optional:
   - `:delivery` - How to send actuator commands: `:pubsub` (default), `:direct`, or `:sync`
@@ -113,9 +120,13 @@ defmodule BB.Motion do
 
   ## Examples
 
-      BB.Motion.move_to(MyRobot, :gripper, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK)
+      BB.Motion.move_to(MyRobot, :gripper, {0.3, 0.2, 0.1},
+        source_link: :base_link,
+        solver: BB.IK.FABRIK
+      )
 
       BB.Motion.move_to(context, :gripper, target,
+        source_link: :base_link,
         solver: BB.IK.FABRIK,
         delivery: :direct,
         max_iterations: 100
@@ -124,6 +135,7 @@ defmodule BB.Motion do
   @spec move_to(robot_or_context(), atom(), target(), keyword()) :: motion_result()
   def move_to(robot_or_context, target_link, target, opts) do
     solver = Keyword.fetch!(opts, :solver)
+    source_link = Keyword.fetch!(opts, :source_link)
     delivery = Keyword.get(opts, :delivery, :pubsub)
     solver_opts = extract_solver_opts(opts)
 
@@ -133,9 +145,9 @@ defmodule BB.Motion do
       [:bb, :motion, :move_to],
       %{robot: robot.name, target_link: target_link, solver: solver},
       fn ->
-        case solver.solve(robot, robot_state, target_link, target, solver_opts) do
+        case solver.solve(robot, robot_state, source_link, target_link, target, solver_opts) do
           {:ok, positions, meta} ->
-            RobotState.set_positions(robot_state, positions)
+            RobotState.set_configurations(robot_state, positions)
             send_positions_to_actuators(robot_module, robot, positions, delivery)
 
             result = {:ok, meta}
@@ -177,7 +189,8 @@ defmodule BB.Motion do
   ## Examples
 
       # Check if target is reachable
-      case BB.Motion.solve_only(MyRobot, :gripper, target, solver: BB.IK.FABRIK) do
+      case BB.Motion.solve_only(MyRobot, :gripper, target,
+             source_link: :base_link, solver: BB.IK.FABRIK) do
         {:ok, _positions, %{reached: true}} -> :reachable
         {:error, _} -> :unreachable
       end
@@ -185,6 +198,7 @@ defmodule BB.Motion do
   @spec solve_only(robot_or_context(), atom(), target(), keyword()) :: solve_result()
   def solve_only(robot_or_context, target_link, target, opts) do
     solver = Keyword.fetch!(opts, :solver)
+    source_link = Keyword.fetch!(opts, :source_link)
     solver_opts = extract_solver_opts(opts)
 
     {_robot_module, robot, robot_state} = extract_context(robot_or_context)
@@ -193,7 +207,7 @@ defmodule BB.Motion do
       [:bb, :motion, :solve],
       %{robot: robot.name, target_link: target_link, solver: solver},
       fn ->
-        case solver.solve(robot, robot_state, target_link, target, solver_opts) do
+        case solver.solve(robot, robot_state, source_link, target_link, target, solver_opts) do
           {:ok, _positions, meta} = result ->
             extra_meta = %{
               iterations: meta.iterations,
@@ -226,6 +240,9 @@ defmodule BB.Motion do
 
   Required:
   - `:solver` - Module implementing `BB.IK.Solver` behaviour
+  - `:source_link` - The link the chain starts at. No default: the root is right
+    for a fixed-base arm and silently wrong for a robot whose base floats, so
+    pass `BB.Robot.root_link(robot)` when you do mean the whole tree
 
   Optional:
   - `:delivery` - How to send actuator commands: `:pubsub` (default), `:direct`, or `:sync`
@@ -245,7 +262,8 @@ defmodule BB.Motion do
         right_foot: {-0.1, 0.0, 0.0}
       }
 
-      case BB.Motion.move_to_multi(MyRobot, targets, solver: BB.IK.FABRIK) do
+      case BB.Motion.move_to_multi(MyRobot, targets,
+             source_link: :body, solver: BB.IK.FABRIK) do
         {:ok, results} ->
           IO.puts("All targets reached")
 
@@ -261,7 +279,7 @@ defmodule BB.Motion do
         {robot_module, robot, robot_state} = extract_context(robot_or_context)
 
         all_positions = merge_all_positions(results)
-        RobotState.set_positions(robot_state, all_positions)
+        RobotState.set_configurations(robot_state, all_positions)
         send_positions_to_actuators(robot_module, robot, all_positions, delivery)
 
         {:ok, results}
@@ -290,7 +308,8 @@ defmodule BB.Motion do
 
       targets = %{left_foot: {0.1, 0.0, 0.0}, right_foot: {-0.1, 0.0, 0.0}}
 
-      case BB.Motion.solve_only_multi(MyRobot, targets, solver: BB.IK.FABRIK) do
+      case BB.Motion.solve_only_multi(MyRobot, targets,
+             source_link: :body, solver: BB.IK.FABRIK) do
         {:ok, results} ->
           Enum.each(results, fn {link, {:ok, _positions, meta}} ->
             IO.puts("\#{link}: residual=\#{meta.residual}")
@@ -303,13 +322,15 @@ defmodule BB.Motion do
   @spec solve_only_multi(robot_or_context(), targets(), keyword()) :: multi_solve_result()
   def solve_only_multi(robot_or_context, targets, opts) do
     solver = Keyword.fetch!(opts, :solver)
+    source_link = Keyword.fetch!(opts, :source_link)
     solver_opts = extract_solver_opts(opts)
 
     {_robot_module, robot, robot_state} = extract_context(robot_or_context)
 
     targets
     |> Task.async_stream(fn {target_link, target} ->
-      {target_link, solver.solve(robot, robot_state, target_link, target, solver_opts)}
+      {target_link,
+       solver.solve(robot, robot_state, source_link, target_link, target, solver_opts)}
     end)
     |> Enum.reduce_while({:ok, %{}}, fn
       {:ok, {link, {:ok, _, _} = result}}, {:ok, results} ->
@@ -360,7 +381,7 @@ defmodule BB.Motion do
       [:bb, :motion, :send_positions],
       %{robot: robot.name, joint_count: map_size(positions), delivery: delivery},
       fn ->
-        RobotState.set_positions(robot_state, positions)
+        RobotState.set_configurations(robot_state, positions)
         send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
         {:ok, %{}}
       end
@@ -381,7 +402,7 @@ defmodule BB.Motion do
 
   defp extract_solver_opts(opts) do
     opts
-    |> Keyword.drop([:solver, :delivery, :velocity, :duration, :command_id])
+    |> Keyword.drop([:solver, :source_link, :delivery, :velocity, :duration, :command_id])
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end
 
@@ -412,7 +433,8 @@ defmodule BB.Motion do
   end
 
   defp send_position_to_actuator(robot_module, robot, actuator_name, position, :pubsub, opts) do
-    path = BB.Robot.actuator_path(robot, actuator_name)
+    # The name came from the joint's own actuator list, so the lookup cannot miss.
+    {:ok, path} = BB.Robot.actuator_path(robot, actuator_name)
     Actuator.set_position(robot_module, path, position, opts)
   end
 

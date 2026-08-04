@@ -55,7 +55,7 @@ robot = MyRobot.Robot.robot()
 target = {0.3, 0.2, 0.1}
 
 # Solve for joint angles
-case FABRIK.solve(robot, state, :end_effector_link, target) do
+case FABRIK.solve(robot, state, :base_link, :end_effector_link, target) do
   {:ok, positions, meta} ->
     IO.puts("Solved in #{meta.iterations} iterations")
     IO.puts("Distance to target: #{Float.round(meta.residual * 1000, 2)}mm")
@@ -68,6 +68,57 @@ end
 ```
 
 > **Note:** This example just solves for joint angles. To actually move the robot, see the [Motion Integration](#motion-integration) section below.
+
+## Scoping the chain
+
+Every solve takes **both ends** of the chain: a `source_link` and a
+`target_link`. There is no default for the source, which is deliberate.
+
+For a fixed-base arm the root is always the right source, so requiring it looks
+like ceremony. It isn't, because the root is precisely the *wrong* source for a
+robot whose base moves. A legged robot solving for a foot wants the chain from its
+*body* — a chain of nothing but revolute joints. Start that solve at the root
+instead and it drags the 6-DoF floating base into a problem that has no business
+containing one:
+
+```elixir
+# Aim the head by rotating the mast only. The base is not part of this problem,
+# so the chain contains a single revolute joint.
+BB.Motion.move_to(robot, :sensor_head, target,
+  source_link: :chassis,
+  solver: BB.IK.FABRIK
+)
+
+# Reach the target by driving *and* rotating the mast, in one solve. Genuinely a
+# different problem, and one that needs a solver which handles a planar joint.
+BB.Motion.move_to(robot, :sensor_head, target,
+  source_link: BB.Robot.root_link(robot),
+  solver: BB.IK.DLS
+)
+```
+
+A default that is right for one class of robot and quietly wrong for another is
+worse than no default, so when you do mean the whole tree, say so with
+`BB.Robot.root_link(robot)`. The extra words are the feature: the call now records
+which chain was intended, so a reader can tell whether root-to-target was a
+decision or an accident.
+
+`source_link` must be an ancestor of `target_link`. Asking for two links that
+merely share an ancestor — one gripper to the other — reports
+`BB.Error.Kinematics.NotAnAncestor`, and the message names the link you should
+have passed instead.
+
+### Multi-DoF joints
+
+A chain can contain `:planar` and `:floating` joints, whose configurations are a
+`BB.Math.Transform2D` and a `BB.Math.Transform` rather than an angle. Not every
+algorithm copes: a Jacobian-based solver like `BB.IK.DLS` is dimension-agnostic
+and needs no special case, while FABRIK repositions joints along a chain and has
+no meaningful interpretation for a 6-DoF base.
+
+That asymmetry is a property of the **chain**, not the robot. A legged robot whose
+body floats is a perfectly good FABRIK problem when each leg is solved from body
+to foot — which is exactly what `source_link` lets you ask for.
 
 ## Understanding the Result
 
@@ -93,7 +144,7 @@ defmodule IKDemo do
 
   def check_reachability(robot, state, target_link, target) do
     # Solve IK
-    case FABRIK.solve(robot, state, target_link, target) do
+    case FABRIK.solve(robot, state, BB.Robot.root_link(robot), target_link, target) do
       {:ok, positions, meta} ->
         # Verify with forward kinematics
         {x, y, z} = Kinematics.link_position(robot, positions, target_link)
@@ -127,7 +178,7 @@ IKDemo.check_reachability(robot, state, :tip, {0.3, 0.2, 0.0})
 Fine-tune the solver behaviour with options:
 
 ```elixir
-FABRIK.solve(robot, state, :end_effector, target,
+FABRIK.solve(robot, state, :base_link, :end_effector, target,
   max_iterations: 100,    # Default: 50
   tolerance: 0.001,       # Default: 1.0e-4 (0.1mm)
   respect_limits: true    # Default: true
@@ -148,7 +199,7 @@ Not all targets can be reached. The solver handles this gracefully:
 # Target way beyond the robot's reach
 target = {10.0, 0.0, 0.0}
 
-case FABRIK.solve(robot, state, :tip, target) do
+case FABRIK.solve(robot, state, :base_link, :tip, target) do
   {:error, :unreachable, meta} ->
     # The solver stretched the arm as far as possible
     # meta.positions contains the best-effort joint angles
@@ -206,7 +257,8 @@ The `BB.Motion` module bridges IK solving with actuator commands, making it easy
 alias BB.Motion
 
 # Move the end-effector to a target position (your robot is already running)
-case Motion.move_to(MyRobot.Robot, :tip, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK) do
+case Motion.move_to(MyRobot.Robot, :tip, {0.3, 0.2, 0.1},
+       source_link: :base_link, solver: BB.IK.FABRIK) do
   {:ok, meta} ->
     IO.puts("Moved in #{meta.iterations} iterations")
 
@@ -247,7 +299,8 @@ targets = %{
   right_foot: {-0.1, 0.0, 0.0}
 }
 
-case Motion.move_to_multi(MyRobot.Robot, targets, solver: BB.IK.FABRIK) do
+case Motion.move_to_multi(MyRobot.Robot, targets,
+       source_link: :base_link, solver: BB.IK.FABRIK) do
   {:ok, results} ->
     Enum.each(results, fn {link, {:ok, _pos, meta}} ->
       IO.puts("#{link}: #{meta.iterations} iterations")
@@ -297,7 +350,8 @@ defmodule MyRobot.Commands.Reach do
 
   @impl true
   def handle_command(%{target: target}, context) do
-    case BB.Motion.move_to(context, :gripper, target, solver: BB.IK.FABRIK) do
+    case BB.Motion.move_to(context, :gripper, target,
+           source_link: :base_link, solver: BB.IK.FABRIK) do
       {:ok, meta} ->
         {:ok, %{residual: meta.residual, iterations: meta.iterations}}
 
@@ -332,8 +386,11 @@ The solver will clamp joint values to these limits, which may prevent reaching s
 To see the unconstrained solution:
 
 ```elixir
-{:ok, unconstrained, _} = FABRIK.solve(robot, state, :tip, target, respect_limits: false)
-{:ok, constrained, _} = FABRIK.solve(robot, state, :tip, target, respect_limits: true)
+{:ok, unconstrained, _} =
+  FABRIK.solve(robot, state, :base_link, :tip, target, respect_limits: false)
+
+{:ok, constrained, _} =
+  FABRIK.solve(robot, state, :base_link, :tip, target, respect_limits: true)
 
 # Compare the solutions
 IO.inspect(unconstrained, label: "Without limits")

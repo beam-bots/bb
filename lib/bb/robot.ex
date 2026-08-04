@@ -35,6 +35,11 @@ defmodule BB.Robot do
   - Angular velocity: rad/s
   """
 
+  alias BB.Error.Kinematics.NoParentJoint
+  alias BB.Error.Kinematics.NotAnAncestor
+  alias BB.Error.Kinematics.UnknownActuator
+  alias BB.Error.Kinematics.UnknownJoint
+  alias BB.Error.Kinematics.UnknownLink
   alias BB.Robot.{Joint, Link, Topology}
 
   defstruct [
@@ -83,53 +88,111 @@ defmodule BB.Robot do
         }
 
   @doc """
+  Get the link at the root of the kinematic tree.
+
+  Returns a bare atom rather than a result tuple: unlike every other lookup here
+  it cannot fail, because `BB.Dsl.TopologyTransformer` guarantees exactly one
+  root link exists.
+
+  Useful when a caller genuinely wants a whole-tree chain and has to say so —
+  `BB.Motion` requires `:source_link` with no default, precisely so that
+  root-to-target is recorded as a decision rather than assumed.
+
+      BB.Motion.move_to(robot, :gripper, target,
+        source_link: BB.Robot.root_link(robot),
+        solver: BB.IK.DLS
+      )
+  """
+  @spec root_link(t()) :: atom()
+  def root_link(%__MODULE__{root_link: root_link}), do: root_link
+
+  @doc """
   Get a link by name.
   """
-  @spec get_link(t(), atom()) :: Link.t() | nil
-  def get_link(%__MODULE__{links: links}, name) do
-    Map.get(links, name)
+  @spec get_link(t(), atom()) :: {:ok, Link.t()} | {:error, UnknownLink.t()}
+  def get_link(%__MODULE__{links: links, name: robot_name}, name) do
+    case Map.fetch(links, name) do
+      {:ok, link} -> {:ok, link}
+      :error -> {:error, UnknownLink.exception(link: name, robot: robot_name)}
+    end
   end
 
   @doc """
   Get a joint by name.
   """
-  @spec get_joint(t(), atom()) :: Joint.t() | nil
-  def get_joint(%__MODULE__{joints: joints}, name) do
-    Map.get(joints, name)
+  @spec get_joint(t(), atom()) :: {:ok, Joint.t()} | {:error, UnknownJoint.t()}
+  def get_joint(%__MODULE__{joints: joints, name: robot_name}, name) do
+    case Map.fetch(joints, name) do
+      {:ok, joint} -> {:ok, joint}
+      :error -> {:error, UnknownJoint.exception(joint: name, robot: robot_name)}
+    end
   end
 
   @doc """
-  Get the parent joint of a link (nil for root link).
+  Get the parent joint of a link.
+
+  The root link has no parent joint, which is reported as
+  `{:error, %BB.Error.Kinematics.NoParentJoint{}}` — a distinct type from
+  `UnknownLink` so a caller walking up the tree can match on it as a termination
+  signal rather than being told a valid root link doesn't exist.
   """
-  @spec parent_joint(t(), atom()) :: Joint.t() | nil
+  @spec parent_joint(t(), atom()) ::
+          {:ok, Joint.t()} | {:error, UnknownLink.t() | UnknownJoint.t() | NoParentJoint.t()}
   def parent_joint(%__MODULE__{} = robot, link_name) do
     case get_link(robot, link_name) do
-      %Link{parent_joint: nil} -> nil
-      %Link{parent_joint: joint_name} -> get_joint(robot, joint_name)
-      nil -> nil
+      {:ok, %Link{parent_joint: nil}} -> {:error, NoParentJoint.exception(link: link_name)}
+      {:ok, %Link{parent_joint: joint_name}} -> get_joint(robot, joint_name)
+      {:error, reason} -> {:error, reason}
     end
   end
 
   @doc """
   Get the child joints of a link.
-  """
-  @spec child_joints(t(), atom()) :: [Joint.t()]
-  def child_joints(%__MODULE__{} = robot, link_name) do
-    case get_link(robot, link_name) do
-      %Link{child_joints: joint_names} ->
-        Enum.map(joint_names, &get_joint(robot, &1))
 
-      nil ->
-        []
+  A link with no children returns `{:ok, []}`, which is distinct from naming a
+  link that doesn't exist.
+  """
+  @spec child_joints(t(), atom()) :: {:ok, [Joint.t()]} | {:error, UnknownLink.t()}
+  def child_joints(%__MODULE__{joints: joints} = robot, link_name) do
+    case get_link(robot, link_name) do
+      {:ok, %Link{child_joints: joint_names}} ->
+        {:ok, Enum.map(joint_names, &Map.fetch!(joints, &1))}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   @doc """
   Get the path from root to a given link or joint.
+
+  Equivalent to `path_between/3` from the root link, and delegates to
+  `BB.Robot.Topology.path_to/2`.
   """
-  @spec path_to(t(), atom()) :: [atom()] | nil
-  def path_to(%__MODULE__{topology: topology}, name) do
-    Map.get(topology.paths, name)
+  @spec path_to(t(), atom()) :: {:ok, [atom()]} | {:error, UnknownLink.t()}
+  def path_to(%__MODULE__{topology: topology} = robot, name) do
+    topology |> Topology.path_to(name) |> attribute_to(robot)
+  end
+
+  @doc """
+  Get the path from a source link down to a target link.
+
+  Restricted to the case where `source_link` is an ancestor of `target_link`,
+  which is a prefix drop on the precomputed root-relative paths. The result
+  starts at `source_link` and ends at `target_link`, interleaving the joints and
+  links between them, so `path_to/2` is the special case of a source at the root.
+
+  A source that isn't above the target reports
+  `BB.Error.Kinematics.NotAnAncestor`, carrying the nearest common ancestor so
+  the message names the link the caller should have passed.
+
+      BB.Robot.path_between(robot, :chassis, :sensor_head)
+      #=> {:ok, [:chassis, :mast, :sensor_head]}
+  """
+  @spec path_between(t(), atom(), atom()) ::
+          {:ok, [atom()]} | {:error, UnknownLink.t() | NotAnAncestor.t()}
+  def path_between(%__MODULE__{topology: topology} = robot, source_link, target_link) do
+    topology |> Topology.path_between(source_link, target_link) |> attribute_to(robot)
   end
 
   @doc """
@@ -141,18 +204,16 @@ defmodule BB.Robot do
   actuator's `:bb` option, and therefore the topic its commands are published
   to — `[:actuator | actuator_path(robot, name)]`.
 
-  Returns `nil` if no actuator by that name exists.
-
       BB.Robot.actuator_path(robot, :pan_servo)
-      #=> [:base, :pan, :pan_servo]
+      #=> {:ok, [:base, :pan, :pan_servo]}
   """
-  @spec actuator_path(t(), atom()) :: [atom()] | nil
-  def actuator_path(%__MODULE__{actuators: actuators} = robot, name) do
-    with %{joint: joint_name} <- Map.get(actuators, name),
-         joint_path when is_list(joint_path) <- path_to(robot, joint_name) do
-      joint_path ++ [name]
+  @spec actuator_path(t(), atom()) :: {:ok, [atom()]} | {:error, UnknownActuator.t()}
+  def actuator_path(%__MODULE__{actuators: actuators, name: robot_name} = robot, name) do
+    with {:ok, %{joint: joint_name}} <- Map.fetch(actuators, name),
+         {:ok, joint_path} <- path_to(robot, joint_name) do
+      {:ok, joint_path ++ [name]}
     else
-      _ -> nil
+      _ -> {:error, UnknownActuator.exception(actuator: name, robot: robot_name)}
     end
   end
 
@@ -171,4 +232,12 @@ defmodule BB.Robot do
   def joints_in_order(%__MODULE__{topology: topology, joints: joints}) do
     Enum.map(topology.joint_order, &Map.fetch!(joints, &1))
   end
+
+  # `BB.Robot.Topology` has no robot name to put in its errors, so name them here
+  # rather than leaving the diagnostic weaker than the error type allows.
+  defp attribute_to({:error, %UnknownLink{} = error}, %__MODULE__{name: name}) do
+    {:error, %{error | robot: name}}
+  end
+
+  defp attribute_to(result, %__MODULE__{}), do: result
 end
