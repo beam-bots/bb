@@ -36,9 +36,22 @@ State of one or more joints.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `names` | `[atom]` | Yes | Joint names |
-| `positions` | `[float]` | No | Positions in radians (revolute) or metres (prismatic) |
-| `velocities` | `[float]` | No | Velocities in rad/s or m/s |
-| `efforts` | `[float]` | No | Efforts in Nm or N |
+| `positions` | `[configuration]` | No | Configurations, shaped to each joint's type |
+| `velocities` | `[velocity]` | No | Velocities, shaped to each joint's type |
+| `efforts` | `[effort]` | No | Efforts, shaped to each joint's type |
+
+Element types depend on the joint's degrees of freedom, and line up positionally
+with `names`:
+
+| Joint type | `positions` | `velocities` | `efforts` |
+|---|---|---|---|
+| single-DoF | `float` — radians (revolute) or metres (prismatic) | `float` — rad/s or m/s | `float` — Nm or N |
+| `:planar` | `BB.Math.Transform2D` | `BB.Message.Geometry.Twist2D` | `BB.Message.Geometry.Wrench2D` |
+| `:floating` | `BB.Math.Transform` | `BB.Message.Geometry.Twist` | `BB.Message.Geometry.Wrench` |
+
+Most consumers only ever see single-DoF joints, so their handling is unchanged in
+practice — but a consumer that pattern matches on a float, or does arithmetic on
+an element, should state which joint types it supports.
 
 **Published to:** `[:sensor, joint_name]`
 
@@ -48,6 +61,13 @@ JointState.new!(
   names: [:shoulder, :elbow],
   positions: [0.5, 1.2],
   velocities: [0.1, 0.0]
+)
+
+# A mobile base reports its whole pose in the same message as its mast, so a
+# consumer never has to correlate two topics to reconstruct one instant.
+JointState.new!(
+  names: [:base, :mast],
+  positions: [BB.Math.Transform2D.new(12.4, -3.1, 1.57), 0.5]
 )
 ```
 

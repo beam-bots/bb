@@ -368,7 +368,10 @@ defmodule BB.JointTest do
       assert joint.name == :planar_joint
     end
 
-    test "planar joint with optional axis compiles" do
+    # A planar joint's axis is the surface normal of the plane it moves in, so it
+    # is required rather than optional — an empty block gives the horizontal
+    # plane, which is what a ground vehicle wants.
+    test "planar joint axis defaults to the horizontal plane's normal" do
       [link] = Info.topology(PlanarRobot)
       [joint] = link.joints
       assert is_struct(joint.axis, Axis)
@@ -383,6 +386,9 @@ defmodule BB.JointTest do
         link :base_link do
           joint :planar_joint do
             type :planar
+
+            axis do
+            end
 
             dynamics do
               damping ~u(0.5 newton_second_per_meter)

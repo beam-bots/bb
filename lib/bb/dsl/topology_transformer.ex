@@ -80,6 +80,25 @@ defmodule BB.Dsl.TopologyTransformer do
      )}
   end
 
+  defp recursive_transform(joint, dsl, path)
+       when is_struct(joint, Joint) and is_nil(joint.axis) and joint.type == :planar do
+    {:error,
+     DslError.exception(
+       module: Transformer.get_persisted(dsl, :module),
+       path: to_error_path([joint | [:joint | path]]),
+       message: """
+       An axis must be present for planar joints
+
+       A planar joint's axis is the surface normal of the plane it moves in, so
+       without one there is no plane to move in. The default axis points along Z,
+       so an empty `axis` block gives the horizontal plane a ground vehicle wants:
+
+           axis do
+           end
+       """
+     )}
+  end
+
   defp recursive_transform(joint, dsl, path) when is_struct(joint, Joint) do
     inner_path = [joint | [:joint | path]]
 
@@ -143,8 +162,25 @@ defmodule BB.Dsl.TopologyTransformer do
      DslError.exception(
        module: Transformer.get_persisted(dsl, :module),
        path: to_error_path([:axis | path]),
-       module: """
+       message: """
        Cannot set an axis when parent joint is fixed.
+       """
+     )}
+  end
+
+  defp recursive_transform(axis, dsl, [parent | _] = path)
+       when is_struct(axis, Axis) and parent.type == :floating do
+    {:error,
+     DslError.exception(
+       module: Transformer.get_persisted(dsl, :module),
+       path: to_error_path([:axis | path]),
+       message: """
+       Cannot set an axis when parent joint is floating.
+
+       A floating joint has all six degrees of freedom and no distinguished
+       direction, so there is nothing for an axis to describe. If you meant to
+       constrain the joint to a plane, use `type :planar` — there the axis is the
+       plane's surface normal.
        """
      )}
   end
