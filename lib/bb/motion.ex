@@ -412,7 +412,8 @@ defmodule BB.Motion do
   end
 
   defp send_position_to_actuator(robot_module, robot, actuator_name, position, :pubsub, opts) do
-    path = BB.Robot.actuator_path(robot, actuator_name)
+    # The name came from the joint's own actuator list, so the lookup cannot miss.
+    {:ok, path} = BB.Robot.actuator_path(robot, actuator_name)
     Actuator.set_position(robot_module, path, position, opts)
   end
 

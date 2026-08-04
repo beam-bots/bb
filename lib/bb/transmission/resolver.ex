@@ -130,27 +130,22 @@ defmodule BB.Transmission.Resolver do
 
   defp joint_type_for_attachment(robot, :actuator, name) do
     case robot.actuators[name] do
-      %{joint: joint_name} ->
-        case Robot.get_joint(robot, joint_name) do
-          %{type: type} -> type
-          _ -> nil
-        end
-
-      _ ->
-        nil
+      %{joint: joint_name} -> joint_type(robot, joint_name)
+      _ -> nil
     end
   end
 
   defp joint_type_for_attachment(robot, :sensor, name) do
     case robot.sensors[name] do
-      %{attached_to: {:joint, joint_name}} ->
-        case Robot.get_joint(robot, joint_name) do
-          %{type: type} -> type
-          _ -> nil
-        end
+      %{attached_to: {:joint, joint_name}} -> joint_type(robot, joint_name)
+      _ -> nil
+    end
+  end
 
-      _ ->
-        nil
+  defp joint_type(robot, joint_name) do
+    case Robot.get_joint(robot, joint_name) do
+      {:ok, %{type: type}} -> type
+      {:error, _} -> nil
     end
   end
 

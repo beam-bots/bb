@@ -686,8 +686,9 @@ defmodule BB.Robot.KinematicsTest do
   end
 
   defp reference_chain(robot, positions, target_link) do
-    robot
-    |> BB.Robot.path_to(target_link)
+    {:ok, path} = BB.Robot.path_to(robot, target_link)
+
+    path
     |> Enum.filter(&Map.has_key?(robot.joints, &1))
     |> Enum.reduce(Transform.identity(), fn joint_name, acc ->
       Transform.compose(acc, Kinematics.compute_joint_transform(robot, positions, joint_name))
@@ -698,10 +699,10 @@ defmodule BB.Robot.KinematicsTest do
     Enum.reduce(robot.topology.link_order, %{}, fn link_name, transforms ->
       transform =
         case BB.Robot.get_link(robot, link_name) do
-          %{parent_joint: nil} ->
+          {:ok, %{parent_joint: nil}} ->
             Transform.identity()
 
-          %{parent_joint: parent_joint_name} ->
+          {:ok, %{parent_joint: parent_joint_name}} ->
             parent_link = robot.joints[parent_joint_name].parent_link
 
             Transform.compose(

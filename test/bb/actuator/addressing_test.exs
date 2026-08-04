@@ -52,16 +52,17 @@ defmodule BB.Actuator.AddressingTest do
 
   describe "BB.Robot.actuator_path/2" do
     test "resolves an actuator directly under the root link's joint" do
-      assert BB.Robot.actuator_path(Robot.robot(), :motor) == [:base, :shoulder, :motor]
+      assert BB.Robot.actuator_path(Robot.robot(), :motor) == {:ok, [:base, :shoulder, :motor]}
     end
 
     test "resolves an actuator nested deeper in the topology" do
       assert BB.Robot.actuator_path(Robot.robot(), :forearm_motor) ==
-               [:base, :shoulder, :arm, :elbow, :forearm_motor]
+               {:ok, [:base, :shoulder, :arm, :elbow, :forearm_motor]}
     end
 
-    test "returns nil for an unknown actuator" do
-      assert BB.Robot.actuator_path(Robot.robot(), :nonexistent) == nil
+    test "reports an unknown actuator as an actuator, not a link" do
+      assert {:error, %BB.Error.Kinematics.UnknownActuator{actuator: :nonexistent}} =
+               BB.Robot.actuator_path(Robot.robot(), :nonexistent)
     end
 
     test "agrees with the path the framework injects into the driver" do

@@ -843,13 +843,13 @@ defmodule BB.Actuator do
 
   defp actuator_path!(robot, name) when is_atom(name) do
     case Robot.actuator_path(robot.robot(), name) do
-      nil ->
+      {:ok, path} ->
+        path
+
+      {:error, _} ->
         raise ArgumentError,
               "#{inspect(robot)} has no actuator named #{inspect(name)}. " <>
                 "Known actuators: #{inspect(Map.keys(robot.robot().actuators))}"
-
-      path ->
-        path
     end
   end
 

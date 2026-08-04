@@ -66,8 +66,8 @@ defmodule BB.Dsl.RobotTransformer do
          ## Examples
 
              robot = #{unquote(module)}.robot()
-             link = BB.Robot.get_link(robot, :base_link)
-             joint = BB.Robot.get_joint(robot, :shoulder)
+             {:ok, link} = BB.Robot.get_link(robot, :base_link)
+             {:ok, joint} = BB.Robot.get_joint(robot, :shoulder)
 
          """
          @spec robot() :: BB.Robot.t()

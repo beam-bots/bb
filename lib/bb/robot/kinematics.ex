@@ -67,13 +67,7 @@ defmodule BB.Robot.Kinematics do
   end
 
   def forward_kinematics(%Robot{} = robot, positions, target_link) when is_map(positions) do
-    path = Robot.path_to(robot, target_link)
-
-    if is_nil(path) do
-      raise ArgumentError, "Unknown link: #{inspect(target_link)}"
-    end
-
-    compute_chain_transform(robot, positions, path)
+    compute_chain_transform(robot, positions, path_to!(robot, target_link))
   end
 
   @doc """
@@ -99,7 +93,7 @@ defmodule BB.Robot.Kinematics do
 
     specs =
       Enum.map(link_order, fn link_name ->
-        link = Robot.get_link(robot, link_name)
+        {:ok, link} = Robot.get_link(robot, link_name)
         link_joint_spec(robot, positions, index_of, link_name, link.parent_joint)
       end)
 
@@ -161,13 +155,7 @@ defmodule BB.Robot.Kinematics do
 
   def position_jacobian(%Robot{} = robot, positions, target_link, joint_names)
       when is_map(positions) do
-    path = Robot.path_to(robot, target_link)
-
-    if is_nil(path) do
-      raise ArgumentError, "Unknown link: #{inspect(target_link)}"
-    end
-
-    chain_joints = Enum.filter(path, &Map.has_key?(robot.joints, &1))
+    chain_joints = chain_joints(robot, path_to!(robot, target_link))
     chain_jacobian(robot, positions, chain_joints, joint_names)
   end
 
@@ -191,13 +179,7 @@ defmodule BB.Robot.Kinematics do
   end
 
   def jacobian(%Robot{} = robot, positions, target_link, joint_names) when is_map(positions) do
-    path = Robot.path_to(robot, target_link)
-
-    if is_nil(path) do
-      raise ArgumentError, "Unknown link: #{inspect(target_link)}"
-    end
-
-    chain_joints = Enum.filter(path, &Map.has_key?(robot.joints, &1))
+    chain_joints = chain_joints(robot, path_to!(robot, target_link))
 
     position = chain_jacobian(robot, positions, chain_joints, joint_names)
     orientation = chain_orientation_jacobian(robot, positions, chain_joints, joint_names)
@@ -213,7 +195,7 @@ defmodule BB.Robot.Kinematics do
   """
   @spec compute_joint_transform(Robot.t(), %{atom() => float()}, atom()) :: Transform.t()
   def compute_joint_transform(%Robot{} = robot, positions, joint_name) do
-    joint = Robot.get_joint(robot, joint_name)
+    {:ok, joint} = Robot.get_joint(robot, joint_name)
     position = Map.get(positions, joint_name, 0.0)
 
     origin_transform = Transform.from_origin(joint.origin)
@@ -243,8 +225,22 @@ defmodule BB.Robot.Kinematics do
 
   defp tuple_to_vec3({x, y, z}), do: Vec3.new(x, y, z)
 
+  # These entry points raise rather than return a result tuple, which is the
+  # contract they have always had. Raising the structured error keeps the
+  # diagnosis in one place.
+  defp path_to!(robot, target_link) do
+    case Robot.path_to(robot, target_link) do
+      {:ok, path} -> path
+      {:error, error} -> raise error
+    end
+  end
+
+  defp chain_joints(%Robot{joints: joints}, path) do
+    Enum.filter(path, &Map.has_key?(joints, &1))
+  end
+
   defp compute_chain_transform(%Robot{} = robot, positions, path) do
-    case Enum.filter(path, &Map.has_key?(robot.joints, &1)) do
+    case chain_joints(robot, path) do
       [] ->
         Transform.identity()
 

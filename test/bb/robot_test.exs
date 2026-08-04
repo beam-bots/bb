@@ -6,6 +6,10 @@ defmodule BB.RobotTest do
   use ExUnit.Case, async: true
   import BB.Unit
 
+  alias BB.Error.Kinematics.NoParentJoint
+  alias BB.Error.Kinematics.NotAnAncestor
+  alias BB.Error.Kinematics.UnknownJoint
+  alias BB.Error.Kinematics.UnknownLink
   alias BB.Math.Transform
   alias BB.Math.Vec3
   alias BB.Robot
@@ -106,48 +110,142 @@ defmodule BB.RobotTest do
       assert map_size(robot.joints) == 3
     end
 
+    test "root_link/1 returns the root of the kinematic tree" do
+      assert Robot.root_link(SimpleArm.robot()) == :base
+    end
+
     test "get_link/2 returns correct link" do
       robot = SimpleArm.robot()
-      link = Robot.get_link(robot, :upper_arm)
-      assert %Link{name: :upper_arm} = link
+      assert {:ok, %Link{name: :upper_arm}} = Robot.get_link(robot, :upper_arm)
+    end
+
+    test "get_link/2 names the robot when the link doesn't exist" do
+      robot = SimpleArm.robot()
+
+      assert {:error, %UnknownLink{link: :nope, robot: robot_name}} =
+               Robot.get_link(robot, :nope)
+
+      assert robot_name == robot.name
     end
 
     test "get_joint/2 returns correct joint" do
       robot = SimpleArm.robot()
-      joint = Robot.get_joint(robot, :elbow)
-      assert %Joint{name: :elbow, type: :revolute} = joint
+      assert {:ok, %Joint{name: :elbow, type: :revolute}} = Robot.get_joint(robot, :elbow)
+    end
+
+    test "get_joint/2 reports an unknown joint as a joint, not a link" do
+      assert {:error, %UnknownJoint{joint: :nope}} = Robot.get_joint(SimpleArm.robot(), :nope)
     end
 
     test "parent_joint/2 returns parent joint of a link" do
       robot = SimpleArm.robot()
-      assert Robot.parent_joint(robot, :base) == nil
-      assert %Joint{name: :shoulder} = Robot.parent_joint(robot, :upper_arm)
-      assert %Joint{name: :elbow} = Robot.parent_joint(robot, :forearm)
+      assert {:ok, %Joint{name: :shoulder}} = Robot.parent_joint(robot, :upper_arm)
+      assert {:ok, %Joint{name: :elbow}} = Robot.parent_joint(robot, :forearm)
+    end
+
+    # The root having no parent is a structural fact, so a caller walking up the
+    # tree gets a termination signal rather than "that link doesn't exist".
+    test "parent_joint/2 distinguishes the root from an unknown link" do
+      robot = SimpleArm.robot()
+
+      assert {:error, %NoParentJoint{link: :base}} = Robot.parent_joint(robot, :base)
+      assert {:error, %UnknownLink{link: :nope}} = Robot.parent_joint(robot, :nope)
     end
 
     test "child_joints/2 returns child joints of a link" do
       robot = SimpleArm.robot()
-      [shoulder] = Robot.child_joints(robot, :base)
-      assert shoulder.name == :shoulder
+      assert {:ok, [%Joint{name: :shoulder}]} = Robot.child_joints(robot, :base)
+    end
 
-      assert Robot.child_joints(robot, :end_effector) == []
+    test "child_joints/2 distinguishes no children from no such link" do
+      robot = SimpleArm.robot()
+
+      assert {:ok, []} = Robot.child_joints(robot, :end_effector)
+      assert {:error, %UnknownLink{link: :nope}} = Robot.child_joints(robot, :nope)
     end
 
     test "path_to/2 returns path from root" do
       robot = SimpleArm.robot()
-      assert Robot.path_to(robot, :base) == [:base]
-      assert Robot.path_to(robot, :shoulder) == [:base, :shoulder]
-      assert Robot.path_to(robot, :upper_arm) == [:base, :shoulder, :upper_arm]
+      assert Robot.path_to(robot, :base) == {:ok, [:base]}
+      assert Robot.path_to(robot, :shoulder) == {:ok, [:base, :shoulder]}
+      assert Robot.path_to(robot, :upper_arm) == {:ok, [:base, :shoulder, :upper_arm]}
 
-      assert Robot.path_to(robot, :end_effector) == [
-               :base,
-               :shoulder,
-               :upper_arm,
-               :elbow,
-               :forearm,
-               :wrist,
-               :end_effector
-             ]
+      assert Robot.path_to(robot, :end_effector) ==
+               {:ok,
+                [
+                  :base,
+                  :shoulder,
+                  :upper_arm,
+                  :elbow,
+                  :forearm,
+                  :wrist,
+                  :end_effector
+                ]}
+    end
+
+    test "path_to/2 errors on an unknown link" do
+      assert {:error, %UnknownLink{link: :nope}} = Robot.path_to(SimpleArm.robot(), :nope)
+    end
+
+    test "path_between/3 drops the prefix above the source" do
+      robot = SimpleArm.robot()
+
+      assert Robot.path_between(robot, :upper_arm, :end_effector) ==
+               {:ok, [:upper_arm, :elbow, :forearm, :wrist, :end_effector]}
+    end
+
+    test "path_between/3 from the root agrees with path_to/2" do
+      robot = SimpleArm.robot()
+
+      assert Robot.path_between(robot, Robot.root_link(robot), :end_effector) ==
+               Robot.path_to(robot, :end_effector)
+    end
+
+    test "path_between/3 from a link to itself is that link alone" do
+      assert Robot.path_between(SimpleArm.robot(), :forearm, :forearm) == {:ok, [:forearm]}
+    end
+
+    # Reversing the ends is the easy mistake, and the error should say which
+    # link the caller should have passed rather than just reporting a failure.
+    test "path_between/3 reports the nearest common ancestor when the source is below the target" do
+      robot = SimpleArm.robot()
+
+      assert {:error,
+              %NotAnAncestor{
+                source_link: :end_effector,
+                target_link: :upper_arm,
+                common_ancestor: :upper_arm
+              }} = Robot.path_between(robot, :end_effector, :upper_arm)
+    end
+
+    test "path_between/3 attributes an unknown link to the right end" do
+      robot = SimpleArm.robot()
+
+      assert {:error, %UnknownLink{link: :nope, role: :source}} =
+               Robot.path_between(robot, :nope, :forearm)
+
+      assert {:error, %UnknownLink{link: :nope, role: :target}} =
+               Robot.path_between(robot, :forearm, :nope)
+    end
+
+    # A single chain can't produce a branch point, so the sibling case needs a
+    # topology that actually branches.
+    test "path_between/3 names the branch point for two siblings" do
+      robot = BB.ExampleRobots.DifferentialDriveRobot.robot()
+
+      assert {:error,
+              %NotAnAncestor{
+                source_link: :left_wheel,
+                target_link: :right_wheel,
+                common_ancestor: :base_link
+              }} = Robot.path_between(robot, :left_wheel, :right_wheel)
+    end
+
+    test "path_between/3 descends into one branch without picking up the others" do
+      robot = BB.ExampleRobots.DifferentialDriveRobot.robot()
+
+      assert Robot.path_between(robot, :base_link, :right_wheel) ==
+               {:ok, [:base_link, :right_wheel_joint, :right_wheel]}
     end
 
     test "links_in_order/1 returns links in topological order" do
@@ -168,7 +266,7 @@ defmodule BB.RobotTest do
   describe "Link struct" do
     test "has parent and child references" do
       robot = SimpleArm.robot()
-      upper_arm = Robot.get_link(robot, :upper_arm)
+      {:ok, upper_arm} = Robot.get_link(robot, :upper_arm)
 
       assert upper_arm.parent_joint == :shoulder
       assert upper_arm.child_joints == [:elbow]
@@ -176,7 +274,7 @@ defmodule BB.RobotTest do
 
     test "root link has no parent" do
       robot = SimpleArm.robot()
-      base = Robot.get_link(robot, :base)
+      {:ok, base} = Robot.get_link(robot, :base)
 
       assert base.parent_joint == nil
       assert base.child_joints == [:shoulder]
@@ -184,14 +282,14 @@ defmodule BB.RobotTest do
 
     test "leaf link has no children" do
       robot = SimpleArm.robot()
-      end_effector = Robot.get_link(robot, :end_effector)
+      {:ok, end_effector} = Robot.get_link(robot, :end_effector)
 
       assert end_effector.child_joints == []
     end
 
     test "mass is converted to kilograms" do
       robot = SimpleArm.robot()
-      base = Robot.get_link(robot, :base)
+      {:ok, base} = Robot.get_link(robot, :base)
 
       assert base.mass == 5.0
     end
@@ -200,7 +298,7 @@ defmodule BB.RobotTest do
   describe "Joint struct" do
     test "has parent and child link references" do
       robot = SimpleArm.robot()
-      elbow = Robot.get_joint(robot, :elbow)
+      {:ok, elbow} = Robot.get_joint(robot, :elbow)
 
       assert elbow.parent_link == :upper_arm
       assert elbow.child_link == :forearm
@@ -208,7 +306,7 @@ defmodule BB.RobotTest do
 
     test "origin is converted to meters and radians" do
       robot = SimpleArm.robot()
-      shoulder = Robot.get_joint(robot, :shoulder)
+      {:ok, shoulder} = Robot.get_joint(robot, :shoulder)
 
       assert shoulder.origin.position == {0.0, 0.0, 0.1}
       assert shoulder.origin.orientation == {0.0, 0.0, 0.0}
@@ -216,14 +314,14 @@ defmodule BB.RobotTest do
 
     test "axis is normalised" do
       robot = SimpleArm.robot()
-      shoulder = Robot.get_joint(robot, :shoulder)
+      {:ok, shoulder} = Robot.get_joint(robot, :shoulder)
 
       assert shoulder.axis == {0.0, 0.0, 1.0}
     end
 
     test "limits are converted to radians" do
       robot = SimpleArm.robot()
-      shoulder = Robot.get_joint(robot, :shoulder)
+      {:ok, shoulder} = Robot.get_joint(robot, :shoulder)
 
       assert_in_delta shoulder.limits.lower, -:math.pi() / 2, 0.001
       assert_in_delta shoulder.limits.upper, :math.pi() / 2, 0.001
@@ -231,7 +329,7 @@ defmodule BB.RobotTest do
 
     test "velocity is converted to radians per second" do
       robot = SimpleArm.robot()
-      shoulder = Robot.get_joint(robot, :shoulder)
+      {:ok, shoulder} = Robot.get_joint(robot, :shoulder)
 
       expected = 2.0 * :math.pi() / 180.0
       assert_in_delta shoulder.limits.velocity, expected, 0.0001
@@ -239,13 +337,13 @@ defmodule BB.RobotTest do
 
     test "rotational?/1 returns true for revolute joints" do
       robot = SimpleArm.robot()
-      shoulder = Robot.get_joint(robot, :shoulder)
+      {:ok, shoulder} = Robot.get_joint(robot, :shoulder)
       assert Joint.rotational?(shoulder)
     end
 
     test "movable?/1 returns true for non-fixed joints" do
       robot = SimpleArm.robot()
-      shoulder = Robot.get_joint(robot, :shoulder)
+      {:ok, shoulder} = Robot.get_joint(robot, :shoulder)
       assert Joint.movable?(shoulder)
     end
   end
@@ -255,10 +353,16 @@ defmodule BB.RobotTest do
       robot = SimpleArm.robot()
       topology = robot.topology
 
-      assert Topology.depth_of(topology, :base) == 0
-      assert Topology.depth_of(topology, :shoulder) == 1
-      assert Topology.depth_of(topology, :upper_arm) == 1
-      assert Topology.depth_of(topology, :elbow) == 2
+      assert Topology.depth_of(topology, :base) == {:ok, 0}
+      assert Topology.depth_of(topology, :shoulder) == {:ok, 1}
+      assert Topology.depth_of(topology, :upper_arm) == {:ok, 1}
+      assert Topology.depth_of(topology, :elbow) == {:ok, 2}
+    end
+
+    test "depth_of/2 errors on an unknown node" do
+      topology = SimpleArm.robot().topology
+
+      assert {:error, %UnknownLink{link: :nope}} = Topology.depth_of(topology, :nope)
     end
 
     test "max_depth/1 returns maximum depth" do
@@ -551,7 +655,7 @@ defmodule BB.RobotTest do
     test "raises for unknown link" do
       robot = SimpleArm.robot()
 
-      assert_raise ArgumentError, ~r/Unknown link/, fn ->
+      assert_raise UnknownLink, ~r/Unknown link: :nonexistent/, fn ->
         Kinematics.forward_kinematics(robot, %{}, :nonexistent)
       end
     end

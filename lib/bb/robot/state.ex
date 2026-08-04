@@ -206,10 +206,10 @@ defmodule BB.Robot.State do
   @spec get_chain_positions(t(), atom()) :: [{atom(), float()}]
   def get_chain_positions(%__MODULE__{robot: robot} = state, target_link) do
     case Robot.path_to(robot, target_link) do
-      nil ->
+      {:error, _} ->
         []
 
-      path ->
+      {:ok, path} ->
         path
         |> Enum.filter(&Map.has_key?(robot.joints, &1))
         |> Enum.map(fn joint_name ->
