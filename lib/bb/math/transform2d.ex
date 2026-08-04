@@ -135,7 +135,7 @@ defmodule BB.Math.Transform2D do
   @spec to_transform(t(), Vec3.t()) :: Transform.t()
   def to_transform(%__MODULE__{} = t, %Vec3{} = normal) do
     n = Vec3.normalise(normal)
-    {u, v} = plane_basis(n)
+    {u, v} = basis(n)
 
     offset = Vec3.add(Vec3.scale(u, t.x), Vec3.scale(v, t.y))
 
@@ -144,11 +144,31 @@ defmodule BB.Math.Transform2D do
     |> Transform.compose(Transform.from_axis_angle(n, t.theta))
   end
 
-  # `{u, v, n}` is right-handed with `u × v == n`. The seed is whichever cardinal
-  # axis is least aligned with the normal, which keeps the cross product
-  # well-conditioned and makes the canonical `{0, 0, 1}` normal reduce to the XY
-  # plane with `u == x̂` and `v == ŷ`.
-  defp plane_basis(%Vec3{} = n) do
+  @doc """
+  The two in-plane axes for a given plane normal.
+
+  `{u, v, normal}` is right-handed with `u × v == normal`, `u` is the direction
+  `x` measures along and `v` the direction `y` measures along. The canonical
+  `{0, 0, 1}` normal reduces to the XY plane with `u == x̂` and `v == ŷ`.
+
+  Exposed because a planar joint's Jacobian columns must be expressed in the same
+  basis `to_transform/2` lifts its configuration through, and the two disagreeing
+  would be a silently wrong derivative.
+
+  ## Examples
+
+      iex> {u, v} = BB.Math.Transform2D.plane_basis(BB.Math.Vec3.unit_z())
+      iex> {BB.Math.Vec3.to_list(u), BB.Math.Vec3.to_list(v)}
+      {[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]}
+  """
+  @spec plane_basis(Vec3.t()) :: {Vec3.t(), Vec3.t()}
+  def plane_basis(%Vec3{} = normal) do
+    basis(Vec3.normalise(normal))
+  end
+
+  # The seed is whichever cardinal axis is least aligned with the normal, which
+  # keeps the cross product well-conditioned.
+  defp basis(%Vec3{} = n) do
     seed =
       if abs(Vec3.z(n)) < 0.9 do
         Vec3.unit_z()

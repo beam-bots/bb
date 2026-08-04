@@ -6,6 +6,8 @@ defmodule BB.Robot.KinematicsTest do
   use ExUnit.Case, async: true
   import BB.Unit
 
+  alias BB.Error.Kinematics.UnknownJoint
+  alias BB.ExampleRobots.DifferentialDriveRobot
   alias BB.ExampleRobots.LinearActuator
   alias BB.ExampleRobots.SixDofArm
   alias BB.Math.Quaternion
@@ -500,15 +502,34 @@ defmodule BB.Robot.KinematicsTest do
 
       assert Nx.to_flat_list(picked[[.., 0]]) == Nx.to_flat_list(base[[.., 2]])
       assert Nx.to_flat_list(picked[[.., 1]]) == Nx.to_flat_list(base[[.., 0]])
+    end
 
-      # A joint that does not lie on the chain to the target gets a zero column.
-      with_unrelated =
+    test "a real joint off the chain to the target gets a zero column" do
+      robot = DifferentialDriveRobot.robot()
+
+      configurations = %{left_wheel_joint: 0.3, right_wheel_joint: -0.4}
+
+      jacobian =
+        Kinematics.position_jacobian(robot, configurations, :right_wheel, [
+          :right_wheel_joint,
+          :left_wheel_joint
+        ])
+
+      assert Nx.to_flat_list(jacobian[[.., 1]]) == [0.0, 0.0, 0.0]
+    end
+
+    # Previously a name the robot didn't have quietly produced one zero column,
+    # which hid a typo. It cannot survive per-DoF columns either: there is no way
+    # to know how wide a joint that doesn't exist should be.
+    test "a joint the robot doesn't have is an error, not a zero column" do
+      robot = SixDofArm.robot()
+
+      assert_raise UnknownJoint, ~r/Unknown joint: :not_a_real_joint/, fn ->
         Kinematics.position_jacobian(robot, @sixdof_positions, :tool0, [
           :wrist_3_joint,
           :not_a_real_joint
         ])
-
-      assert Nx.to_flat_list(with_unrelated[[.., 1]]) == [0.0, 0.0, 0.0]
+      end
     end
   end
 
