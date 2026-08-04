@@ -93,17 +93,75 @@ defmodule BB.MotionTest do
         execution_id: make_ref()
       }
 
-      {:ok, positions, meta} = Motion.solve_only(context, :tip, target, solver: MockSolver)
+      {:ok, positions, meta} =
+        Motion.solve_only(context, :tip, target, source_link: :base_link, solver: MockSolver)
 
       assert positions == %{shoulder_joint: 0.5, elbow_joint: 0.3}
       assert meta.iterations == 10
       assert meta.residual == 0.001
       assert meta.reached == true
 
-      {called_robot, _called_state, called_link, called_target, _opts} = MockSolver.last_call()
+      {called_robot, _called_state, called_source, called_link, called_target, _opts} =
+        MockSolver.last_call()
+
       assert called_robot == robot
+      assert called_source == :base_link
       assert called_link == :tip
       assert called_target == target
+    end
+
+    # No default anywhere: the root is right for a fixed-base arm and silently
+    # wrong for a robot whose base floats, so a missing `:source_link` must be
+    # loud rather than quietly producing the contaminated chain.
+    test "requires :source_link with no default" do
+      robot = MotionTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      context = %Context{
+        robot_module: MotionTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      assert_raise KeyError, fn ->
+        Motion.solve_only(context, :tip, {0.3, 0.2, 0.1}, solver: MockSolver)
+      end
+
+      assert_raise KeyError, fn ->
+        Motion.move_to(context, :tip, {0.3, 0.2, 0.1}, solver: MockSolver)
+      end
+
+      assert_raise KeyError, fn ->
+        Motion.solve_only_multi(context, %{tip: {0.3, 0.2, 0.1}}, solver: MockSolver)
+      end
+
+      assert_raise KeyError, fn ->
+        Motion.move_to_multi(context, %{tip: {0.3, 0.2, 0.1}}, solver: MockSolver)
+      end
+    end
+
+    test "does not pass :source_link on to the solver as an option" do
+      robot = MotionTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      context = %Context{
+        robot_module: MotionTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      {:ok, _positions, _meta} =
+        Motion.solve_only(context, :tip, {0.3, 0.2, 0.1},
+          source_link: :base_link,
+          solver: MockSolver
+        )
+
+      {_robot, _state, _source, _link, _target, opts} = MockSolver.last_call()
+
+      refute Keyword.has_key?(opts, :source_link)
+      refute Keyword.has_key?(opts, :solver)
     end
 
     test "passes solver options through" do
@@ -120,13 +178,14 @@ defmodule BB.MotionTest do
       }
 
       Motion.solve_only(context, :tip, {0.3, 0.2, 0.1},
+        source_link: :base_link,
         solver: MockSolver,
         max_iterations: 100,
         tolerance: 0.01,
         respect_limits: false
       )
 
-      {_robot, _state, _link, _target, opts} = MockSolver.last_call()
+      {_robot, _state, _source, _link, _target, opts} = MockSolver.last_call()
       assert opts[:max_iterations] == 100
       assert opts[:tolerance] == 0.01
       assert opts[:respect_limits] == false
@@ -148,7 +207,10 @@ defmodule BB.MotionTest do
       }
 
       {:error, %Unreachable{} = error} =
-        Motion.solve_only(context, :tip, {10.0, 0.0, 0.0}, solver: MockSolver)
+        Motion.solve_only(context, :tip, {10.0, 0.0, 0.0},
+          source_link: :base_link,
+          solver: MockSolver
+        )
 
       assert error.iterations == 50
       assert error.residual == 0.5
@@ -178,7 +240,11 @@ defmodule BB.MotionTest do
         execution_id: make_ref()
       }
 
-      {:ok, meta} = Motion.move_to(context, :tip, {0.3, 0.2, 0.1}, solver: MockSolver)
+      {:ok, meta} =
+        Motion.move_to(context, :tip, {0.3, 0.2, 0.1},
+          source_link: :base_link,
+          solver: MockSolver
+        )
 
       assert meta.reached == true
 
@@ -205,7 +271,10 @@ defmodule BB.MotionTest do
       }
 
       {:error, %Unreachable{}} =
-        Motion.move_to(context, :tip, {10.0, 0.0, 0.0}, solver: MockSolver)
+        Motion.move_to(context, :tip, {10.0, 0.0, 0.0},
+          source_link: :base_link,
+          solver: MockSolver
+        )
 
       assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 1.0}
       assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 1.0}
@@ -248,11 +317,14 @@ defmodule BB.MotionTest do
       )
 
       {:ok, _positions, meta} =
-        Motion.solve_only(MotionTestRobot, :tip, {0.3, 0.2, 0.1}, solver: MockSolver)
+        Motion.solve_only(MotionTestRobot, :tip, {0.3, 0.2, 0.1},
+          source_link: :base_link,
+          solver: MockSolver
+        )
 
       assert meta.reached == true
 
-      {called_robot, _state, _link, _target, _opts} = MockSolver.last_call()
+      {called_robot, _state, _source, _link, _target, _opts} = MockSolver.last_call()
       assert called_robot.name == MotionTestRobot
     end
   end
@@ -275,7 +347,8 @@ defmodule BB.MotionTest do
 
       targets = %{tip: {0.3, 0.2, 0.1}, upper_arm: {0.2, 0.1, 0.0}}
 
-      {:ok, results} = Motion.solve_only_multi(context, targets, solver: MockSolver)
+      {:ok, results} =
+        Motion.solve_only_multi(context, targets, source_link: :base_link, solver: MockSolver)
 
       assert Map.has_key?(results, :tip)
       assert Map.has_key?(results, :upper_arm)
@@ -300,7 +373,7 @@ defmodule BB.MotionTest do
 
         alias BB.Error.Kinematics.Unreachable
 
-        def solve(_robot, _state, target_link, _target, _opts) do
+        def solve(_robot, _state, _source_link, target_link, _target, _opts) do
           if target_link == :upper_arm do
             {:error,
              %Unreachable{
@@ -316,7 +389,10 @@ defmodule BB.MotionTest do
       end
 
       {:error, :upper_arm, %Unreachable{}, results} =
-        Motion.solve_only_multi(context, targets, solver: FailOnSecondSolver)
+        Motion.solve_only_multi(context, targets,
+          source_link: :base_link,
+          solver: FailOnSecondSolver
+        )
 
       assert {:error, %Unreachable{}} = results[:upper_arm]
     end
@@ -343,7 +419,8 @@ defmodule BB.MotionTest do
 
       targets = %{tip: {0.3, 0.2, 0.1}}
 
-      {:ok, results} = Motion.move_to_multi(context, targets, solver: MockSolver)
+      {:ok, results} =
+        Motion.move_to_multi(context, targets, source_link: :base_link, solver: MockSolver)
 
       assert {:ok, _positions, meta} = results[:tip]
       assert meta.reached == true

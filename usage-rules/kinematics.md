@@ -41,11 +41,18 @@ IK solvers are **pluggable** and ship in satellite packages (`bb_ik_dls`,
 
 ```elixir
 {:ok, meta} =
-  BB.Motion.move_to(MyRobot.Robot, :gripper, {0.3, 0.2, 0.1}, solver: BB.IK.FABRIK)
+  BB.Motion.move_to(MyRobot.Robot, :gripper, {0.3, 0.2, 0.1},
+    source_link: :base_link,
+    solver: BB.IK.FABRIK
+  )
 ```
 
 - **`:solver` is required** — core ships no default. Add a solver package and
   pass its module.
+- **`:source_link` is required too**, and has no default. The root is right for a
+  fixed-base arm and silently wrong for a robot whose base floats, where it drags
+  a 6-DoF joint into a problem that has no business containing one. Pass
+  `BB.Robot.root_link(robot)` when you do mean the whole tree.
 - Targets are `{x, y, z}` in metres.
 - Use `BB.Motion.solve_only/4` to compute angles without moving.
 - Solver options (`:max_iterations`, `:tolerance`, `:respect_limits`) are

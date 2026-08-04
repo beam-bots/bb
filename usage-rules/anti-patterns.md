@@ -71,8 +71,10 @@ Current, easily-confused signatures:
   `positions/1` or `joint_positions/1` — a joint's configuration is a float only
   when it has one degree of freedom).
 - Command callback is `handle_command/3` (goal, context, state) — not `/2`.
-- IK goes through `BB.Motion.move_to/4` with a required `:solver:`; there is no
-  default solver in core.
+- IK goes through `BB.Motion.move_to/4` with required `:solver` and
+  `:source_link` options; there is no default solver in core, and no default
+  source link either — pass `BB.Robot.root_link(robot)` if you mean the whole
+  tree.
 
 When unsure, `mix usage_rules.search_docs "<topic>" -p bb` rather than
 inventing a function.

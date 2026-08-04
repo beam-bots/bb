@@ -7,7 +7,7 @@ defmodule BB.Test.MockSolver do
   Mock IK solver for testing BB.Motion without real IK computations.
 
   Configure behaviour via process dictionary:
-  - `:mock_solver_result` - the result to return from solve/5
+  - `:mock_solver_result` - the result to return from solve/6
 
   ## Examples
 
@@ -20,7 +20,7 @@ defmodule BB.Test.MockSolver do
   alias BB.Error.Kinematics.Unreachable
 
   @doc """
-  Set the result that solve/5 will return.
+  Set the result that solve/6 will return.
   """
   def set_result(result) do
     Process.put(:mock_solver_result, result)
@@ -48,8 +48,11 @@ defmodule BB.Test.MockSolver do
   end
 
   @impl BB.IK.Solver
-  def solve(robot, state_or_positions, target_link, target, opts) do
-    Process.put(:mock_solver_last_call, {robot, state_or_positions, target_link, target, opts})
+  def solve(robot, state_or_configurations, source_link, target_link, target, opts) do
+    Process.put(
+      :mock_solver_last_call,
+      {robot, state_or_configurations, source_link, target_link, target, opts}
+    )
 
     case Process.get(:mock_solver_result) do
       nil ->

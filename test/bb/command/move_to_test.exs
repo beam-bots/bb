@@ -92,6 +92,42 @@ defmodule BB.Command.MoveToTest do
                call_command(goal, context)
     end
 
+    # A command reports a missing `:source_link` as an invalid argument rather
+    # than letting a `KeyError` escape from inside BB.Motion.
+    test "returns error when source_link is missing in single-target mode" do
+      robot = MoveToTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      context = %Context{
+        robot_module: MoveToTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      goal = %{target: Vec3.new(0.3, 0.0, 0.0), target_link: :tip, solver: MockSolver}
+
+      assert {:error, %InvalidCommand{argument: :source_link, reason: "required"}} =
+               call_command(goal, context)
+    end
+
+    test "returns error when source_link is missing in multi-target mode" do
+      robot = MoveToTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      context = %Context{
+        robot_module: MoveToTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      goal = %{targets: %{tip: Vec3.new(0.3, 0.0, 0.0)}, solver: MockSolver}
+
+      assert {:error, %InvalidCommand{argument: :source_link, reason: "required"}} =
+               call_command(goal, context)
+    end
+
     test "returns ok with metadata on success" do
       start_supervised!(MoveToTestRobot)
 
@@ -117,6 +153,7 @@ defmodule BB.Command.MoveToTest do
       goal = %{
         target: Vec3.new(0.3, 0.0, 0.0),
         target_link: :tip,
+        source_link: :base_link,
         solver: MockSolver
       }
 
@@ -146,6 +183,7 @@ defmodule BB.Command.MoveToTest do
       goal = %{
         target: Vec3.new(10.0, 0.0, 0.0),
         target_link: :tip,
+        source_link: :base_link,
         solver: MockSolver
       }
 
@@ -173,6 +211,7 @@ defmodule BB.Command.MoveToTest do
       goal = %{
         target: Vec3.new(0.3, 0.0, 0.0),
         target_link: :tip,
+        source_link: :base_link,
         solver: MockSolver,
         max_iterations: 100,
         tolerance: 0.01,
@@ -181,7 +220,7 @@ defmodule BB.Command.MoveToTest do
 
       {:ok, _meta} = call_command(goal, context)
 
-      {_robot, _state, _link, _target, opts} = MockSolver.last_call()
+      {_robot, _state, _source, _link, _target, opts} = MockSolver.last_call()
       assert opts[:max_iterations] == 100
       assert opts[:tolerance] == 0.01
       assert opts[:respect_limits] == false
@@ -206,6 +245,7 @@ defmodule BB.Command.MoveToTest do
 
       goal = %{
         targets: %{tip: {0.3, 0.0, 0.0}},
+        source_link: :base_link,
         solver: MockSolver
       }
 

@@ -48,14 +48,34 @@ defmodule BB.IK.Solver do
 
   Solvers return structured errors from `BB.Error.Kinematics`:
 
-  - `%BB.Error.Kinematics.UnknownLink{}` - Target link not found in robot topology
+  - `%BB.Error.Kinematics.UnknownLink{}` - Source or target link not found in robot
+    topology; `:role` says which
+  - `%BB.Error.Kinematics.NotAnAncestor{}` - Source link does not sit above the
+    target link, carrying their nearest common ancestor
   - `%BB.Error.Kinematics.NoDofs{}` - Chain has no movable joints
   - `%BB.Error.Kinematics.Unreachable{}` - Target outside workspace
   - `%BB.Error.Kinematics.NoSolution{}` - Solver failed to converge
+
+  ## Multi-DoF joints
+
+  A chain may contain `:planar` and `:floating` joints, whose configurations are a
+  `BB.Math.Transform2D` and a `BB.Math.Transform` rather than a float — see
+  `BB.Robot.State`. Jacobian width is then the sum of degrees of freedom along the
+  chain, and `BB.Robot.Kinematics.jacobian_columns/2` maps each column back to its
+  joint and degree of freedom.
+
+  Not every algorithm can handle this. A Jacobian-based solver is
+  dimension-agnostic and needs no special case; a heuristic that repositions
+  joints along a chain has no meaningful interpretation for a 6-DoF base. A solver
+  that cannot should say so clearly rather than returning a wrong answer — and
+  since `source_link` lets the caller scope the chain, a floating-base robot is
+  still solvable by such a solver as long as the chain asked for excludes the
+  floating joint.
   """
 
   alias BB.Error.Kinematics.NoDofs
   alias BB.Error.Kinematics.NoSolution
+  alias BB.Error.Kinematics.NotAnAncestor
   alias BB.Error.Kinematics.UnknownLink
   alias BB.Error.Kinematics.Unreachable
   alias BB.Math.Quaternion
@@ -106,7 +126,11 @@ defmodule BB.IK.Solver do
         }
 
   @type kinematics_error ::
-          UnknownLink.t() | NoDofs.t() | Unreachable.t() | NoSolution.t()
+          UnknownLink.t()
+          | NotAnAncestor.t()
+          | NoDofs.t()
+          | Unreachable.t()
+          | NoSolution.t()
 
   @type solve_result ::
           {:ok, positions(), meta()}
@@ -118,21 +142,42 @@ defmodule BB.IK.Solver do
   ## Parameters
 
   - `robot` - The BB.Robot struct containing topology and joint information
-  - `state_or_positions` - Either a BB.Robot.State or a map of joint positions
+  - `state_or_configurations` - Either a BB.Robot.State or a map of joint configurations
+  - `source_link` - The link the chain starts at; must be an ancestor of `target_link`
   - `target_link` - The name of the link to position (end-effector)
   - `target` - Target position `{x, y, z}` or 4x4 pose transform
   - `opts` - Solver options
 
   ## Returns
 
-  - `{:ok, positions, meta}` - Successfully solved; positions map and metadata
+  - `{:ok, configurations, meta}` - Successfully solved; configurations map and metadata
   - `{:error, error}` - Failed to solve; error struct contains all metadata
 
   Error structs include `:positions` with best-effort joint values when applicable.
+
+  ## Why `source_link` has no default
+
+  Defaulting it to the root is right for a fixed-base arm and precisely wrong for
+  a robot whose base floats, where it silently drags a 6-DoF joint into a problem
+  that has no business containing one. A default that is correct for one class of
+  robot and quietly wrong for another is the footgun this parameter exists to
+  remove, so every solve states its own scope:
+
+      # The chain contains only revolute joints, so the floating base is simply
+      # not part of the problem.
+      solver.solve(robot, state, :body, :front_left_foot, target, opts)
+
+      # The whole tree, said out loud.
+      solver.solve(robot, state, BB.Robot.root_link(robot), :gripper, target, opts)
+
+  Derive the chain with `BB.Robot.path_between/3`, which reports an unknown
+  source, an unknown target, and a source that isn't above the target as three
+  distinct errors.
   """
   @callback solve(
               robot :: Robot.t(),
-              state_or_positions :: Robot.State.t() | positions(),
+              state_or_configurations :: Robot.State.t() | positions(),
+              source_link :: atom(),
               target_link :: atom(),
               target :: target(),
               opts :: opts()
