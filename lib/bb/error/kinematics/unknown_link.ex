@@ -4,17 +4,24 @@
 
 defmodule BB.Error.Kinematics.UnknownLink do
   @moduledoc """
-  Target link not found in robot topology.
+  Link not found in robot topology.
 
-  Raised when attempting to solve inverse kinematics for a link
-  that does not exist in the robot's kinematic structure.
+  Returned when a lookup names a link the robot does not have.
+
+  `:role` says which parameter was at fault, so a lookup taking both ends of a
+  chain — `BB.Robot.path_between/3` — can report an unknown source as a source
+  rather than misattributing it to the target. It is `nil` for lookups that take
+  only one link.
   """
   use BB.Error,
     class: :kinematics,
-    fields: [:target_link, :robot]
+    fields: [:link, :role, :robot]
+
+  @type role :: :source | :target
 
   @type t :: %__MODULE__{
-          target_link: atom(),
+          link: atom(),
+          role: role() | nil,
           robot: atom() | nil
         }
 
@@ -22,8 +29,9 @@ defmodule BB.Error.Kinematics.UnknownLink do
     def severity(_), do: :error
   end
 
-  def message(%{target_link: link, robot: robot}) do
+  def message(%{link: link, role: role, robot: robot}) do
+    role_str = if role, do: "#{role} link", else: "link"
     robot_str = if robot, do: " in #{inspect(robot)}", else: ""
-    "Unknown link: #{inspect(link)} not found#{robot_str}"
+    "Unknown #{role_str}: #{inspect(link)} not found#{robot_str}"
   end
 end

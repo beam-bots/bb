@@ -222,6 +222,72 @@ Near kinematic singularity.
 
 **Severity:** `:warning`
 
+### NoParentJoint
+
+A link has no parent joint because it is the root of the kinematic tree.
+
+Distinct from `UnknownLink` so a caller walking up the tree gets a termination
+signal to match on rather than being told its valid root link doesn't exist.
+
+**Module:** `BB.Error.Kinematics.NoParentJoint`
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `link` | `atom` | The root link |
+
+**Severity:** `:error`
+
+### NotAnAncestor
+
+A source link does not sit above a target link in the kinematic tree.
+
+Returned by `BB.Robot.path_between/3`. `common_ancestor` is always populated and
+names the link the caller should have passed as the source.
+
+**Module:** `BB.Error.Kinematics.NotAnAncestor`
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `source_link` | `atom` | The link given as the source |
+| `target_link` | `atom` | The link given as the target |
+| `common_ancestor` | `atom` | Their nearest common ancestor |
+
+**Severity:** `:error`
+
+### UnknownActuator
+
+Referenced actuator not found.
+
+**Module:** `BB.Error.Kinematics.UnknownActuator`
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `actuator` | `atom` | Unknown actuator name |
+| `robot` | `atom` | Robot name, if known |
+
+**Severity:** `:error`
+
+### UnknownJoint
+
+Referenced joint not found.
+
+**Module:** `BB.Error.Kinematics.UnknownJoint`
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `joint` | `atom` | Unknown joint name |
+| `robot` | `atom` | Robot name, if known |
+
+**Severity:** `:error`
+
 ### UnknownLink
 
 Referenced link not found.
@@ -233,6 +299,8 @@ Referenced link not found.
 | Field | Type | Description |
 |-------|------|-------------|
 | `link` | `atom` | Unknown link name |
+| `role` | `:source \| :target` | Which parameter was at fault, for lookups taking both ends of a chain; `nil` otherwise |
+| `robot` | `atom` | Robot name, if known |
 
 **Severity:** `:error`
 
