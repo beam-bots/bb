@@ -103,6 +103,9 @@ defmodule BB.Robot.Kinematics.Defn do
   so it resolves to the identity. The per-joint inputs follow the same layout as
   `fk_chain/6`, describing each link's parent joint (identity-valued for the
   root). Returns `{n, 4, 4}`, one transform per link in input order.
+
+  Vectorises over a leading batch axis, so a fleet of identical chains — the legs
+  of a gait, say — resolves in one call with a lane per chain.
   """
   defn link_transforms(
          positions,
@@ -128,7 +131,12 @@ defmodule BB.Robot.Kinematics.Defn do
       )
 
     n = Nx.axis_size(joint_mats, 0)
-    init = Nx.broadcast(Nx.eye(4, type: :f64), {n, 4, 4})
+
+    # Derived from `joint_mats` rather than broadcast from a literal so that it
+    # carries whatever batch axis `positions` arrived with — `while` rejects an
+    # initial value shaped unlike the one its body produces, which made this
+    # unusable under `Nx.vectorize` (e.g. one lane per leg of a gait).
+    init = joint_mats |> Nx.multiply(0.0) |> Nx.add(Nx.eye(4, type: :f64))
 
     {result, _joint_mats, _parent_idx, _i} =
       while {acc = init, jm = joint_mats, parents = parent_idx, i = 0}, i < n do
