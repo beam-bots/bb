@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.28.0](https://github.com/beam-bots/bb/compare/v0.27.0...v0.28.0) (2026-08-05)
+
+
+
+
+### Bug Fixes:
+
+* vectorise `link_transforms/9` over a batch axis (#220) by James Harton
+
 ## [v0.27.0](https://github.com/beam-bots/bb/compare/v0.26.0...v0.27.0) (2026-08-04)
 
 
