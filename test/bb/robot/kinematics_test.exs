@@ -643,6 +643,51 @@ defmodule BB.Robot.KinematicsTest do
     end
   end
 
+  # Solving a fleet of identical chains at once — the legs of a gait — means one
+  # call with a lane per chain. The scan seeded its accumulator from a literal
+  # identity, which carries no batch axis, so `while` rejected the loop outright
+  # and the batched form could not run at all.
+  describe "link_transforms/9 vectorised over a batch of chains" do
+    setup do
+      rows = 3
+
+      # A root plus two revolute joints about Z, offset 0.3m then 0.2m along X.
+      solve = fn positions ->
+        Kinematics.Defn.link_transforms(
+          positions,
+          Nx.broadcast(0.0, {rows, 3}),
+          Nx.tensor([[0.0, 0.0, 0.0], [0.3, 0.0, 0.0], [0.2, 0.0, 0.0]], type: :f64),
+          Nx.tensor(List.duplicate([0.0, 0.0, 1.0], rows), type: :f64),
+          Nx.tensor([0.0, 1.0, 1.0], type: :f64),
+          Nx.broadcast(0.0, {rows}),
+          Nx.broadcast(Nx.eye(4, type: :f64), {rows, 4, 4}),
+          Nx.broadcast(0.0, {rows, 6}),
+          Nx.tensor([0, 0, 1], type: :s32)
+        )
+      end
+
+      %{solve: solve, lanes: [[0.0, 0.0, 0.0], [0.0, 0.3, 0.0], [0.0, 0.6, 0.3]]}
+    end
+
+    test "gives each lane the same answer as solving it alone", %{solve: solve, lanes: lanes} do
+      batched =
+        lanes
+        |> Nx.tensor(type: :f64)
+        |> Nx.vectorize(:chain)
+        |> solve.()
+        |> Nx.devectorize()
+
+      assert Nx.shape(batched) == {3, 3, 4, 4}
+
+      for {positions, lane} <- Enum.with_index(lanes) do
+        alone = solve.(Nx.tensor(positions, type: :f64))
+
+        assert Nx.all_close(batched[lane], alone) |> Nx.to_number() == 1,
+               "lane #{lane} disagrees with the same chain solved on its own"
+      end
+    end
+  end
+
   defp finite_difference_jacobian(robot, positions, target_link, joint_names) do
     epsilon = 1.0e-6
 
