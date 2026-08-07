@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.28.1](https://github.com/beam-bots/bb/compare/v0.28.0...v0.28.1) (2026-08-07)
+
+
+
+
+### Bug Fixes:
+
+* break the compile-time cycle that deadlocks the Elixir 1.19 compiler (#223) by James Harton
+
 ## [v0.28.0](https://github.com/beam-bots/bb/compare/v0.27.0...v0.28.0) (2026-08-05)
 
 
