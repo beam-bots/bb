@@ -274,13 +274,17 @@ defmodule BB.Message.Option do
   defp configuration?(%Transform{}), do: true
   defp configuration?(_), do: false
 
+  # `is_struct/2` rather than a `%Twist{}` pattern: the message modules below
+  # `BB.Message.Geometry` import this one, so matching their structs here would
+  # close a compile-time cycle. Elixir 1.20 tolerates it, 1.19 deadlocks the
+  # parallel compiler. A module in a guard is only a runtime reference.
   defp velocity?(value) when is_float(value), do: true
-  defp velocity?(%Twist2D{}), do: true
-  defp velocity?(%Twist{}), do: true
+  defp velocity?(value) when is_struct(value, Twist2D), do: true
+  defp velocity?(value) when is_struct(value, Twist), do: true
   defp velocity?(_), do: false
 
   defp effort?(value) when is_float(value), do: true
-  defp effort?(%Wrench2D{}), do: true
-  defp effort?(%Wrench{}), do: true
+  defp effort?(value) when is_struct(value, Wrench2D), do: true
+  defp effort?(value) when is_struct(value, Wrench), do: true
   defp effort?(_), do: false
 end
