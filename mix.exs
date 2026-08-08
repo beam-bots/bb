@@ -202,7 +202,7 @@ defmodule BB.MixProject do
   defp deps do
     [
       {:ease, "~> 1.0"},
-      {:localize, "~> 0.37"},
+      {:localize, "~> 1.0"},
       {:nx, "~> 0.10"},
       {:spark, "~> 2.3"},
       {:splode, "~> 0.2"},
