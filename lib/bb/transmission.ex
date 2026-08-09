@@ -132,13 +132,14 @@ defmodule BB.Transmission do
 
   defp apply_to_payload(other, _t), do: other
 
-  defp apply_to_waypoint(%{position: p, velocity: v, acceleration: a} = wp, t) do
-    %{
-      wp
-      | position: apply_position(p, t),
-        velocity: apply_rate(v, t),
-        acceleration: apply_rate(a, t)
-    }
+  # Waypoints are keyword lists, per `BB.Message.Actuator.Command.Trajectory`,
+  # and their rates are optional — an omitted one stays omitted rather than
+  # becoming a zero, which would mean "do not move" to a driver reading it.
+  defp apply_to_waypoint(waypoint, t) do
+    waypoint
+    |> Keyword.replace_lazy(:position, &apply_position(&1, t))
+    |> Keyword.replace_lazy(:velocity, &maybe_apply_rate(&1, t))
+    |> Keyword.replace_lazy(:acceleration, &maybe_apply_rate(&1, t))
   end
 
   defp maybe_apply_rate(nil, _t), do: nil

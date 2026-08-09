@@ -713,6 +713,9 @@ defmodule BB.Actuator do
     BB.call(robot, actuator_name, {:command, message}, timeout)
   end
 
+  defp as_float(nil), do: nil
+  defp as_float(value), do: value * 1.0
+
   defp build_trajectory_message(frame_id, waypoints, opts) do
     frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
 
@@ -722,8 +725,8 @@ defmodule BB.Actuator do
 
         [
           position: wp[:position] * 1.0,
-          velocity: wp[:velocity] * 1.0,
-          acceleration: wp[:acceleration] * 1.0,
+          velocity: as_float(wp[:velocity]),
+          acceleration: as_float(wp[:acceleration]),
           time_from_start: wp[:time_from_start]
         ]
       end)

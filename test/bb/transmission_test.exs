@@ -110,6 +110,62 @@ defmodule BB.TransmissionTest do
     end
   end
 
+  describe "apply_to_command/2 with a trajectory" do
+    alias BB.Message
+    alias BB.Message.Actuator.Command
+
+    defp trajectory(waypoints) do
+      {:ok, message} =
+        Message.new(Command.Trajectory, :joint, waypoints: waypoints, repeat: 1)
+
+      message
+    end
+
+    defp reversing, do: %{reduction: 1.0, offset: 0.0, reversed?: true}
+
+    test "waypoints are keyword lists, not maps" do
+      # apply_to_waypoint/2 used to pattern match a map, so any joint with a
+      # transmission crashed its actuator on the first waypoint
+      message =
+        trajectory([[position: 0.5, velocity: 0.3, acceleration: 0.1, time_from_start: 0]])
+
+      assert %Message{payload: %Command.Trajectory{waypoints: [waypoint]}} =
+               Transmission.apply_to_command(message, reversing())
+
+      assert waypoint[:position] == -0.5
+      assert waypoint[:velocity] == -0.3
+      assert waypoint[:acceleration] == -0.1
+    end
+
+    test "an omitted rate stays omitted rather than becoming zero" do
+      # zero would read as "do not move" to a driver; absent means "you decide"
+      message = trajectory([[position: 0.5, time_from_start: 0]])
+
+      assert %Message{payload: %Command.Trajectory{waypoints: [waypoint]}} =
+               Transmission.apply_to_command(message, reversing())
+
+      assert waypoint[:position] == -0.5
+      assert waypoint[:velocity] == nil
+      assert waypoint[:acceleration] == nil
+    end
+
+    test "time_from_start is untouched" do
+      message = trajectory([[position: 0.5, time_from_start: 250]])
+
+      assert %Message{payload: %Command.Trajectory{waypoints: [waypoint]}} =
+               Transmission.apply_to_command(message, reversing())
+
+      assert waypoint[:time_from_start] == 250
+    end
+
+    test "a nil transmission leaves the waypoints alone" do
+      waypoints = [[position: 0.5, velocity: 0.3, acceleration: 0.1, time_from_start: 0]]
+
+      assert %Message{payload: %Command.Trajectory{waypoints: ^waypoints}} =
+               Transmission.apply_to_command(trajectory(waypoints), nil)
+    end
+  end
+
   describe "unapply_to_payload/2" do
     alias BB.Message
     alias BB.Message.Actuator.BeginMotion
