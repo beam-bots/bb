@@ -69,10 +69,9 @@ defmodule BB.Dsl.UniquenessTransformer do
     end
   end
 
-  # `Localize.Unit` and `Decimal` structs carry a `:name` field that is not a
-  # DSL entity identifier — skip them so they aren't treated as named entities.
-  defp retrieve_names(%Localize.Unit{}, _path, names), do: names
-  defp retrieve_names(%Decimal{}, _path, names), do: names
+  # `BB.Unit` structs carry a `:name` field that is not a DSL entity
+  # identifier — skip them so they aren't treated as named entities.
+  defp retrieve_names(%BB.Unit{}, _path, names), do: names
 
   # Estimator input/output entities use `:name` as a callback-side key
   # (matched in the user's `handle_input/2` payload map and `{:reply, [...]}`

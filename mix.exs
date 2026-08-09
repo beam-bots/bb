@@ -30,6 +30,7 @@ defmodule BB.MixProject do
 
   defp dialyzer do
     [
+      ignore_warnings: ".dialyzer_ignore.exs",
       plt_add_apps: [:mix]
     ]
   end
@@ -202,7 +203,6 @@ defmodule BB.MixProject do
   defp deps do
     [
       {:ease, "~> 1.0"},
-      {:localize, "~> 1.0"},
       {:nx, "~> 0.10"},
       {:spark, "~> 2.3"},
       {:splode, "~> 0.2"},
@@ -216,6 +216,9 @@ defmodule BB.MixProject do
       {:ex_doc, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:git_ops, "~> 2.9", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.6", optional: true},
+      # Generates `BB.Unit.Conversions`; see `mix localize.unit.gen_conversions`.
+      {:localize,
+       github: "elixir-localize/localize", ref: "b77cb38c", only: [:dev], runtime: false},
       {:mimic, "~> 2.2", only: :test},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:usage_rules, "~> 1.2", only: [:dev], runtime: false}

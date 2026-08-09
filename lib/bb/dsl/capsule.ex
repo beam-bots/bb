@@ -19,7 +19,7 @@ defmodule BB.Dsl.Capsule do
             radius: nil,
             height: nil
 
-  alias Localize.Unit
+  alias BB.Unit
   alias Spark.Dsl.Entity
 
   @type t :: %__MODULE__{

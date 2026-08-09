@@ -138,7 +138,7 @@ defmodule BB.Estimator.Wiring do
 
   defp duration_to_ns(unit) do
     unit
-    |> Localize.Unit.convert!("second")
+    |> BB.Unit.convert!("second")
     |> Units.extract_float()
     |> Kernel.*(1_000_000_000)
     |> round()

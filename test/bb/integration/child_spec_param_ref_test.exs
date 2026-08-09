@@ -238,7 +238,7 @@ defmodule BB.Integration.ChildSpecParamRefTest do
 
       # Should receive the resolved unit value (10 newton_meter as Cldr.Unit)
       assert max_effort != nil
-      assert {:ok, converted} = Localize.Unit.convert(max_effort, "newton-meter")
+      assert {:ok, converted} = BB.Unit.convert(max_effort, "newton-meter")
       assert_in_delta Units.extract_float(converted), 10.0, 0.001
     end
 
@@ -274,7 +274,7 @@ defmodule BB.Integration.ChildSpecParamRefTest do
       {:actuator_handle_options, new_max_effort} = handle_opts_event
 
       assert new_max_effort != nil
-      assert {:ok, converted} = Localize.Unit.convert(new_max_effort, "newton-meter")
+      assert {:ok, converted} = BB.Unit.convert(new_max_effort, "newton-meter")
       assert_in_delta Units.extract_float(converted), 20.0, 0.001
     end
   end
@@ -294,7 +294,7 @@ defmodule BB.Integration.ChildSpecParamRefTest do
 
       # Should receive the resolved unit value (100 hertz as Cldr.Unit)
       assert sample_rate != nil
-      assert {:ok, converted} = Localize.Unit.convert(sample_rate, "hertz")
+      assert {:ok, converted} = BB.Unit.convert(sample_rate, "hertz")
       assert_in_delta Units.extract_float(converted), 100.0, 0.001
     end
 
@@ -330,7 +330,7 @@ defmodule BB.Integration.ChildSpecParamRefTest do
       {:sensor_handle_options, new_sample_rate} = handle_opts_event
 
       assert new_sample_rate != nil
-      assert {:ok, converted} = Localize.Unit.convert(new_sample_rate, "hertz")
+      assert {:ok, converted} = BB.Unit.convert(new_sample_rate, "hertz")
       assert_in_delta Units.extract_float(converted), 200.0, 0.001
     end
   end

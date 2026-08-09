@@ -22,7 +22,7 @@ defmodule BB.Dsl.Transmission do
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
           reduction: number,
-          offset: nil | Localize.Unit.t(),
+          offset: nil | BB.Unit.t(),
           reversed?: boolean
         }
 end

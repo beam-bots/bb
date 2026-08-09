@@ -22,11 +22,11 @@ defmodule BB.Dsl.Origin do
   @type t :: %__MODULE__{
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
-          roll: Localize.Unit.t(),
-          pitch: Localize.Unit.t(),
-          yaw: Localize.Unit.t(),
-          x: Localize.Unit.t(),
-          y: Localize.Unit.t(),
-          z: Localize.Unit.t()
+          roll: BB.Unit.t(),
+          pitch: BB.Unit.t(),
+          yaw: BB.Unit.t(),
+          x: BB.Unit.t(),
+          y: BB.Unit.t(),
+          z: BB.Unit.t()
         }
 end

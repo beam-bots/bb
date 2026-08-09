@@ -159,7 +159,7 @@ defmodule BB.Dsl.ValidateLimitUnitsTransformer do
     do: {:cont, :ok}
 
   defp check_field(
-         %Localize.Unit{} = value,
+         %BB.Unit{} = value,
          section,
          field,
          expected_unit,

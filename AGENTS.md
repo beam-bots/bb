@@ -185,7 +185,10 @@ When adding a new payload, pick the convention that matches its shape rather tha
 
 ## Key Patterns
 
-- Units: Use `Localize.Unit` throughout DSL, converted to floats (SI) in Robot struct
+- Units: Use `BB.Unit` throughout DSL, converted to floats (SI) in Robot struct.
+  Conversion tables live in `lib/bb/unit/conversions.ex`, generated from CLDR by
+  `mix localize.unit.gen_conversions` — Localize is a `:dev`-only dependency, so
+  nothing ships to a target but the generated file
 - Transforms: 4x4 matrices in `BB.Math.Transform`, angles in radians
 - Process registration: Uses Registry with `:via` tuples, names must be globally unique per robot
 - DSL entities are structs in `lib/bb/dsl/` matching entity names

@@ -173,7 +173,7 @@ defmodule BB.Loop do
   ## Options
 
   - `:clock` (required) - `{:rate, hertz}` or `:external`. A rate may be given
-    as a `Localize.Unit` in any frequency unit (`~u(100 hertz)`) or as a plain
+    as a `BB.Unit` in any frequency unit (`~u(100 hertz)`) or as a plain
     positive number of hertz.
 
   Building a loop does not start it; call `arm/1` once the component is ready to
@@ -327,9 +327,9 @@ defmodule BB.Loop do
   defp period_ns(:external), do: nil
   defp period_ns({:rate, rate}), do: round(@ns_per_second / hertz(rate))
 
-  defp hertz(%Localize.Unit{} = rate) do
+  defp hertz(%BB.Unit{} = rate) do
     rate
-    |> Localize.Unit.convert!("hertz")
+    |> BB.Unit.convert!("hertz")
     |> Units.extract_float()
     |> hertz()
   end
