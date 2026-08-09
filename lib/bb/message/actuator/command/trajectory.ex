@@ -20,8 +20,10 @@ defmodule BB.Message.Actuator.Command.Trajectory do
   Each waypoint is a map with:
 
   - `position` - Position at this waypoint (radians or metres)
-  - `velocity` - Velocity at this waypoint (rad/s or m/s)
-  - `acceleration` - Acceleration at this waypoint (rad/s² or m/s²)
+  - `velocity` - Velocity at this waypoint (rad/s or m/s). Optional; omitted
+    leaves the pace to the driver, which will generally work out the speed
+    needed to arrive by `time_from_start`.
+  - `acceleration` - Acceleration at this waypoint (rad/s² or m/s²). Optional.
   - `time_from_start` - Time from trajectory start (milliseconds)
 
   ## Examples
@@ -58,8 +60,16 @@ defmodule BB.Message.Actuator.Command.Trajectory do
 
   @waypoint_schema [
     position: [type: :float, required: true, doc: "Position (radians or metres)"],
-    velocity: [type: :float, required: true, doc: "Velocity (rad/s or m/s)"],
-    acceleration: [type: :float, required: true, doc: "Acceleration (rad/s² or m/s²)"],
+    velocity: [
+      type: {:or, [nil, :float]},
+      required: false,
+      doc: "Velocity (rad/s or m/s). Omitted means the driver decides."
+    ],
+    acceleration: [
+      type: {:or, [nil, :float]},
+      required: false,
+      doc: "Acceleration (rad/s² or m/s²). Omitted means the driver decides."
+    ],
     time_from_start: [
       type: :non_neg_integer,
       required: true,
