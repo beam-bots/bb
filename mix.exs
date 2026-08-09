@@ -9,7 +9,7 @@ defmodule BB.MixProject do
   Beam Bots - The framework for resilient robotics.
   """
 
-  @version "0.28.1"
+  @version "0.29.0"
 
   def project do
     [

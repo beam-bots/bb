@@ -11,6 +11,13 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.29.0](https://github.com/beam-bots/bb/compare/v0.28.1...v0.29.0) (2026-08-09)
+### Breaking Changes:
+
+* waypoint rates are optional, and survive a transmission (#226) by James Harton
+
+
+
 ## [v0.28.1](https://github.com/beam-bots/bb/compare/v0.28.0...v0.28.1) (2026-08-07)
 
 
