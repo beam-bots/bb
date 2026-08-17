@@ -6,6 +6,7 @@ defmodule BB.MotionTest do
   use ExUnit.Case, async: true
 
   alias BB.Command.Context
+  alias BB.Error.Kinematics.MultiFailed
   alias BB.Error.Kinematics.Unreachable
   alias BB.Error.State.NotArmed
   alias BB.Motion
@@ -486,13 +487,13 @@ defmodule BB.MotionTest do
         end
       end
 
-      {:error, :upper_arm, %Unreachable{}, results} =
+      {:error, %MultiFailed{failed_link: :upper_arm, error: %Unreachable{}} = failure} =
         Motion.solve_only_multi(context, targets,
           source_link: :base_link,
           solver: FailOnSecondSolver
         )
 
-      assert {:error, %Unreachable{}} = results[:upper_arm]
+      assert {:error, %Unreachable{}} = failure.partial_results[:upper_arm]
     end
   end
 
@@ -525,7 +526,7 @@ defmodule BB.MotionTest do
       assert meta.reached == true
     end
 
-    test "reports an actuator's refusal with no failed link, since no target failed" do
+    test "reports an actuator's refusal unwrapped, since no target failed" do
       start_supervised!(MotionTestRobot)
 
       robot = MotionTestRobot.robot()
@@ -548,13 +549,11 @@ defmodule BB.MotionTest do
         execution_id: make_ref()
       }
 
-      assert {:error, nil, %NotArmed{}, results} =
+      assert {:error, %NotArmed{}} =
                Motion.move_to_multi(context, %{tip: {0.3, 0.2, 0.1}},
                  source_link: :base_link,
                  solver: SolvesShoulder
                )
-
-      assert {:ok, _positions, _meta} = results[:tip]
     end
   end
 end

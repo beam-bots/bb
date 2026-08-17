@@ -306,8 +306,11 @@ case Motion.move_to_multi(MyRobot.Robot, targets,
       IO.puts("#{link}: #{meta.iterations} iterations")
     end)
 
-  {:error, failed_link, reason, _results} ->
-    IO.puts("#{failed_link} failed: #{reason}")
+  {:error, %BB.Error.Kinematics.MultiFailed{failed_link: link} = error} ->
+    IO.puts("#{link} failed: #{BB.Error.message(error)}")
+
+  {:error, error} ->
+    IO.puts("An actuator refused its command: #{BB.Error.message(error)}")
 end
 ```
 

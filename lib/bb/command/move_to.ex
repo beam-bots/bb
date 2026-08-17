@@ -92,7 +92,6 @@ defmodule BB.Command.MoveTo do
   use BB.Command
 
   alias BB.Error.Invalid.Command, as: InvalidCommand
-  alias BB.Error.Kinematics.MultiFailed
   alias BB.Math.Vec3
   alias BB.Message.Geometry.Point3D
   alias BB.Motion
@@ -130,13 +129,7 @@ defmodule BB.Command.MoveTo do
       opts = build_opts(goal, source_link, solver)
       target = normalize_target(target)
 
-      case Motion.move_to(context, target_link, target, opts) do
-        {:ok, meta} ->
-          {:ok, meta}
-
-        {:error, error} ->
-          {:error, error}
-      end
+      Motion.move_to(context, target_link, target, opts)
     end
   end
 
@@ -146,18 +139,7 @@ defmodule BB.Command.MoveTo do
          {:ok, source_link} <- fetch_required(goal, :source_link) do
       opts = build_opts(goal, source_link, solver)
 
-      case Motion.move_to_multi(context, targets, opts) do
-        {:ok, results} ->
-          {:ok, results}
-
-        {:error, failed_link, error, results} ->
-          {:error,
-           MultiFailed.exception(
-             failed_link: failed_link,
-             error: error,
-             partial_results: results
-           )}
-      end
+      Motion.move_to_multi(context, targets, opts)
     end
   end
 

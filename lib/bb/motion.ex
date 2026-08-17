@@ -46,7 +46,7 @@ defmodule BB.Motion do
       case BB.Motion.move_to_multi(MyRobot, targets,
              source_link: :body, solver: BB.IK.FABRIK) do
         {:ok, results} -> IO.puts("All targets reached")
-        {:error, failed_link, error, _results} -> IO.puts("Failed: \#{failed_link}")
+        {:error, error} -> IO.puts("Failed: \#{BB.Error.message(error)}")
       end
 
       # In a custom command handler
@@ -72,6 +72,7 @@ defmodule BB.Motion do
 
   alias BB.Actuator
   alias BB.Command.Context
+  alias BB.Error.Kinematics.MultiFailed
   alias BB.IK.Solver
   alias BB.Robot.Runtime
   alias BB.Robot.State, as: RobotState
@@ -94,10 +95,8 @@ defmodule BB.Motion do
 
   @type motion_result :: {:ok, meta()} | {:error, motion_error()}
   @type solve_result :: {:ok, positions(), meta()} | {:error, kinematics_error()}
-  @type multi_motion_result ::
-          {:ok, multi_results()} | {:error, atom() | nil, motion_error(), multi_results()}
-  @type multi_solve_result ::
-          {:ok, multi_results()} | {:error, atom(), kinematics_error(), multi_results()}
+  @type multi_motion_result :: {:ok, multi_results()} | {:error, motion_error()}
+  @type multi_solve_result :: {:ok, multi_results()} | {:error, MultiFailed.t()}
 
   @doc """
   Move an end-effector to a target position.
@@ -284,10 +283,12 @@ defmodule BB.Motion do
   ## Returns
 
   - `{:ok, results}` - All targets solved; results is a map of link → `{:ok, positions, meta}`
-  - `{:error, failed_link, error, results}` - A target failed; error is from `BB.Error.Kinematics`
-  - `{:error, nil, error, results}` - Every target solved, but an actuator
-    refused the command it was sent. The failed link is `nil` because a refusal
-    belongs to an actuator rather than to one of the targets
+  - `{:error, %BB.Error.Kinematics.MultiFailed{}}` - A target failed to solve.
+    The error names the link that failed, carries the underlying kinematics
+    error, and keeps the results of the targets solved before it
+  - `{:error, error}` - Every target solved, but an actuator refused the command
+    it was sent. That failure isn't kinematic, so it arrives as the actuator's
+    own error rather than wrapped in `MultiFailed`
 
   ## Examples
 
@@ -301,8 +302,11 @@ defmodule BB.Motion do
         {:ok, results} ->
           IO.puts("All targets reached")
 
-        {:error, failed_link, error, _results} ->
-          IO.puts("Failed to reach \#{failed_link}: \#{BB.Error.message(error)}")
+        {:error, %MultiFailed{failed_link: link} = error} ->
+          IO.puts("Failed to reach \#{link}: \#{BB.Error.message(error)}")
+
+        {:error, error} ->
+          IO.puts("An actuator refused: \#{BB.Error.message(error)}")
       end
   """
   @spec move_to_multi(robot_or_context(), targets(), keyword()) :: multi_motion_result()
@@ -325,10 +329,10 @@ defmodule BB.Motion do
         :ok ->
           {:ok, results}
 
-        # A refusal belongs to an actuator rather than to one of the targets:
-        # every target solved, and the command was refused on the way out.
+        # Not wrapped in `MultiFailed`: every target solved, and the command was
+        # refused on the way out, so nothing about this failure is kinematic.
         {:error, error} ->
-          {:error, nil, error, results}
+          {:error, error}
       end
     end
   end
@@ -346,7 +350,9 @@ defmodule BB.Motion do
   ## Returns
 
   - `{:ok, results}` - All targets solved; results is a map of link → `{:ok, positions, meta}`
-  - `{:error, failed_link, error, results}` - A target failed; error is from `BB.Error.Kinematics`
+  - `{:error, %BB.Error.Kinematics.MultiFailed{}}` - A target failed. The error
+    names the link that failed, carries the underlying kinematics error, and
+    keeps the results of the targets solved before it
 
   ## Examples
 
@@ -359,8 +365,8 @@ defmodule BB.Motion do
             IO.puts("\#{link}: residual=\#{meta.residual}")
           end)
 
-        {:error, failed_link, error, _results} ->
-          IO.puts("\#{failed_link} is unreachable: \#{BB.Error.message(error)}")
+        {:error, %MultiFailed{failed_link: link} = error} ->
+          IO.puts("\#{link} is unreachable: \#{BB.Error.message(error)}")
       end
   """
   @spec solve_only_multi(robot_or_context(), targets(), keyword()) :: multi_solve_result()
@@ -381,7 +387,13 @@ defmodule BB.Motion do
         {:cont, {:ok, Map.put(results, link, result)}}
 
       {:ok, {link, {:error, error} = result}}, {:ok, results} ->
-        {:halt, {:error, link, error, Map.put(results, link, result)}}
+        {:halt,
+         {:error,
+          MultiFailed.exception(
+            failed_link: link,
+            error: error,
+            partial_results: Map.put(results, link, result)
+          )}}
     end)
   end
 
