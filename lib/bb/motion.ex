@@ -111,6 +111,13 @@ defmodule BB.Motion do
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
     each command and waits for the actuator to accept it, raising the actuator's
     error if one refuses; `:direct` casts to each actuator without waiting
+  - `:velocity` - Velocity hint (passed to actuators)
+  - `:duration` - Duration hint in milliseconds (passed to actuators)
+  - `:command_id` - Correlation ID for feedback tracking (passed to actuators)
+  - `:timeout` - How long to wait for each actuator to accept its command, in
+    milliseconds (default 5000). Ignored under `:direct`, which waits for
+    nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
+    that would rather skip a late step than die wants `:direct`
   - `:max_iterations` - Maximum solver iterations (passed to solver)
   - `:tolerance` - Convergence tolerance in metres (passed to solver)
   - `:respect_limits` - Whether to clamp to joint limits (passed to solver)
@@ -140,6 +147,7 @@ defmodule BB.Motion do
     source_link = Keyword.fetch!(opts, :source_link)
     delivery = Keyword.get(opts, :delivery, :pubsub)
     solver_opts = extract_solver_opts(opts)
+    actuator_opts = extract_actuator_opts(opts)
 
     {robot_module, robot, robot_state} = extract_context(robot_or_context)
 
@@ -150,7 +158,7 @@ defmodule BB.Motion do
         case solver.solve(robot, robot_state, source_link, target_link, target, solver_opts) do
           {:ok, positions, meta} ->
             RobotState.set_configurations(robot_state, positions)
-            send_positions_to_actuators(robot_module, robot, positions, delivery)
+            send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
 
             result = {:ok, meta}
 
@@ -250,6 +258,13 @@ defmodule BB.Motion do
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
     each command and waits for the actuator to accept it, raising the actuator's
     error if one refuses; `:direct` casts to each actuator without waiting
+  - `:velocity` - Velocity hint (passed to actuators)
+  - `:duration` - Duration hint in milliseconds (passed to actuators)
+  - `:command_id` - Correlation ID for feedback tracking (passed to actuators)
+  - `:timeout` - How long to wait for each actuator to accept its command, in
+    milliseconds (default 5000). Ignored under `:direct`, which waits for
+    nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
+    that would rather skip a late step than die wants `:direct`
   - `:max_iterations` - Maximum solver iterations (passed to solver)
   - `:tolerance` - Convergence tolerance in metres (passed to solver)
   - `:respect_limits` - Whether to clamp to joint limits (passed to solver)
@@ -280,11 +295,12 @@ defmodule BB.Motion do
     case solve_only_multi(robot_or_context, targets, opts) do
       {:ok, results} ->
         delivery = Keyword.get(opts, :delivery, :pubsub)
+        actuator_opts = extract_actuator_opts(opts)
         {robot_module, robot, robot_state} = extract_context(robot_or_context)
 
         all_positions = merge_all_positions(results)
         RobotState.set_configurations(robot_state, all_positions)
-        send_positions_to_actuators(robot_module, robot, all_positions, delivery)
+        send_positions_to_actuators(robot_module, robot, all_positions, delivery, actuator_opts)
 
         {:ok, results}
 
@@ -367,6 +383,11 @@ defmodule BB.Motion do
     error if one refuses; `:direct` casts to each actuator without waiting
   - `:velocity` - Velocity hint for actuators (rad/s or m/s)
   - `:duration` - Duration hint for actuators (milliseconds)
+  - `:command_id` - Correlation ID for feedback tracking
+  - `:timeout` - How long to wait for each actuator to accept its command, in
+    milliseconds (default 5000). Ignored under `:direct`, which waits for
+    nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
+    that would rather skip a late step than die wants `:direct`
 
   ## Examples
 
@@ -406,19 +427,21 @@ defmodule BB.Motion do
     {robot_module, robot, robot_state}
   end
 
+  @actuator_opts [:velocity, :duration, :command_id, :timeout]
+
   defp extract_solver_opts(opts) do
     opts
-    |> Keyword.drop([:solver, :source_link, :delivery, :velocity, :duration, :command_id])
+    |> Keyword.drop([:solver, :source_link, :delivery | @actuator_opts])
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end
 
   defp extract_actuator_opts(opts) do
     opts
-    |> Keyword.take([:velocity, :duration, :command_id])
+    |> Keyword.take(@actuator_opts)
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end
 
-  defp send_positions_to_actuators(robot_module, robot, positions, delivery, opts \\ []) do
+  defp send_positions_to_actuators(robot_module, robot, positions, delivery, opts) do
     positions
     |> Enum.flat_map(&actuators_for_joint(robot, &1))
     |> send_to_actuators(robot_module, robot, delivery, opts)

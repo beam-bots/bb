@@ -21,6 +21,9 @@ defmodule BB.Test.RecordingActuator do
   Pass `subscribe_to:` to have it subscribe to some other topic. Messages
   arriving there are forwarded as `{:received, :info, message}`, which is how
   the tests check that the server leaves a driver's own subscriptions alone.
+
+  Pass `delay_ms:` to have it block for that long before answering a command,
+  standing in for a driver that waits on slow hardware.
   """
   use BB.Actuator,
     options_schema: [
@@ -28,6 +31,12 @@ defmodule BB.Test.RecordingActuator do
         type: {:list, :atom},
         required: false,
         doc: "An additional pubsub topic for the actuator to subscribe to itself"
+      ],
+      delay_ms: [
+        type: :non_neg_integer,
+        required: false,
+        default: 0,
+        doc: "How long to block before answering a command"
       ]
     ]
 
@@ -44,11 +53,12 @@ defmodule BB.Test.RecordingActuator do
       topic -> BB.subscribe(bb.robot, topic)
     end
 
-    {:ok, %{recipient: recipient}}
+    {:ok, %{recipient: recipient, delay_ms: Keyword.fetch!(opts, :delay_ms)}}
   end
 
   @impl BB.Actuator
   def handle_command(%BB.Message{} = message, state) do
+    Process.sleep(state.delay_ms)
     forward(state.recipient, :command, message)
     {:noreply, state}
   end

@@ -54,6 +54,27 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
   end
 
+  defmodule SlowRobot do
+    use BB
+
+    topology do
+      link :base do
+        joint :shoulder do
+          type :revolute
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(180 degree_per_second))
+          end
+
+          actuator :motor, {BB.Test.RecordingActuator, delay_ms: 300}
+
+          link :arm
+        end
+      end
+    end
+  end
+
   defmodule SubscribingRobot do
     use BB
 
@@ -159,6 +180,23 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       :ok = BB.publish(ArmedRobot, @actuator_topic, begin_motion)
 
       refute_receive {:received, _kind, %Message{payload: %BeginMotion{}}}, 200
+    end
+  end
+
+  describe "waiting" do
+    setup do
+      start_robot(SlowRobot)
+      :ok = BB.Safety.arm(SlowRobot)
+      :ok
+    end
+
+    test ":timeout bounds how long the caller waits for a slow driver" do
+      assert {:timeout, _} =
+               catch_exit(BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50))
+    end
+
+    test "and the default is long enough for one that merely takes its time" do
+      assert :ok = BB.Actuator.set_position(SlowRobot, :motor, 0.5)
     end
   end
 

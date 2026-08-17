@@ -35,6 +35,10 @@ defmodule BB.Command.MoveTo do
   - `respect_limits` - Whether to clamp to joint limits (default: true)
   - `delivery` - Actuator command delivery: `:pubsub` (default) waits for each
     actuator to accept its command, `:direct` doesn't wait
+  - `velocity` - Velocity hint for actuators (rad/s or m/s)
+  - `duration` - Duration hint for actuators (milliseconds)
+  - `timeout` - How long to wait for each actuator to accept its command, in
+    milliseconds (default: 5000). Unused under `delivery: :direct`
 
   ## Usage
 
@@ -174,7 +178,10 @@ defmodule BB.Command.MoveTo do
       max_iterations: Map.get(goal, :max_iterations),
       tolerance: Map.get(goal, :tolerance),
       respect_limits: Map.get(goal, :respect_limits),
-      delivery: Map.get(goal, :delivery)
+      delivery: Map.get(goal, :delivery),
+      velocity: Map.get(goal, :velocity),
+      duration: Map.get(goal, :duration),
+      timeout: Map.get(goal, :timeout)
     ]
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end

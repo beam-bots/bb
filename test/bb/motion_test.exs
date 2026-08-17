@@ -254,6 +254,36 @@ defmodule BB.MotionTest do
       assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.3}
     end
 
+    test "passes the actuator hints on rather than dropping them with the solver's" do
+      start_supervised!(MotionTestRobot)
+      :ok = BB.Safety.arm(MotionTestRobot)
+      BB.subscribe(MotionTestRobot, [:actuator])
+
+      robot = MotionTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      MockSolver.set_result(
+        {:ok, %{shoulder_joint: 0.5}, %{iterations: 10, residual: 0.001, reached: true}}
+      )
+
+      context = %Context{
+        robot_module: MotionTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      {:ok, _meta} =
+        Motion.move_to(context, :tip, {0.3, 0.2, 0.1},
+          source_link: :base_link,
+          solver: MockSolver,
+          velocity: 0.25,
+          duration: 400
+        )
+
+      assert_receive {:bb, _path, %{payload: %{velocity: 0.25, duration: 400}}}, 500
+    end
+
     test "does not update state on error" do
       robot = MotionTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -303,6 +333,30 @@ defmodule BB.MotionTest do
 
       assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 0.7}
       assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.4}
+    end
+
+    test "passes the actuator hints on to the actuators" do
+      start_supervised!(MotionTestRobot)
+      :ok = BB.Safety.arm(MotionTestRobot)
+      BB.subscribe(MotionTestRobot, [:actuator])
+
+      robot = MotionTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      context = %Context{
+        robot_module: MotionTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      :ok =
+        Motion.send_positions(context, %{shoulder_joint: 0.7},
+          velocity: 0.25,
+          duration: 400
+        )
+
+      assert_receive {:bb, _path, %{payload: %{velocity: 0.25, duration: 400}}}, 500
     end
 
     test "raises an actuator's refusal rather than reporting success" do
