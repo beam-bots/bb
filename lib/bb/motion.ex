@@ -86,10 +86,16 @@ defmodule BB.Motion do
   @type multi_results ::
           %{atom() => {:ok, positions(), meta()} | {:error, kinematics_error()}}
 
-  @type motion_result :: {:ok, meta()} | {:error, kinematics_error()}
+  @typedoc """
+  Why a motion stopped: either the solver couldn't reach the target, or an
+  actuator refused the command it was sent.
+  """
+  @type motion_error :: kinematics_error() | BB.Error.t()
+
+  @type motion_result :: {:ok, meta()} | {:error, motion_error()}
   @type solve_result :: {:ok, positions(), meta()} | {:error, kinematics_error()}
   @type multi_motion_result ::
-          {:ok, multi_results()} | {:error, atom(), kinematics_error(), multi_results()}
+          {:ok, multi_results()} | {:error, atom() | nil, motion_error(), multi_results()}
   @type multi_solve_result ::
           {:ok, multi_results()} | {:error, atom(), kinematics_error(), multi_results()}
 
@@ -109,13 +115,14 @@ defmodule BB.Motion do
 
   Optional:
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
-    each command and waits for the actuator to accept it, raising the actuator's
-    error if one refuses; `:direct` casts to each actuator without waiting
+    each command and waits for the actuator to accept it, reporting the first
+    refusal; `:direct` casts to each actuator and waits for nothing, so a
+    refusal is never reported
   - `:velocity` - Velocity hint (passed to actuators)
   - `:duration` - Duration hint in milliseconds (passed to actuators)
   - `:command_id` - Correlation ID for feedback tracking (passed to actuators)
   - `:timeout` - How long to wait for each actuator to accept its command, in
-    milliseconds (default 5000). Ignored under `:direct`, which waits for
+    milliseconds (default 5000). Unused under `:direct`, which waits for
     nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
     that would rather skip a late step than die wants `:direct`
   - `:max_iterations` - Maximum solver iterations (passed to solver)
@@ -125,7 +132,10 @@ defmodule BB.Motion do
   ## Returns
 
   - `{:ok, meta}` - Successfully moved; meta contains solver info (iterations, residual, etc.)
-  - `{:error, error}` - Failed; error is a struct from `BB.Error.Kinematics`
+  - `{:error, error}` - Failed; either a struct from `BB.Error.Kinematics` if
+    the target couldn't be solved, or the actuator's own error if one refused
+    the command it was sent. The robot state is updated either way: the
+    positions were computed, and some joints may have taken them
 
   ## Examples
 
@@ -155,25 +165,26 @@ defmodule BB.Motion do
       [:bb, :motion, :move_to],
       %{robot: robot.name, target_link: target_link, solver: solver},
       fn ->
-        case solver.solve(robot, robot_state, source_link, target_link, target, solver_opts) do
-          {:ok, positions, meta} ->
-            RobotState.set_configurations(robot_state, positions)
-            send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
+        with {:ok, positions, meta} <-
+               solver.solve(robot, robot_state, source_link, target_link, target, solver_opts),
+             RobotState.set_configurations(robot_state, positions),
+             :ok <-
+               send_positions_to_actuators(
+                 robot_module,
+                 robot,
+                 positions,
+                 delivery,
+                 actuator_opts
+               ) do
+          extra_meta = %{
+            iterations: meta.iterations,
+            residual: meta.residual,
+            reached: meta.reached
+          }
 
-            result = {:ok, meta}
-
-            extra_meta = %{
-              iterations: meta.iterations,
-              residual: meta.residual,
-              reached: meta.reached
-            }
-
-            {result, extra_meta}
-
-          {:error, error} ->
-            result = {:error, error}
-            extra_meta = %{error: error.__struct__}
-            {result, extra_meta}
+          {{:ok, meta}, extra_meta}
+        else
+          {:error, error} -> {{:error, error}, %{error: error.__struct__}}
         end
       end
     )
@@ -256,13 +267,14 @@ defmodule BB.Motion do
 
   Optional:
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
-    each command and waits for the actuator to accept it, raising the actuator's
-    error if one refuses; `:direct` casts to each actuator without waiting
+    each command and waits for the actuator to accept it, reporting the first
+    refusal; `:direct` casts to each actuator and waits for nothing, so a
+    refusal is never reported
   - `:velocity` - Velocity hint (passed to actuators)
   - `:duration` - Duration hint in milliseconds (passed to actuators)
   - `:command_id` - Correlation ID for feedback tracking (passed to actuators)
   - `:timeout` - How long to wait for each actuator to accept its command, in
-    milliseconds (default 5000). Ignored under `:direct`, which waits for
+    milliseconds (default 5000). Unused under `:direct`, which waits for
     nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
     that would rather skip a late step than die wants `:direct`
   - `:max_iterations` - Maximum solver iterations (passed to solver)
@@ -273,6 +285,9 @@ defmodule BB.Motion do
 
   - `{:ok, results}` - All targets solved; results is a map of link → `{:ok, positions, meta}`
   - `{:error, failed_link, error, results}` - A target failed; error is from `BB.Error.Kinematics`
+  - `{:error, nil, error, results}` - Every target solved, but an actuator
+    refused the command it was sent. The failed link is `nil` because a refusal
+    belongs to an actuator rather than to one of the targets
 
   ## Examples
 
@@ -292,20 +307,29 @@ defmodule BB.Motion do
   """
   @spec move_to_multi(robot_or_context(), targets(), keyword()) :: multi_motion_result()
   def move_to_multi(robot_or_context, targets, opts) do
-    case solve_only_multi(robot_or_context, targets, opts) do
-      {:ok, results} ->
-        delivery = Keyword.get(opts, :delivery, :pubsub)
-        actuator_opts = extract_actuator_opts(opts)
-        {robot_module, robot, robot_state} = extract_context(robot_or_context)
+    with {:ok, results} <- solve_only_multi(robot_or_context, targets, opts) do
+      delivery = Keyword.get(opts, :delivery, :pubsub)
+      actuator_opts = extract_actuator_opts(opts)
+      {robot_module, robot, robot_state} = extract_context(robot_or_context)
 
-        all_positions = merge_all_positions(results)
-        RobotState.set_configurations(robot_state, all_positions)
-        send_positions_to_actuators(robot_module, robot, all_positions, delivery, actuator_opts)
+      all_positions = merge_all_positions(results)
+      RobotState.set_configurations(robot_state, all_positions)
 
-        {:ok, results}
+      case send_positions_to_actuators(
+             robot_module,
+             robot,
+             all_positions,
+             delivery,
+             actuator_opts
+           ) do
+        :ok ->
+          {:ok, results}
 
-      {:error, failed_link, error, results} ->
-        {:error, failed_link, error, results}
+        # A refusal belongs to an actuator rather than to one of the targets:
+        # every target solved, and the command was refused on the way out.
+        {:error, error} ->
+          {:error, nil, error, results}
+      end
     end
   end
 
@@ -379,15 +403,22 @@ defmodule BB.Motion do
   ## Options
 
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
-    each command and waits for the actuator to accept it, raising the actuator's
-    error if one refuses; `:direct` casts to each actuator without waiting
+    each command and waits for the actuator to accept it, reporting the first
+    refusal; `:direct` casts to each actuator and waits for nothing, so a
+    refusal is never reported
   - `:velocity` - Velocity hint for actuators (rad/s or m/s)
   - `:duration` - Duration hint for actuators (milliseconds)
   - `:command_id` - Correlation ID for feedback tracking
   - `:timeout` - How long to wait for each actuator to accept its command, in
-    milliseconds (default 5000). Ignored under `:direct`, which waits for
+    milliseconds (default 5000). Unused under `:direct`, which waits for
     nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
     that would rather skip a late step than die wants `:direct`
+
+  ## Returns
+
+  - `:ok` - Every actuator accepted its command
+  - `{:error, error}` - One refused; the rest were still sent, and the robot
+    state was updated regardless
 
   ## Examples
 
@@ -397,7 +428,8 @@ defmodule BB.Motion do
       # With direct delivery for lower latency
       :ok = BB.Motion.send_positions(MyRobot, positions, delivery: :direct)
   """
-  @spec send_positions(robot_or_context(), positions(), keyword()) :: :ok
+  @spec send_positions(robot_or_context(), positions(), keyword()) ::
+          :ok | {:error, motion_error()}
   def send_positions(robot_or_context, positions, opts \\ []) do
     delivery = Keyword.get(opts, :delivery, :pubsub)
     actuator_opts = extract_actuator_opts(opts)
@@ -409,12 +441,13 @@ defmodule BB.Motion do
       %{robot: robot.name, joint_count: map_size(positions), delivery: delivery},
       fn ->
         RobotState.set_configurations(robot_state, positions)
-        send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
-        {:ok, %{}}
+
+        result =
+          send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
+
+        {result, %{}}
       end
     )
-
-    :ok
   end
 
   defp extract_context(%Context{} = context) do
@@ -427,11 +460,11 @@ defmodule BB.Motion do
     {robot_module, robot, robot_state}
   end
 
-  @actuator_opts [:velocity, :duration, :command_id, :timeout]
+  @actuator_opts [:delivery, :velocity, :duration, :command_id, :timeout]
 
   defp extract_solver_opts(opts) do
     opts
-    |> Keyword.drop([:solver, :source_link, :delivery | @actuator_opts])
+    |> Keyword.drop([:solver, :source_link | @actuator_opts])
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end
 
@@ -465,19 +498,19 @@ defmodule BB.Motion do
       Task.async(fn -> Actuator.set_position(robot_module, path, position, opts) end)
     end)
     |> Task.await_many(:infinity)
-    |> raise_refusal()
+    |> first_refusal()
   end
 
   defp send_to_actuators(commands, robot_module, _robot, :direct, opts) do
     Enum.each(commands, fn {actuator_name, position} ->
-      Actuator.set_position_async(robot_module, actuator_name, position, opts)
+      Actuator.set_position(robot_module, actuator_name, position, opts)
     end)
   end
 
-  defp raise_refusal(results) do
+  defp first_refusal(results) do
     case Enum.find(results, &match?({:error, _}, &1)) do
       nil -> :ok
-      {:error, error} -> raise error
+      {:error, error} -> {:error, error}
     end
   end
 end

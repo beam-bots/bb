@@ -284,6 +284,30 @@ defmodule BB.MotionTest do
       assert_receive {:bb, _path, %{payload: %{velocity: 0.25, duration: 400}}}, 500
     end
 
+    test "returns an actuator's refusal rather than the solver's metadata" do
+      start_supervised!(MotionTestRobot)
+
+      robot = MotionTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      MockSolver.set_result(
+        {:ok, %{shoulder_joint: 0.5}, %{iterations: 10, residual: 0.001, reached: true}}
+      )
+
+      context = %Context{
+        robot_module: MotionTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      assert {:error, %NotArmed{}} =
+               Motion.move_to(context, :tip, {0.3, 0.2, 0.1},
+                 source_link: :base_link,
+                 solver: MockSolver
+               )
+    end
+
     test "does not update state on error" do
       robot = MotionTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -359,7 +383,7 @@ defmodule BB.MotionTest do
       assert_receive {:bb, _path, %{payload: %{velocity: 0.25, duration: 400}}}, 500
     end
 
-    test "raises an actuator's refusal rather than reporting success" do
+    test "returns an actuator's refusal rather than reporting success" do
       start_supervised!(MotionTestRobot)
 
       robot = MotionTestRobot.robot()
@@ -372,9 +396,8 @@ defmodule BB.MotionTest do
         execution_id: make_ref()
       }
 
-      assert_raise NotArmed, fn ->
-        Motion.send_positions(context, %{shoulder_joint: 0.7, elbow_joint: 0.4})
-      end
+      assert {:error, %NotArmed{}} =
+               Motion.send_positions(context, %{shoulder_joint: 0.7, elbow_joint: 0.4})
     end
   end
 
@@ -500,6 +523,38 @@ defmodule BB.MotionTest do
 
       assert {:ok, _positions, meta} = results[:tip]
       assert meta.reached == true
+    end
+
+    test "reports an actuator's refusal with no failed link, since no target failed" do
+      start_supervised!(MotionTestRobot)
+
+      robot = MotionTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      # Each target is solved in its own task, which doesn't inherit the process
+      # dictionary `MockSolver` keeps its answer in, so this one carries its own.
+      defmodule SolvesShoulder do
+        @behaviour BB.IK.Solver
+
+        def solve(_robot, _state, _source_link, _target_link, _target, _opts) do
+          {:ok, %{shoulder_joint: 0.5}, %{iterations: 10, residual: 0.001, reached: true}}
+        end
+      end
+
+      context = %Context{
+        robot_module: MotionTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      assert {:error, nil, %NotArmed{}, results} =
+               Motion.move_to_multi(context, %{tip: {0.3, 0.2, 0.1}},
+                 source_link: :base_link,
+                 solver: SolvesShoulder
+               )
+
+      assert {:ok, _positions, _meta} = results[:tip]
     end
   end
 end
