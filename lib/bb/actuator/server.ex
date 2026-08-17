@@ -38,6 +38,8 @@ defmodule BB.Actuator.Server do
 
   use GenServer
 
+  require Logger
+
   alias BB.Actuator.MotorProfile
   alias BB.Component.OptionsSchema
   alias BB.Error.State.NotArmed
@@ -356,6 +358,12 @@ defmodule BB.Actuator.Server do
   end
 
   defp refuse(message, reason, error, transport, state) do
+    Logger.warning(
+      "Actuator #{inspect(state.actuator_name)} on #{inspect(state.bb.robot)} refused " <>
+        "#{inspect(message.payload.__struct__)} delivered by #{transport}: " <>
+        Exception.message(error)
+    )
+
     :telemetry.execute(
       [:bb, :actuator, :rejected],
       %{count: 1},

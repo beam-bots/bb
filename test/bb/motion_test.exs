@@ -220,6 +220,7 @@ defmodule BB.MotionTest do
   describe "move_to/4" do
     test "updates robot state on success" do
       start_supervised!(MotionTestRobot)
+      :ok = BB.Safety.arm(MotionTestRobot)
 
       robot = MotionTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -284,6 +285,7 @@ defmodule BB.MotionTest do
   describe "send_positions/3" do
     test "updates robot state" do
       start_supervised!(MotionTestRobot)
+      :ok = BB.Safety.arm(MotionTestRobot)
 
       robot = MotionTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -401,6 +403,7 @@ defmodule BB.MotionTest do
   describe "move_to_multi/3" do
     test "moves to multiple targets" do
       start_supervised!(MotionTestRobot)
+      :ok = BB.Safety.arm(MotionTestRobot)
 
       robot = MotionTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)

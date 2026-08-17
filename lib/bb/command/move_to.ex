@@ -33,7 +33,8 @@ defmodule BB.Command.MoveTo do
   - `max_iterations` - Maximum solver iterations (default: 50)
   - `tolerance` - Convergence tolerance in metres (default: 1.0e-4)
   - `respect_limits` - Whether to clamp to joint limits (default: true)
-  - `delivery` - Actuator command delivery: `:pubsub` (default), `:direct`, or `:sync`
+  - `delivery` - Actuator command delivery: `:pubsub` (default) waits for each
+    actuator to accept its command, `:direct` doesn't wait
 
   ## Usage
 

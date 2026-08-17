@@ -102,20 +102,30 @@ defmodule BB.PubSub do
   ancestor paths. At each level, subscribers are filtered by their registered
   `message_types` (if any).
 
+  ## Options
+
+    * `:except` - Processes to skip. Use it to put a message on a topic for the
+      benefit of its observers when one subscriber is being handed the same
+      message by another route and would otherwise act on it twice.
+
   ## Examples
 
       # From a sensor process
       path = [:sensor | state.bb.path]
       publish(state.bb.robot, path, message)
+
+      # Everyone watching the topic except the process being called directly
+      publish(robot, path, message, except: [pid])
   """
-  @spec publish(module, [atom], BB.Message.t()) :: :ok
-  def publish(robot, path, %BB.Message{} = message)
+  @spec publish(module, [atom], BB.Message.t(), keyword) :: :ok
+  def publish(robot, path, %BB.Message{} = message, opts \\ [])
       when is_atom(robot) and is_list(path) do
     settings = Info.settings(robot)
     registry_module = settings.registry_module
     registry = registry_name(robot)
     message = %{message | robot: robot}
     message_module = message.payload.__struct__
+    except = Keyword.get(opts, :except, [])
 
     path
     |> ancestor_paths()
@@ -123,15 +133,16 @@ defmodule BB.PubSub do
       registry_module.dispatch(
         registry,
         topic,
-        &dispatch_to_subscribers(&1, path, message, message_module)
+        &dispatch_to_subscribers(&1, path, message, message_module, except)
       )
     end)
 
     :ok
   end
 
-  defp dispatch_to_subscribers(entries, path, message, message_module) do
+  defp dispatch_to_subscribers(entries, path, message, message_module, except) do
     for {pid, msg_types} <- entries,
+        pid not in except,
         msg_types == [] or message_module in msg_types do
       send(pid, {:bb, path, message})
     end

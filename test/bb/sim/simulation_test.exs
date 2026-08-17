@@ -5,6 +5,7 @@
 defmodule BB.Sim.SimulationTest do
   use ExUnit.Case, async: false
 
+  alias BB.Error.State.NotArmed
   alias BB.Message
   alias BB.Message.Actuator.BeginMotion
   alias BB.PubSub
@@ -71,7 +72,7 @@ defmodule BB.Sim.SimulationTest do
       :ok = BB.Safety.arm(SimModeRobot)
 
       target_position = 0.5
-      BB.Actuator.set_position!(SimModeRobot, :motor, target_position)
+      :ok = BB.Actuator.set_position(SimModeRobot, :motor, target_position)
 
       assert_receive {:bb, [:actuator, :base_link, :shoulder, :motor],
                       %Message{payload: %BeginMotion{target_position: ^target_position}}},
@@ -89,7 +90,7 @@ defmodule BB.Sim.SimulationTest do
       :ok = BB.Safety.arm(SimModeRobot)
 
       over_limit = 3.0
-      BB.Actuator.set_position!(SimModeRobot, :motor, over_limit)
+      :ok = BB.Actuator.set_position(SimModeRobot, :motor, over_limit)
 
       upper_limit = :math.pi() / 2
 
@@ -102,14 +103,21 @@ defmodule BB.Sim.SimulationTest do
       Supervisor.stop(pid)
     end
 
-    test "synchronous position command returns acknowledgement" do
+    test "a position command is acknowledged once the actuator has accepted it" do
       {:ok, pid} = SimModeRobot.start_link(simulation: :kinematic)
 
       :ok = BB.Safety.arm(SimModeRobot)
 
-      result = BB.Actuator.set_position_sync(SimModeRobot, :motor, 0.5)
+      assert BB.Actuator.set_position(SimModeRobot, :motor, 0.5) == :ok
 
-      assert result == {:ok, :accepted}
+      Supervisor.stop(pid)
+    end
+
+    test "and refused while the robot is disarmed" do
+      {:ok, pid} = SimModeRobot.start_link(simulation: :kinematic)
+
+      assert {:error, %NotArmed{actuator: :motor}} =
+               BB.Actuator.set_position(SimModeRobot, :motor, 0.5)
 
       Supervisor.stop(pid)
     end
@@ -276,7 +284,7 @@ defmodule BB.Sim.SimulationTest do
       :ok = BB.Safety.arm(AutoEstimatorRobot)
 
       target_position = 0.5
-      BB.Actuator.set_position!(AutoEstimatorRobot, :motor, target_position)
+      :ok = BB.Actuator.set_position(AutoEstimatorRobot, :motor, target_position)
 
       # Should receive JointState from the auto-added estimator
       assert_receive {:bb, [:sensor, :base_link, :shoulder, :motor_position_estimator],

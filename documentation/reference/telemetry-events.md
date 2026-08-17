@@ -89,7 +89,7 @@ Sending positions to actuators.
 |-----|------|-------------|
 | `robot` | `atom` | Robot module |
 | `joint_count` | `integer` | Number of joints updated |
-| `delivery` | `atom` | `:pubsub`, `:direct`, or `:sync` |
+| `delivery` | `atom` | `:pubsub` or `:direct` |
 
 ## Kinematics Events
 

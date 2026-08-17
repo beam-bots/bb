@@ -81,7 +81,7 @@ defmodule BB.Motion do
   @type meta :: Solver.meta()
   @type kinematics_error :: Solver.kinematics_error()
   @type robot_or_context :: module() | Context.t()
-  @type delivery :: :pubsub | :direct | :sync
+  @type delivery :: :pubsub | :direct
   @type targets :: %{atom() => target()}
   @type multi_results ::
           %{atom() => {:ok, positions(), meta()} | {:error, kinematics_error()}}
@@ -108,7 +108,9 @@ defmodule BB.Motion do
     pass `BB.Robot.root_link(robot)` when you do mean the whole tree
 
   Optional:
-  - `:delivery` - How to send actuator commands: `:pubsub` (default), `:direct`, or `:sync`
+  - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
+    each command and waits for the actuator to accept it, raising the actuator's
+    error if one refuses; `:direct` casts to each actuator without waiting
   - `:max_iterations` - Maximum solver iterations (passed to solver)
   - `:tolerance` - Convergence tolerance in metres (passed to solver)
   - `:respect_limits` - Whether to clamp to joint limits (passed to solver)
@@ -245,7 +247,9 @@ defmodule BB.Motion do
     pass `BB.Robot.root_link(robot)` when you do mean the whole tree
 
   Optional:
-  - `:delivery` - How to send actuator commands: `:pubsub` (default), `:direct`, or `:sync`
+  - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
+    each command and waits for the actuator to accept it, raising the actuator's
+    error if one refuses; `:direct` casts to each actuator without waiting
   - `:max_iterations` - Maximum solver iterations (passed to solver)
   - `:tolerance` - Convergence tolerance in metres (passed to solver)
   - `:respect_limits` - Whether to clamp to joint limits (passed to solver)
@@ -358,7 +362,9 @@ defmodule BB.Motion do
 
   ## Options
 
-  - `:delivery` - How to send actuator commands: `:pubsub` (default), `:direct`, or `:sync`
+  - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
+    each command and waits for the actuator to accept it, raising the actuator's
+    error if one refuses; `:direct` casts to each actuator without waiting
   - `:velocity` - Velocity hint for actuators (rad/s or m/s)
   - `:duration` - Duration hint for actuators (milliseconds)
 
@@ -435,17 +441,14 @@ defmodule BB.Motion do
   defp send_position_to_actuator(robot_module, robot, actuator_name, position, :pubsub, opts) do
     # The name came from the joint's own actuator list, so the lookup cannot miss.
     {:ok, path} = BB.Robot.actuator_path(robot, actuator_name)
-    Actuator.set_position(robot_module, path, position, opts)
+
+    case Actuator.set_position(robot_module, path, position, opts) do
+      :ok -> :ok
+      {:error, error} -> raise error
+    end
   end
 
   defp send_position_to_actuator(robot_module, _robot, actuator_name, position, :direct, opts) do
-    Actuator.set_position!(robot_module, actuator_name, position, opts)
-  end
-
-  defp send_position_to_actuator(robot_module, _robot, actuator_name, position, :sync, opts) do
-    case Actuator.set_position_sync(robot_module, actuator_name, position, opts) do
-      {:ok, _} -> :ok
-      {:error, reason} -> raise "Actuator #{actuator_name} rejected position: #{inspect(reason)}"
-    end
+    Actuator.set_position_async(robot_module, actuator_name, position, opts)
   end
 end

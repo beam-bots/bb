@@ -130,6 +130,7 @@ defmodule BB.Command.MoveToTest do
 
     test "returns ok with metadata on success" do
       start_supervised!(MoveToTestRobot)
+      :ok = BB.Safety.arm(MoveToTestRobot)
 
       robot = MoveToTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -165,6 +166,7 @@ defmodule BB.Command.MoveToTest do
 
     test "returns error on solver failure" do
       start_supervised!(MoveToTestRobot)
+      :ok = BB.Safety.arm(MoveToTestRobot)
 
       robot = MoveToTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -195,6 +197,7 @@ defmodule BB.Command.MoveToTest do
 
     test "passes solver options through" do
       start_supervised!(MoveToTestRobot)
+      :ok = BB.Safety.arm(MoveToTestRobot)
 
       robot = MoveToTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -228,6 +231,7 @@ defmodule BB.Command.MoveToTest do
 
     test "handles multi-target mode" do
       start_supervised!(MoveToTestRobot)
+      :ok = BB.Safety.arm(MoveToTestRobot)
 
       robot = MoveToTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)

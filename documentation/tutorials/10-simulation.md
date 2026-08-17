@@ -62,7 +62,7 @@ With your robot running in simulation (see [Starting in Simulation Mode](#starti
 :ok = BB.Safety.arm(MyRobot.Robot)
 
 # Send a position command
-BB.Actuator.set_position!(MyRobot.Robot, :shoulder_motor, 1.57)
+:ok = BB.Actuator.set_position(MyRobot.Robot, :shoulder_motor, 1.57)
 
 # The OpenLoopPositionEstimator will estimate position over time
 Process.sleep(500)
@@ -211,7 +211,7 @@ You can subscribe to motion messages from simulated actuators:
 BB.PubSub.subscribe(MyRobot.Robot, [:actuator, :base_link, :shoulder, :motor])
 
 # Send a command
-BB.Actuator.set_position!(MyRobot.Robot, :motor, 1.0)
+:ok = BB.Actuator.set_position(MyRobot.Robot, :motor, 1.0)
 
 # Receive the BeginMotion message
 receive do

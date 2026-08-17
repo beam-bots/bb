@@ -51,7 +51,7 @@ defmodule BB.Sim.ActuatorTransmissionTest do
       :ok = BB.Safety.arm(SimTxRobot)
 
       joint_target = :math.pi() / 4 + 0.01
-      BB.Actuator.set_position!(SimTxRobot, :motor, joint_target)
+      :ok = BB.Actuator.set_position(SimTxRobot, :motor, joint_target)
 
       assert_receive {:bb, _path,
                       %Message{

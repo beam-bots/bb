@@ -329,14 +329,15 @@ end
 
 ### Use Direct Delivery for Low Latency
 
-For actuator commands where PubSub overhead matters:
+For actuator commands where the publication and the round trip cost more than
+knowing the outcome is worth:
 
 ```elixir
-# Instead of
-BB.Actuator.set_position(MyRobot.Robot, [:actuator, :servo], position)
+# Instead of publishing and waiting for the actuator to accept
+:ok = BB.Actuator.set_position(MyRobot.Robot, :servo, position)
 
-# Use direct
-BB.Actuator.set_position!(MyRobot.Robot, :servo, position)
+# Cast and move on — a refusal then only reaches the log and telemetry
+BB.Actuator.set_position_async(MyRobot.Robot, :servo, position)
 ```
 
 ## Quick Reference

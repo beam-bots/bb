@@ -137,7 +137,7 @@ defmodule BB.Actuator.CommandPayloadsTest do
     end
 
     test "the built-ins still work alongside it" do
-      :ok = BB.Actuator.set_position(Robot, :wide, 0.5)
+      assert :ok = BB.Actuator.set_position(Robot, :wide, 0.5)
       assert_receive {:commanded, %Command.Position{position: 0.5}}, 500
     end
   end
@@ -148,23 +148,20 @@ defmodule BB.Actuator.CommandPayloadsTest do
       assert_receive {:commanded, %Command.Effort{}}, 500
     end
 
-    test "a published payload outside the list never arrives" do
-      :ok = BB.Actuator.set_position(Robot, :narrow, 0.5)
+    test "a payload outside the list never arrives, and the caller is told so" do
+      assert {:error, %UnsupportedCommand{actuator: :narrow, command: Command.Position}} =
+               BB.Actuator.set_position(Robot, :narrow, 0.5, timeout: 500)
+
       refute_receive {:commanded, _}, 200
     end
 
     test "narrowing holds on the direct transport, not just the published one" do
-      :ok = BB.Actuator.set_position!(Robot, :narrow, 0.5)
+      :ok = BB.Actuator.set_position_async(Robot, :narrow, 0.5)
       refute_receive {:commanded, _}, 200
     end
 
-    test "the synchronous transport gets a structured error" do
-      assert {:error, %UnsupportedCommand{actuator: :narrow, command: Command.Position}} =
-               BB.Actuator.set_position_sync(Robot, :narrow, 0.5, [], 500)
-    end
-
     test "the error names what the actuator does accept" do
-      {:error, error} = BB.Actuator.set_position_sync(Robot, :narrow, 0.5, [], 500)
+      {:error, error} = BB.Actuator.set_position(Robot, :narrow, 0.5, timeout: 500)
       assert Exception.message(error) =~ "Command.Effort"
     end
 
@@ -192,7 +189,7 @@ defmodule BB.Actuator.CommandPayloadsTest do
 
       on_exit(fn -> :telemetry.detach(handler) end)
 
-      :ok = BB.Actuator.set_position!(Robot, :narrow, 0.5)
+      :ok = BB.Actuator.set_position_async(Robot, :narrow, 0.5)
 
       assert_receive {:telemetry, %{reason: :unsupported_command, actuator: :narrow}}, 500
     end
