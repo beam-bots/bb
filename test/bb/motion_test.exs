@@ -7,6 +7,7 @@ defmodule BB.MotionTest do
 
   alias BB.Command.Context
   alias BB.Error.Kinematics.Unreachable
+  alias BB.Error.State.NotArmed
   alias BB.Motion
   alias BB.Robot.State, as: RobotState
   alias BB.Test.MockSolver
@@ -302,6 +303,24 @@ defmodule BB.MotionTest do
 
       assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 0.7}
       assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.4}
+    end
+
+    test "raises an actuator's refusal rather than reporting success" do
+      start_supervised!(MotionTestRobot)
+
+      robot = MotionTestRobot.robot()
+      {:ok, robot_state} = RobotState.new(robot)
+
+      context = %Context{
+        robot_module: MotionTestRobot,
+        robot: robot,
+        robot_state: robot_state,
+        execution_id: make_ref()
+      }
+
+      assert_raise NotArmed, fn ->
+        Motion.send_positions(context, %{shoulder_joint: 0.7, elbow_joint: 0.4})
+      end
     end
   end
 

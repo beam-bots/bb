@@ -419,36 +419,42 @@ defmodule BB.Motion do
   end
 
   defp send_positions_to_actuators(robot_module, robot, positions, delivery, opts \\ []) do
-    Enum.each(positions, fn {joint_name, position} ->
-      send_joint_position(robot_module, robot, joint_name, position, delivery, opts)
-    end)
-
-    :ok
+    positions
+    |> Enum.flat_map(&actuators_for_joint(robot, &1))
+    |> send_to_actuators(robot_module, robot, delivery, opts)
   end
 
-  defp send_joint_position(robot_module, robot, joint_name, position, delivery, opts) do
+  defp actuators_for_joint(robot, {joint_name, position}) do
     case Map.get(robot.joints, joint_name) do
-      nil ->
-        :ok
-
-      joint ->
-        Enum.each(joint.actuators, fn actuator_name ->
-          send_position_to_actuator(robot_module, robot, actuator_name, position, delivery, opts)
-        end)
+      nil -> []
+      joint -> Enum.map(joint.actuators, &{&1, position})
     end
   end
 
-  defp send_position_to_actuator(robot_module, robot, actuator_name, position, :pubsub, opts) do
-    # The name came from the joint's own actuator list, so the lookup cannot miss.
-    {:ok, path} = BB.Robot.actuator_path(robot, actuator_name)
+  # The joints of one motion are meant to move together, so they are commanded
+  # together: waiting on each in turn would cost a round trip per joint, and
+  # nothing downstream is ordered by the order they were sent in.
+  defp send_to_actuators(commands, robot_module, robot, :pubsub, opts) do
+    commands
+    |> Enum.map(fn {actuator_name, position} ->
+      # The name came from the joint's own actuator list, so the lookup cannot miss.
+      {:ok, path} = BB.Robot.actuator_path(robot, actuator_name)
+      Task.async(fn -> Actuator.set_position(robot_module, path, position, opts) end)
+    end)
+    |> Task.await_many(:infinity)
+    |> raise_refusal()
+  end
 
-    case Actuator.set_position(robot_module, path, position, opts) do
-      :ok -> :ok
+  defp send_to_actuators(commands, robot_module, _robot, :direct, opts) do
+    Enum.each(commands, fn {actuator_name, position} ->
+      Actuator.set_position_async(robot_module, actuator_name, position, opts)
+    end)
+  end
+
+  defp raise_refusal(results) do
+    case Enum.find(results, &match?({:error, _}, &1)) do
+      nil -> :ok
       {:error, error} -> raise error
     end
-  end
-
-  defp send_position_to_actuator(robot_module, _robot, actuator_name, position, :direct, opts) do
-    Actuator.set_position_async(robot_module, actuator_name, position, opts)
   end
 end
