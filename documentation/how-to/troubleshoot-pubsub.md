@@ -337,7 +337,7 @@ knowing the outcome is worth:
 :ok = BB.Actuator.set_position(MyRobot.Robot, :servo, position)
 
 # Cast and move on — a refusal then only reaches the log and telemetry
-BB.Actuator.set_position_async(MyRobot.Robot, :servo, position)
+BB.Actuator.set_position(MyRobot.Robot, :servo, position, delivery: :direct)
 ```
 
 ## Quick Reference

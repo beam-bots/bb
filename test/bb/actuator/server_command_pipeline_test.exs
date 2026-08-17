@@ -147,8 +147,8 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       refute_receive {:received, :command, %Message{payload: %Command.Position{}}}, 200
     end
 
-    test "set_position_async/4 reaches the driver without waiting" do
-      :ok = BB.Actuator.set_position_async(ArmedRobot, :motor, 0.25)
+    test "delivery: :direct reaches the driver without waiting" do
+      :ok = BB.Actuator.set_position(ArmedRobot, :motor, 0.25, delivery: :direct)
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.25}}},
                      500
@@ -222,7 +222,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     test "a refusal is logged, whichever transport delivered the command" do
       log =
         capture_log(fn ->
-          :ok = BB.Actuator.set_position_async(DisarmedRobot, :motor, 0.5)
+          :ok = BB.Actuator.set_position(DisarmedRobot, :motor, 0.5, delivery: :direct)
           refute_receive {:received, :command, _message}, 200
         end)
 

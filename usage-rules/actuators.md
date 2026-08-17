@@ -18,7 +18,7 @@ refused.
 :ok = BB.Actuator.set_position(MyRobot.Robot, [:base_link, :pan_joint, :servo], 0.785)
 
 # Without waiting for an answer, for time-critical control:
-BB.Actuator.set_position_async(MyRobot.Robot, :servo, 0.785)
+BB.Actuator.set_position(MyRobot.Robot, :servo, 0.785, delivery: :direct)
 ```
 
 The DSL takes `~u` sigil values; the runtime command functions take plain
@@ -32,11 +32,13 @@ numbers in SI base units (radians here).
 - `set_position/4` publishes the command for observers and waits for the
   actuator to accept it, returning `:ok` or `{:error, reason}`. Match on it:
   a refusal means the joint is not moving.
-- `set_position_async/4` casts without waiting, for control paths that can't
-  afford the round trip. A refusal then reaches the log and telemetry only.
+- `delivery: :direct` casts instead, for control paths that can't afford the
+  round trip. It **always returns `:ok`** — a refusal then reaches the log and
+  telemetry only, so don't write an error branch that can never run.
 - `set_velocity`, `set_effort`, `follow_trajectory`, `stop` and `hold` still
-  use the older pubsub/`!`/`_sync` trio, in which the pubsub form can't report
-  a refusal. Use their `_sync` variants where the outcome matters.
+  use the older trio — a pubsub function, a `!` cast and a `_sync` call — in
+  which the pubsub form can't report a refusal. Use their `_sync` variants
+  where the outcome matters.
 - Positions are in **radians**, velocities in rad/s — SI base units, the same
   units the compiled robot struct uses.
 

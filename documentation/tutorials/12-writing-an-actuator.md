@@ -66,7 +66,7 @@ BB.Actuator.Server  ───►  refuses the command unless the robot is armed
 MyDriver.handle_command(motor_space_message, state)
 ```
 
-`set_position/4` also calls the actuator directly, so it can hand its caller the acceptance or refusal; the publication is there for whoever else is watching the topic. `set_position_async/4` casts and waits for nothing. Either way the server funnels every transport into `handle_command/2` — your driver never learns which one was used, and choosing one can't skip the checks.
+`set_position/4` also calls the actuator directly, so it can hand its caller the acceptance or refusal; the publication is there for whoever else is watching the topic. Pass `delivery: :direct` and it casts instead, waiting for nothing. Either way the server funnels every transport into `handle_command/2` — your driver never learns which one was used, and choosing one can't skip the checks.
 
 By the time a `Command.Position`, `Command.Velocity`, `Command.Effort`, or `Command.Trajectory` arrives in your driver's callback, every numeric value is already in motor-space. Your driver does no joint-to-motor maths.
 

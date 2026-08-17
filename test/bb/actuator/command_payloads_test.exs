@@ -156,7 +156,7 @@ defmodule BB.Actuator.CommandPayloadsTest do
     end
 
     test "narrowing holds on the direct transport, not just the published one" do
-      :ok = BB.Actuator.set_position_async(Robot, :narrow, 0.5)
+      :ok = BB.Actuator.set_position(Robot, :narrow, 0.5, delivery: :direct)
       refute_receive {:commanded, _}, 200
     end
 
@@ -189,7 +189,7 @@ defmodule BB.Actuator.CommandPayloadsTest do
 
       on_exit(fn -> :telemetry.detach(handler) end)
 
-      :ok = BB.Actuator.set_position_async(Robot, :narrow, 0.5)
+      :ok = BB.Actuator.set_position(Robot, :narrow, 0.5, delivery: :direct)
 
       assert_receive {:telemetry, %{reason: :unsupported_command, actuator: :narrow}}, 500
     end

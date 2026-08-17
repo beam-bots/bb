@@ -108,26 +108,25 @@ defmodule BB.Actuator do
 
   ### Delivery Methods
 
-  - **Acknowledged** (`set_position/4`) - The command is published to
-    `[:actuator | path]` so orchestration and logging can observe it, and
-    delivered to the actuator by a call. Returns `:ok` or `{:error, reason}`,
-    so a caller finds out that a joint isn't moving rather than assuming it is.
+  `set_position/4` takes a `:delivery` option, the same one `BB.Motion` takes:
 
-  - **Fire-and-forget** (`set_position_async/4`, `set_velocity!/4`, etc.) -
-    Commands sent via `BB.Process.cast`. Lower latency for time-critical
-    control, at the price of a refusal that only the log and telemetry ever
-    see.
+  - **`:pubsub`** (default) - The command is published to `[:actuator | path]`
+    so orchestration and logging can observe it, and delivered to the actuator
+    by a call. Returns `:ok` or `{:error, reason}`, so a caller finds out that
+    a joint isn't moving rather than assuming it is.
 
-  - **Synchronous** (`set_velocity_sync/5`, etc.) - Commands sent via
-    `BB.Process.call`, without publishing. Returns acknowledgement or error.
+  - **`:direct`** - Sent via `BB.Process.cast`, publishing nothing. Lower
+    latency for time-critical control, at the price of a refusal that only the
+    log and telemetry ever see. It always returns `:ok`.
+
+  The other payloads still offer the older trio - a pubsub function, a `!` cast
+  and a `_sync` call (`set_velocity/4`, `set_velocity!/4`,
+  `set_velocity_sync/5`) - in which the pubsub form cannot report a refusal at
+  all.
 
   All of them converge on `c:handle_command/2`. Which transport a caller chose
   is not something a driver has to know about, and choosing one cannot skip
   the checks `BB.Actuator.Server` applies on the way in.
-
-  Only the position commands have been through this treatment so far; the other
-  payloads still offer the older pubsub/`!`/`_sync` trio, in which the pubsub
-  form cannot report a refusal.
 
   ### Addressing
 
@@ -147,7 +146,7 @@ defmodule BB.Actuator do
       :ok = BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57)
 
       # Fire-and-forget (for time-critical control)
-      BB.Actuator.set_position_async(MyRobot, :shoulder_servo, 1.57)
+      BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57, delivery: :direct)
   """
 
   # ----------------------------------------------------------------------------
@@ -493,12 +492,13 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
-  Send a position command and wait for the actuator to accept or refuse it.
+  Send a position command.
 
-  The command is published to `[:actuator | path]` for whoever is watching the
-  topic, and delivered to the actuator itself by a call, so the caller learns
-  whether the joint is actually moving. An actuator refuses a command it
-  doesn't accept, or any command at all while the robot is disarmed.
+  Under the default `delivery: :pubsub` the command is published to
+  `[:actuator | path]` for whoever is watching the topic, and delivered to the
+  actuator itself by a call, so the caller learns whether the joint is actually
+  moving. An actuator refuses a command it doesn't accept, or any command at
+  all while the robot is disarmed.
 
   The publication records that a command was issued; the return value says
   whether it was accepted. A refused command still appears on the topic.
@@ -508,18 +508,31 @@ defmodule BB.Actuator do
 
   ## Options
 
+  - `:delivery` - `:pubsub` (default) publishes the command and waits for the
+    actuator to accept it; `:direct` casts to the actuator and returns at once,
+    publishing nothing. Use `:direct` for control paths where the round trip
+    costs more than knowing the outcome is worth
   - `:velocity` - Velocity hint (rad/s or m/s)
   - `:duration` - Duration hint (milliseconds)
   - `:command_id` - Correlation ID for feedback tracking
-  - `:timeout` - How long to wait for the actuator, in milliseconds (default 5000)
+  - `:timeout` - How long to wait for the actuator, in milliseconds (default
+    5000). Unused under `:direct`, which waits for nothing
 
   ## Returns
 
   - `:ok` - Command accepted
   - `{:error, reason}` - Command refused, `reason` being a `BB.Error` struct
 
-  Exits if the actuator isn't running or doesn't answer within `:timeout`,
-  like any other `GenServer.call/3`.
+  Under `delivery: :pubsub`, exits if the actuator isn't running or doesn't
+  answer within `:timeout`, like any other `GenServer.call/3`.
+
+  > #### `delivery: :direct` always returns `:ok` {: .warning}
+  >
+  > A cast has nowhere to put an answer, so `:direct` returns `:ok` whether the
+  > actuator accepted the command or refused it. The refusal reaches the log
+  > and a `[:bb, :actuator, :rejected]` telemetry event, and nowhere else —
+  > matching on `{:error, reason}` there is a branch that can never run.
+  >
 
   ## Commanding several joints
 
@@ -555,30 +568,16 @@ defmodule BB.Actuator do
   """
   @spec set_position(module(), target(), number(), keyword()) :: :ok | {:error, term()}
   def set_position(robot, target, position, opts \\ []) do
+    deliver_position(Keyword.get(opts, :delivery, :pubsub), robot, target, position, opts)
+  end
+
+  defp deliver_position(:pubsub, robot, target, position, opts) do
     path = actuator_path!(robot, target)
     message = build_position_message(path, position, opts)
     send_command(robot, path, message, opts)
   end
 
-  @doc """
-  Send a position command without waiting for an answer.
-
-  Uses `BB.Process.cast` for fire-and-forget delivery, for control paths where
-  the round trip of `set_position/4` costs more than knowing the outcome is
-  worth. Nothing is published to the actuator's topic, so orchestration and
-  logging don't see the command either.
-
-  A refusal can't be returned to a caller that isn't waiting: it shows up as a
-  warning in the log and a `[:bb, :actuator, :rejected]` telemetry event, and
-  nowhere else. Reach for `set_position/4` unless you have measured that you
-  can't afford it.
-
-  ## Options
-
-  Same as `set_position/4`, except `:timeout`, which has nothing to wait for.
-  """
-  @spec set_position_async(module(), target(), number(), keyword()) :: :ok
-  def set_position_async(robot, target, position, opts \\ []) do
+  defp deliver_position(:direct, robot, target, position, opts) do
     actuator_name = actuator_name!(robot, target)
     message = build_position_message(actuator_name, position, opts)
     BB.cast(robot, actuator_name, {:command, message})

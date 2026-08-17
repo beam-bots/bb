@@ -106,8 +106,8 @@ defmodule BB.Actuator.AddressingTest do
   end
 
   describe "addressing by path on the direct transports" do
-    test "set_position_async/4 accepts a full path" do
-      :ok = BB.Actuator.set_position_async(Robot, [:base, :shoulder, :motor], 0.5)
+    test "delivery: :direct accepts a full path" do
+      :ok = BB.Actuator.set_position(Robot, [:base, :shoulder, :motor], 0.5, delivery: :direct)
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
                      500
