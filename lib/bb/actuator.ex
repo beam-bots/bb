@@ -521,6 +521,29 @@ defmodule BB.Actuator do
   Exits if the actuator isn't running or doesn't answer within `:timeout`,
   like any other `GenServer.call/3`.
 
+  ## Commanding several joints
+
+  This is an ordinary blocking call, so several joints cost several round
+  trips and how they overlap is yours to choose:
+
+      [shoulder: 1.57, elbow: 0.5]
+      |> Enum.map(fn {joint, position} ->
+        Task.async(fn -> BB.Actuator.set_position(MyRobot, joint, position) end)
+      end)
+      |> Task.await_many()
+
+  Three things to know before reaching for that:
+
+  - `Task.async/1` **links**. From a long-lived process - a controller loop -
+    use `Task.Supervisor.async_nolink/3` instead, or an actuator that has died
+    takes the caller down with it.
+  - `Task.await_many/2` applies one deadline to the whole set and kills the
+    stragglers when it expires. It isn't "collect as they land".
+  - Each command publishes from inside its own task, so observers see the
+    commands interleaved rather than in the order you listed them.
+
+  `BB.Motion.send_positions/3` already does this for the joints of one motion.
+
   ## Examples
 
       :ok = BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :servo], 1.57)
