@@ -189,14 +189,16 @@ defmodule BB.Dsl do
         doc: "Default value for the parameter"
       ],
       min: [
-        type: :number,
+        type: {:or, [:number, {:struct, Localize.Unit}]},
         required: false,
-        doc: "Minimum value for numeric parameters"
+        doc:
+          "Smallest value the parameter accepts. Only for numeric types: a number for `:float`/`:integer`, a unit for `{:unit, unit_type}`"
       ],
       max: [
-        type: :number,
+        type: {:or, [:number, {:struct, Localize.Unit}]},
         required: false,
-        doc: "Maximum value for numeric parameters"
+        doc:
+          "Largest value the parameter accepts. Only for numeric types: a number for `:float`/`:integer`, a unit for `{:unit, unit_type}`"
       ],
       doc: [
         type: :string,

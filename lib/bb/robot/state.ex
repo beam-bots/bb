@@ -60,6 +60,7 @@ defmodule BB.Robot.State do
   alias BB.Math.Vec3
   alias BB.Message.Geometry.Twist
   alias BB.Message.Geometry.Twist2D
+  alias BB.Parameter.Type, as: ParameterType
   alias BB.Robot
 
   defstruct [:table, :robot]
@@ -402,10 +403,13 @@ defmodule BB.Robot.State do
       |> List.first()
 
     param_opts = Keyword.get(schema_opts, param_name, [])
+    {type, min, max} = ParameterType.describe(Keyword.get(param_opts, :type))
 
     %{
       value: value,
-      type: Keyword.get(param_opts, :type),
+      type: type,
+      min: min,
+      max: max,
       doc: Keyword.get(param_opts, :doc),
       default: Keyword.get(param_opts, :default)
     }

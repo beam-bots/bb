@@ -12,11 +12,16 @@ defmodule BB.Dsl.ParameterTransformer do
 
   At runtime, these are used by `BB.Robot.Runtime` to register parameters with
   proper validation schemas.
+
+  A parameter's `min`/`max` bounds are folded into its generated type by
+  `BB.Parameter.Type.option_type/3`; bounds which can't be enforced - or a
+  default which doesn't satisfy them - fail the robot's compilation.
   """
   use Spark.Dsl.Transformer
   alias BB.Dsl.{Param, ParamGroup}
-  alias BB.Unit
+  alias BB.Parameter.Type
   alias Spark.Dsl.Transformer
+  alias Spark.Error.DslError
 
   @doc false
   @impl true
@@ -31,67 +36,81 @@ defmodule BB.Dsl.ParameterTransformer do
   @doc false
   @impl true
   def transform(dsl) do
-    {schema_opts, defaults} =
-      dsl
-      |> Transformer.get_entities([:parameters])
-      |> collect_parameters([])
+    module = Transformer.get_persisted(dsl, :module)
 
-    if Enum.empty?(schema_opts) do
-      inject_empty_functions(dsl)
-    else
-      inject_parameter_functions(dsl, schema_opts, defaults)
+    with {:ok, schema_opts, defaults} <-
+           dsl |> Transformer.get_entities([:parameters]) |> collect_parameters([], module) do
+      if Enum.empty?(schema_opts) do
+        inject_empty_functions(dsl)
+      else
+        inject_parameter_functions(dsl, schema_opts, defaults)
+      end
     end
   end
 
-  defp collect_parameters(entities, path_prefix) do
-    Enum.reduce(entities, {[], []}, fn entity, {schema_acc, defaults_acc} ->
-      case entity do
-        %Param{} = param ->
-          {param_schema, param_defaults} = process_param(param, path_prefix)
-          {schema_acc ++ param_schema, defaults_acc ++ param_defaults}
+  defp collect_parameters(entities, path_prefix, module) do
+    Enum.reduce_while(entities, {:ok, [], []}, fn entity, {:ok, schema_acc, defaults_acc} ->
+      case collect_entity(entity, path_prefix, module) do
+        {:ok, schema, defaults} ->
+          {:cont, {:ok, schema_acc ++ schema, defaults_acc ++ defaults}}
 
-        %ParamGroup{} = group ->
-          group_path = path_prefix ++ [group.name]
-
-          {nested_schema, nested_defaults} =
-            collect_parameters(group.params ++ group.groups, group_path)
-
-          {schema_acc ++ nested_schema, defaults_acc ++ nested_defaults}
-
-        _ ->
-          {schema_acc, defaults_acc}
+        {:error, error} ->
+          {:halt, {:error, error}}
       end
     end)
   end
 
-  defp process_param(%Param{} = param, path_prefix) do
+  defp collect_entity(%Param{} = param, path_prefix, module) do
     path = path_prefix ++ [param.name]
-    schema_opts = build_schema_opts(param)
 
-    defaults =
-      if param.default != nil do
-        [{path, param.default}]
-      else
-        []
-      end
-
-    {[{path, schema_opts}], defaults}
+    with {:ok, schema_opts} <- build_schema_opts(param, path, module) do
+      {:ok, [{path, schema_opts}], defaults_for(param, path)}
+    end
   end
 
-  defp build_schema_opts(%Param{} = param) do
-    opts = [type: convert_param_type(param.type)]
-
-    opts = if param.doc, do: Keyword.put(opts, :doc, param.doc), else: opts
-    opts = if param.default != nil, do: Keyword.put(opts, :default, param.default), else: opts
-
-    opts
+  defp collect_entity(%ParamGroup{} = group, path_prefix, module) do
+    collect_parameters(group.params ++ group.groups, path_prefix ++ [group.name], module)
   end
 
-  defp convert_param_type({:unit, unit_type}) do
-    Unit.Option.unit_type(compatible: unit_type)
+  defp collect_entity(_entity, _path_prefix, _module), do: {:ok, [], []}
+
+  defp defaults_for(%Param{default: nil}, _path), do: []
+  defp defaults_for(%Param{default: default}, path), do: [{path, default}]
+
+  defp build_schema_opts(%Param{} = param, path, module) do
+    with {:ok, type} <- option_type(param, path, module),
+         :ok <- validate_default(param, type, path, module) do
+      opts = [type: type]
+
+      opts = if param.doc, do: Keyword.put(opts, :doc, param.doc), else: opts
+      opts = if param.default != nil, do: Keyword.put(opts, :default, param.default), else: opts
+
+      {:ok, opts}
+    end
   end
 
-  defp convert_param_type(type), do: type
+  defp option_type(%Param{} = param, path, module) do
+    case Type.option_type(param.type, param.min, param.max) do
+      {:ok, type} -> {:ok, type}
+      {:error, message} -> {:error, dsl_error(path, module, message)}
+    end
+  end
+
+  defp validate_default(%Param{default: nil}, _type, _path, _module), do: :ok
+  defp validate_default(%Param{min: nil, max: nil}, _type, _path, _module), do: :ok
+
+  # Bounding a parameter always produces a custom validator, so the declared
+  # default can be run through it directly.
+  defp validate_default(%Param{default: default}, {:custom, mod, fun, args}, path, module) do
+    case apply(mod, fun, [default | args]) do
+      {:ok, _default} -> :ok
+      {:error, message} -> {:error, dsl_error(path, module, "invalid `default`: #{message}")}
+    end
+  end
+
+  defp dsl_error(path, module, message) do
+    DslError.exception(module: module, path: [:parameters | path], message: message)
+  end
 
   defp inject_empty_functions(dsl) do
     {:ok,

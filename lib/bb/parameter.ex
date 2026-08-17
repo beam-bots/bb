@@ -144,8 +144,9 @@ defmodule BB.Parameter do
   @doc """
   List all parameters, optionally filtered by path prefix.
 
-  Returns a list of `{path, metadata}` tuples where metadata includes
-  the current value, type, and other schema information.
+  Returns a list of `{path, metadata}` tuples whose metadata carries the current
+  `value`, the declared `type`, its `min`/`max` bounds (`nil` when unbounded),
+  the `doc` and the `default`.
 
   ## Options
 

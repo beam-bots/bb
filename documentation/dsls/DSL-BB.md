@@ -1782,8 +1782,8 @@ A runtime-adjustable parameter.
 |------|------|---------|------|
 | [`type`](#parameters-group-param-type){: #parameters-group-param-type .spark-required} | `any` |  | The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type}) |
 | [`default`](#parameters-group-param-default){: #parameters-group-param-default } | `any` |  | Default value for the parameter |
-| [`min`](#parameters-group-param-min){: #parameters-group-param-min } | `number` |  | Minimum value for numeric parameters |
-| [`max`](#parameters-group-param-max){: #parameters-group-param-max } | `number` |  | Maximum value for numeric parameters |
+| [`min`](#parameters-group-param-min){: #parameters-group-param-min } | `number \| Localize.Unit` |  | Smallest value the parameter accepts. Only for numeric types: a number for `:float`/`:integer`, a unit for `{:unit, unit_type}` |
+| [`max`](#parameters-group-param-max){: #parameters-group-param-max } | `number \| Localize.Unit` |  | Largest value the parameter accepts. Only for numeric types: a number for `:float`/`:integer`, a unit for `{:unit, unit_type}` |
 | [`doc`](#parameters-group-param-doc){: #parameters-group-param-doc } | `String.t` |  | Documentation for the parameter |
 
 
@@ -1824,8 +1824,8 @@ A runtime-adjustable parameter.
 |------|------|---------|------|
 | [`type`](#parameters-param-type){: #parameters-param-type .spark-required} | `any` |  | The parameter value type (:float, :integer, :boolean, :string, :atom, or {:unit, unit_type}) |
 | [`default`](#parameters-param-default){: #parameters-param-default } | `any` |  | Default value for the parameter |
-| [`min`](#parameters-param-min){: #parameters-param-min } | `number` |  | Minimum value for numeric parameters |
-| [`max`](#parameters-param-max){: #parameters-param-max } | `number` |  | Maximum value for numeric parameters |
+| [`min`](#parameters-param-min){: #parameters-param-min } | `number \| Localize.Unit` |  | Smallest value the parameter accepts. Only for numeric types: a number for `:float`/`:integer`, a unit for `{:unit, unit_type}` |
+| [`max`](#parameters-param-max){: #parameters-param-max } | `number \| Localize.Unit` |  | Largest value the parameter accepts. Only for numeric types: a number for `:float`/`:integer`, a unit for `{:unit, unit_type}` |
 | [`doc`](#parameters-param-doc){: #parameters-param-doc } | `String.t` |  | Documentation for the parameter |
 
 

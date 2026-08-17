@@ -53,6 +53,27 @@ Each `param` declaration takes:
 - `min`/`max` - Optional bounds for numeric types
 - `doc` - Description for documentation
 
+### Bounds
+
+`min` and `max` are enforced on every write - at startup, from `set/3`, and
+through a bridge - so a parameter that stands for a hardware register can't be
+handed a value the hardware doesn't have room for. Either bound can be given on
+its own, and bounds on a `{:unit, unit_type}` parameter are units rather than
+bare numbers:
+
+```elixir
+parameters do
+  param :tap_duration, type: :integer, default: 4, max: 127,
+    doc: "Tap detection window, a 7-bit register field"
+
+  param :reach, type: {:unit, :meter}, default: ~u(0.5 meter),
+    min: ~u(0 meter), max: ~u(1.2 meter)
+end
+```
+
+Bounds on a non-numeric type, a `min` above its `max`, or a `default` outside
+its own bounds are compile errors rather than surprises at runtime.
+
 ## Organising Parameters with Groups
 
 Use `group` to organise related parameters:
@@ -163,8 +184,8 @@ Enumerate all parameters or filter by prefix:
 ```elixir
 iex> BB.Parameter.list(MyRobot.Robot)
 [
-  {[:motion, :max_linear_speed], %{value: 1.0, type: :float, ...}},
-  {[:motion, :max_angular_speed], %{value: 0.5, type: :float, ...}},
+  {[:motion, :max_linear_speed], %{value: 1.0, type: :float, min: 0.0, max: 5.0, ...}},
+  {[:motion, :max_angular_speed], %{value: 0.5, type: :float, min: 0.0, max: 2.0, ...}},
   {[:safety, :collision_distance], %{value: 0.3, type: :float, ...}},
   ...
 ]
@@ -192,11 +213,18 @@ Values are validated against the schema. Invalid values are rejected:
 
 ```elixir
 iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_linear_speed], -1.0)
-{:error, "must be at least 0.0"}
+{:error, %Spark.Options.ValidationError{
+  message: "invalid value for :max_linear_speed option: expected value to be at least 0.0, got: -1.0"
+}}
 
 iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_linear_speed], "fast")
-{:error, "expected float, got \"fast\""}
+{:error, %Spark.Options.ValidationError{
+  message: "invalid value for :max_linear_speed option: expected float, got: \"fast\""
+}}
 ```
+
+The stored value is left alone when validation fails, so a rejected `set/3`
+can't leave a component reading a value its hardware won't accept.
 
 ## Atomic Batch Updates
 
