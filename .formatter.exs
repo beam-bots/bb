@@ -104,6 +104,7 @@ spark_locals_without_parens = [
   reversed?: 1,
   roll: 1,
   scale: 1,
+  sensor: 1,
   sensor: 2,
   sensor: 3,
   simulation: 1,

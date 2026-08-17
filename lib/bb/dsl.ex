@@ -476,6 +476,17 @@ defmodule BB.Dsl do
         required: true,
         doc:
           "The child specification for the actuator process. Either a module or `{module, keyword_list}`"
+      ],
+      sensor: [
+        type: :boolean,
+        required: false,
+        default: true,
+        doc: """
+        Whether this actuator needs a separate sensor to report where its joint
+        actually is. Set it to `false` for hardware that reports its own
+        position - a smart servo answering position queries on its bus - to say
+        that the missing position sensor is deliberate.
+        """
       ]
     ]
   }
@@ -1279,6 +1290,7 @@ defmodule BB.Dsl do
       __MODULE__.Verifiers.ValidateChildSpecs,
       __MODULE__.Verifiers.ValidateEstimators,
       __MODULE__.Verifiers.ValidateParamRefs,
+      __MODULE__.Verifiers.ValidatePositionFeedback,
       __MODULE__.Verifiers.ValidateStateRefs,
       __MODULE__.Verifiers.ValidateCategoryRefs
     ]

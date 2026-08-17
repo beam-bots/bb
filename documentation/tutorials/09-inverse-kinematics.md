@@ -267,7 +267,7 @@ case Motion.move_to(MyRobot.Robot, :tip, {0.3, 0.2, 0.1},
 end
 ```
 
-This solves IK, updates the robot state, and sends position commands to all actuators.
+This solves IK and sends position commands to all actuators. It does **not** write the solved positions into `BB.Robot.State` — a commanded position isn't a measured one. Where the joints actually end up is reported by their sensors, so a joint whose actuator has no position feedback needs a `BB.Sensor.OpenLoopPositionEstimator` (the DSL warns at compile time if one is missing).
 
 ### Using FABRIK Convenience Functions
 

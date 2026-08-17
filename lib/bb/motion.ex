@@ -8,12 +8,12 @@ defmodule BB.Motion do
 
   This module provides functions for moving robot end-effectors to target
   positions using pluggable IK solvers. It handles the full workflow:
-  solving IK, updating robot state, and sending commands to actuators.
+  solving IK and sending the resulting positions to actuators.
 
   ## Usage
 
   Single-target functions:
-  - `move_to/4` - Solve IK for one target, update state, send actuator commands
+  - `move_to/4` - Solve IK for one target and send the actuator commands
   - `solve_only/4` - Solve IK without sending commands (for planning/validation)
 
   Multi-target functions (for coordinated motion like gait):
@@ -75,7 +75,6 @@ defmodule BB.Motion do
   alias BB.Error.Kinematics.MultiFailed
   alias BB.IK.Solver
   alias BB.Robot.Runtime
-  alias BB.Robot.State, as: RobotState
 
   @type target :: Solver.target()
   @type positions :: Solver.positions()
@@ -101,8 +100,13 @@ defmodule BB.Motion do
   @doc """
   Move an end-effector to a target position.
 
-  Solves inverse kinematics for the given target, updates the robot state,
-  and sends position commands to all actuators controlling the affected joints.
+  Solves inverse kinematics for the given target and sends position commands
+  to all actuators controlling the affected joints.
+
+  Where the joints actually end up is reported by their sensors, so this does
+  not write the solved positions into `BB.Robot.State` - a commanded position
+  is not a measured one. A joint whose actuator has no position feedback wants
+  a `BB.Sensor.OpenLoopPositionEstimator`.
 
   ## Options
 
@@ -133,8 +137,7 @@ defmodule BB.Motion do
   - `{:ok, meta}` - Successfully moved; meta contains solver info (iterations, residual, etc.)
   - `{:error, error}` - Failed; either a struct from `BB.Error.Kinematics` if
     the target couldn't be solved, or the actuator's own error if one refused
-    the command it was sent. The robot state is updated either way: the
-    positions were computed, and some joints may have taken them
+    the command it was sent
 
   ## Examples
 
@@ -166,7 +169,6 @@ defmodule BB.Motion do
       fn ->
         with {:ok, positions, meta} <-
                solver.solve(robot, robot_state, source_link, target_link, target, solver_opts),
-             RobotState.set_configurations(robot_state, positions),
              :ok <-
                send_positions_to_actuators(
                  robot_module,
@@ -314,10 +316,9 @@ defmodule BB.Motion do
     with {:ok, results} <- solve_only_multi(robot_or_context, targets, opts) do
       delivery = Keyword.get(opts, :delivery, :pubsub)
       actuator_opts = extract_actuator_opts(opts)
-      {robot_module, robot, robot_state} = extract_context(robot_or_context)
+      {robot_module, robot, _robot_state} = extract_context(robot_or_context)
 
       all_positions = merge_all_positions(results)
-      RobotState.set_configurations(robot_state, all_positions)
 
       case send_positions_to_actuators(
              robot_module,
@@ -409,8 +410,8 @@ defmodule BB.Motion do
   Bypasses IK solving entirely - useful when you've already computed
   positions through other means (e.g., trajectory planning, manual input).
 
-  Updates the robot state and sends commands to all actuators controlling
-  the specified joints.
+  Sends commands to all actuators controlling the specified joints. As with
+  `move_to/4`, the robot's own state is left to its sensors.
 
   ## Options
 
@@ -429,8 +430,7 @@ defmodule BB.Motion do
   ## Returns
 
   - `:ok` - Every actuator accepted its command
-  - `{:error, error}` - One refused; the rest were still sent, and the robot
-    state was updated regardless
+  - `{:error, error}` - One refused; the rest were still sent
 
   ## Examples
 
@@ -446,14 +446,12 @@ defmodule BB.Motion do
     delivery = Keyword.get(opts, :delivery, :pubsub)
     actuator_opts = extract_actuator_opts(opts)
 
-    {robot_module, robot, robot_state} = extract_context(robot_or_context)
+    {robot_module, robot, _robot_state} = extract_context(robot_or_context)
 
     :telemetry.span(
       [:bb, :motion, :send_positions],
       %{robot: robot.name, joint_count: map_size(positions), delivery: delivery},
       fn ->
-        RobotState.set_configurations(robot_state, positions)
-
         result =
           send_positions_to_actuators(robot_module, robot, positions, delivery, actuator_opts)
 

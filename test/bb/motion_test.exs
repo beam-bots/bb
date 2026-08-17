@@ -220,7 +220,7 @@ defmodule BB.MotionTest do
   end
 
   describe "move_to/4" do
-    test "updates robot state on success" do
+    test "commands the joints without writing the commanded positions into state" do
       start_supervised!(MotionTestRobot)
       :ok = BB.Safety.arm(MotionTestRobot)
 
@@ -251,8 +251,10 @@ defmodule BB.MotionTest do
 
       assert meta.reached == true
 
-      assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 0.5}
-      assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.3}
+      # Where the joint ends up is a sensor's to report; a commanded position
+      # isn't a measured one.
+      assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 0.0}
+      assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.0}
     end
 
     test "passes the actuator hints on rather than dropping them with the solver's" do
@@ -339,9 +341,10 @@ defmodule BB.MotionTest do
   end
 
   describe "send_positions/3" do
-    test "updates robot state" do
+    test "leaves robot state to the sensors" do
       start_supervised!(MotionTestRobot)
       :ok = BB.Safety.arm(MotionTestRobot)
+      BB.subscribe(MotionTestRobot, [:actuator])
 
       robot = MotionTestRobot.robot()
       {:ok, robot_state} = RobotState.new(robot)
@@ -356,8 +359,10 @@ defmodule BB.MotionTest do
       positions = %{shoulder_joint: 0.7, elbow_joint: 0.4}
       :ok = Motion.send_positions(context, positions)
 
-      assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 0.7}
-      assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.4}
+      assert_receive {:bb, _path, %{payload: %{position: 0.7}}}, 500
+
+      assert RobotState.get_configuration(robot_state, :shoulder_joint) == {:ok, 0.0}
+      assert RobotState.get_configuration(robot_state, :elbow_joint) == {:ok, 0.0}
     end
 
     test "passes the actuator hints on to the actuators" do
