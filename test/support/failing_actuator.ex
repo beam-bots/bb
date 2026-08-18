@@ -7,7 +7,7 @@ defmodule BB.Test.FailingActuator do
   use BB.Actuator, options_schema: [fail_mode: [type: :atom, required: false]]
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def disarm(opts) do

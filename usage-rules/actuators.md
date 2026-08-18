@@ -78,7 +78,7 @@ position queries on its bus — say so, and publish what you read as
 
 ```elixir
 @impl BB.Actuator
-def capabilities, do: [:position_feedback]
+def capabilities(_opts), do: [:position_feedback]
 ```
 
 `BB.Robot.State` is written from `JointState` messages and nothing else, so a

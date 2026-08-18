@@ -18,7 +18,7 @@ defmodule BB.Test.MockActuator do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts) do
@@ -42,7 +42,7 @@ defmodule ServoMotor do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -59,7 +59,7 @@ defmodule MainMotor do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -76,7 +76,7 @@ defmodule BrakeActuator do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -93,7 +93,7 @@ defmodule ShoulderMotor do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -110,7 +110,7 @@ defmodule ElbowMotor do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -127,7 +127,7 @@ defmodule MyMotor do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -148,7 +148,7 @@ defmodule TestActuator do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
-  def capabilities, do: [:position_feedback]
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}

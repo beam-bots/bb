@@ -30,7 +30,7 @@ defmodule BB.Actuator do
 
   ### Optional Callbacks
 
-  - `capabilities/0` - Declare that the driver reads position, velocity or
+  - `capabilities/1` - Declare that the driver reads position, velocity or
     effort back from the hardware. Without it the framework assumes it doesn't,
     and warns that the joint needs a sensor
   - `handle_options/2` - React to parameter changes at runtime
@@ -365,7 +365,7 @@ defmodule BB.Actuator do
   `BB.Message.Sensor.JointState` on its joint's sensor topic:
 
       @impl BB.Actuator
-      def capabilities, do: [:position_feedback, :velocity_feedback]
+      def capabilities(_opts), do: [:position_feedback, :velocity_feedback]
 
   Declaring `:position_feedback` tells the framework this actuator is its own
   position sensor, so no warning is issued for the joint it drives. Declare it
@@ -374,13 +374,37 @@ defmodule BB.Actuator do
   else, so a joint nobody reports on never moves as far as the rest of the
   framework is concerned.
 
-  Answered without options or state, because it describes the driver rather
-  than any one instance of it, and the DSL asks at compile time.
+  ## Options
+
+  `opts` lets a driver answer for how it was wired up, rather than for the
+  hardware in general - an encoder input that may or may not be connected:
+
+      @impl BB.Actuator
+      def capabilities(opts) do
+        if opts[:feedback_pin], do: [:position_feedback], else: []
+      end
+
+  > #### These are not the options `init/1` receives {: .warning}
+  >
+  > This is asked at compile time, by a DSL verifier, so `opts` is what the
+  > robot's author wrote in the DSL, checked against `c:options_schema/0` and
+  > with its defaults applied. Two things follow:
+  >
+  > - There is no `:bb` key, and no `:motor_profile`. The robot doesn't exist
+  >   yet.
+  > - A `param()` reference can't be resolved before the robot is running, so a
+  >   parameterised option arrives holding its schema default instead of the
+  >   value the robot will run with. A capability that genuinely depends on one
+  >   can't be answered here; say what is true of the common case, and prefer
+  >   claiming a capability you sometimes lack over disclaiming one you usually
+  >   have - a spurious warning teaches people to ignore warnings.
+  >
+  > Keep it pure for the same reason: no hardware, no processes, no `Mix`.
   """
-  @callback capabilities() :: [capability()]
+  @callback capabilities(opts :: keyword()) :: [capability()]
 
   @optional_callbacks [
-    capabilities: 0,
+    capabilities: 1,
     command_payloads: 1,
     handle_options: 2,
     handle_call: 3,
@@ -420,7 +444,7 @@ defmodule BB.Actuator do
 
       # Default implementations - all overridable
       @impl BB.Actuator
-      def capabilities, do: []
+      def capabilities(_opts), do: []
 
       @impl BB.Actuator
       def command_payloads(_opts), do: BB.Actuator.default_command_payloads()
@@ -443,7 +467,7 @@ defmodule BB.Actuator do
       @impl BB.Actuator
       def terminate(_reason, _state), do: :ok
 
-      defoverridable capabilities: 0,
+      defoverridable capabilities: 1,
                      command_payloads: 1,
                      handle_options: 2,
                      handle_call: 3,

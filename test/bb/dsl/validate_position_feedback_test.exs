@@ -28,7 +28,30 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedbackTest do
     use BB.Actuator, options_schema: []
 
     @impl BB.Actuator
-    def capabilities, do: [:position_feedback]
+    def capabilities(_opts), do: [:position_feedback]
+
+    @impl BB.Actuator
+    def disarm(_opts), do: :ok
+
+    @impl BB.Actuator
+    def init(_opts), do: {:ok, %{}}
+
+    @impl BB.Actuator
+    def handle_command(_message, state), do: {:noreply, state}
+  end
+
+  defmodule OptionalEncoderActuator do
+    @moduledoc false
+    use BB.Actuator,
+      options_schema: [
+        feedback_pin: [type: :pos_integer, required: false],
+        channel: [type: :non_neg_integer, required: false, default: 0]
+      ]
+
+    @impl BB.Actuator
+    def capabilities(opts) do
+      if opts[:feedback_pin], do: [:position_feedback], else: []
+    end
 
     @impl BB.Actuator
     def disarm(_opts), do: :ok
@@ -76,13 +99,14 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedbackTest do
 
   @blind inspect(BlindActuator)
   @self_sensing inspect(SelfSensingActuator)
+  @optional_encoder inspect(OptionalEncoderActuator)
 
   test "warns when a joint is driven but nothing reports where it is" do
     warning = define(revolute_joint("actuator :motor, #{@blind}"))
 
     assert warning =~ "joint :shoulder is driven by :motor but nothing reports where it is"
     assert warning =~ "OpenLoopPositionEstimator"
-    assert warning =~ "def capabilities, do: [:position_feedback]"
+    assert warning =~ "def capabilities(_opts), do: [:position_feedback]"
   end
 
   test "stays quiet when the joint has a sensor" do
@@ -101,6 +125,35 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedbackTest do
     warning = define(revolute_joint("actuator :motor, #{@self_sensing}"))
 
     refute warning =~ "nothing reports where it is"
+  end
+
+  test "lets the driver answer for how it was configured" do
+    with_encoder =
+      define(revolute_joint("actuator :motor, {#{@optional_encoder}, feedback_pin: 27}"))
+
+    without_encoder =
+      define(revolute_joint("actuator :motor, {#{@optional_encoder}, channel: 3}"))
+
+    refute with_encoder =~ "nothing reports where it is"
+    assert without_encoder =~ "nothing reports where it is"
+  end
+
+  # The parameter's own default (27) is beside the point: it lives in a store
+  # that doesn't exist yet, so the driver answers as though the option were
+  # never given, and gets whatever its own schema says.
+  test "a parameterised option can't be seen, so the driver answers without it" do
+    warning =
+      define("""
+      parameters do
+        group :encoder do
+          param :feedback_pin, type: :integer, default: 27
+        end
+      end
+
+      #{revolute_joint("actuator :motor, {#{@optional_encoder}, feedback_pin: param([:encoder, :feedback_pin])}")}
+      """)
+
+    assert warning =~ "nothing reports where it is"
   end
 
   test "names every unsensed actuator on the joint" do

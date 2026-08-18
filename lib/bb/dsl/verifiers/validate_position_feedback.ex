@@ -17,7 +17,7 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedback do
   an encoder, or `BB.Sensor.OpenLoopPositionEstimator` interpolating from the
   actuator's `BeginMotion` messages for hardware with no feedback at all. Or
   the actuator itself, if it reads position back from the hardware and says so
-  through `c:BB.Actuator.capabilities/0`. A joint with neither gets a warning
+  through `c:BB.Actuator.capabilities/1`. A joint with neither gets a warning
   naming both fixes.
 
   The driver is asked directly rather than the robot's author being made to
@@ -33,6 +33,7 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedback do
 
   use Spark.Dsl.Verifier
 
+  alias BB.Dsl.ChildSpecOptions
   alias BB.Dsl.Joint
   alias BB.Dsl.Link
   alias Spark.Dsl.Verifier
@@ -76,24 +77,25 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedback do
   # break the cross-package builds `ValidateChildSpecBehavioursTransformer`
   # already goes out of its way to allow. Say nothing rather than guess.
   defp senses_position?(actuator) do
-    module = module_for(actuator.child_spec)
+    {module, opts} = ChildSpecOptions.module_and_options(actuator.child_spec)
 
     case Code.ensure_compiled(module) do
-      {:module, _} -> :position_feedback in capabilities(module)
+      {:module, _} -> :position_feedback in capabilities(module, opts)
       {:error, _reason} -> true
     end
   end
 
-  defp capabilities(module) do
-    if function_exported?(module, :capabilities, 0) do
-      module.capabilities()
+  # Options the driver couldn't have asked for are worse than none: invalid ones
+  # are `ValidateChildSpecs`' to report, and this verifier would only turn its
+  # error into a crash.
+  defp capabilities(module, opts) do
+    with true <- function_exported?(module, :capabilities, 1),
+         {:ok, opts} <- ChildSpecOptions.validate(module, opts) do
+      module.capabilities(opts)
     else
-      []
+      _ -> []
     end
   end
-
-  defp module_for(module) when is_atom(module), do: module
-  defp module_for({module, _opts}) when is_atom(module), do: module
 
   # Sorted because the DSL hands entities back in whatever order it holds them,
   # and a warning that reorders itself between builds is a warning people learn
@@ -116,7 +118,7 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedback do
       `BB.Message.Sensor.JointState`:
 
           @impl BB.Actuator
-          def capabilities, do: [:position_feedback]
+          def capabilities(_opts), do: [:position_feedback]
       """,
       file: file,
       line: 1
