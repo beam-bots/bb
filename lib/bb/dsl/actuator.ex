@@ -9,7 +9,6 @@ defmodule BB.Dsl.Actuator do
             __spark_metadata__: nil,
             name: nil,
             child_spec: nil,
-            sensor: true,
             transmission: nil
 
   alias BB.Dsl.Transmission
@@ -22,7 +21,6 @@ defmodule BB.Dsl.Actuator do
           __spark_metadata__: Entity.spark_meta(),
           name: atom,
           child_spec: child_spec,
-          sensor: boolean,
           transmission: nil | Transmission.t()
         }
 end

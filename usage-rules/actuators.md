@@ -72,6 +72,19 @@ Return `{:reply, reply, state}` to answer a caller that is waiting —
 `set_position/4`, `set_velocity_sync/5` and friends; `{:noreply, state}`
 replies `{:ok, :accepted}` for you. The reply is discarded for cast delivery.
 
+If your driver reads position back from the hardware — a smart servo answering
+position queries on its bus — say so, and publish what you read as
+`BB.Message.Sensor.JointState`:
+
+```elixir
+@impl BB.Actuator
+def capabilities, do: [:position_feedback]
+```
+
+`BB.Robot.State` is written from `JointState` messages and nothing else, so a
+joint with neither a sensor nor a self-reporting driver never moves as far as
+kinematics is concerned. The DSL warns at compile time when it finds one.
+
 Don't check `BB.Safety.armed?/1` in a driver — `BB.Actuator.Server` refuses
 commands to a disarmed robot before they reach you.
 

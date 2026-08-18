@@ -40,6 +40,9 @@ defmodule BB.Actuator.CommandPayloadsTest do
     def disarm(_opts), do: :ok
 
     @impl BB.Actuator
+    def capabilities, do: [:position_feedback]
+
+    @impl BB.Actuator
     def handle_command(%Message{} = message, state) do
       if state.recipient, do: send(state.recipient, {:commanded, message.payload})
       {:noreply, state}
@@ -63,6 +66,9 @@ defmodule BB.Actuator.CommandPayloadsTest do
 
     @impl BB.Actuator
     def disarm(_opts), do: :ok
+
+    @impl BB.Actuator
+    def capabilities, do: [:position_feedback]
 
     @impl BB.Actuator
     def handle_command(%Message{} = message, state) do

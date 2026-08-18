@@ -9,19 +9,48 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedbackTest do
 
   import ExUnit.CaptureIO
 
-  defp define(module_body) do
+  defmodule BlindActuator do
+    @moduledoc false
+    use BB.Actuator, options_schema: []
+
+    @impl BB.Actuator
+    def disarm(_opts), do: :ok
+
+    @impl BB.Actuator
+    def init(_opts), do: {:ok, %{}}
+
+    @impl BB.Actuator
+    def handle_command(_message, state), do: {:noreply, state}
+  end
+
+  defmodule SelfSensingActuator do
+    @moduledoc false
+    use BB.Actuator, options_schema: []
+
+    @impl BB.Actuator
+    def capabilities, do: [:position_feedback]
+
+    @impl BB.Actuator
+    def disarm(_opts), do: :ok
+
+    @impl BB.Actuator
+    def init(_opts), do: {:ok, %{}}
+
+    @impl BB.Actuator
+    def handle_command(_message, state), do: {:noreply, state}
+  end
+
+  defp define(topology) do
     capture_io(:stderr, fn ->
       Code.eval_string("""
-      defmodule #{unique_module()} do
+      defmodule PositionFeedbackTest#{System.unique_integer([:positive])} do
         use BB
 
-        #{module_body}
+        #{topology}
       end
       """)
     end)
   end
-
-  defp unique_module, do: "PositionFeedbackTest#{System.unique_integer([:positive])}"
 
   defp revolute_joint(actuator, sensors \\ "") do
     """
@@ -45,36 +74,52 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedbackTest do
     """
   end
 
-  test "warns when a joint is driven but nothing reports where it is" do
-    warning = define(revolute_joint("actuator :motor, BB.Test.MockActuator"))
+  @blind inspect(BlindActuator)
+  @self_sensing inspect(SelfSensingActuator)
 
-    assert warning =~ "joint :shoulder is driven by :motor but has no sensor"
+  test "warns when a joint is driven but nothing reports where it is" do
+    warning = define(revolute_joint("actuator :motor, #{@blind}"))
+
+    assert warning =~ "joint :shoulder is driven by :motor but nothing reports where it is"
     assert warning =~ "OpenLoopPositionEstimator"
-    assert warning =~ "sensor: false"
+    assert warning =~ "def capabilities, do: [:position_feedback]"
   end
 
   test "stays quiet when the joint has a sensor" do
     warning =
       define(
         revolute_joint(
-          "actuator :motor, BB.Test.MockActuator",
+          "actuator :motor, #{@blind}",
           "sensor :position, {BB.Sensor.OpenLoopPositionEstimator, actuator: :motor}"
         )
       )
 
-    refute warning =~ "has no sensor"
+    refute warning =~ "nothing reports where it is"
   end
 
-  test "stays quiet when the actuator says it doesn't need one" do
-    warning = define(revolute_joint("actuator :motor, BB.Test.MockActuator, sensor: false"))
+  test "stays quiet when the driver reports its own position" do
+    warning = define(revolute_joint("actuator :motor, #{@self_sensing}"))
 
-    refute warning =~ "has no sensor"
+    refute warning =~ "nothing reports where it is"
+  end
+
+  test "names every unsensed actuator on the joint" do
+    warning =
+      define(
+        revolute_joint("""
+        actuator :left, #{@blind}
+        actuator :right, #{@blind}
+        actuator :sensing, #{@self_sensing}
+        """)
+      )
+
+    assert warning =~ "driven by :left, :right but nothing reports"
   end
 
   test "stays quiet about a joint with no actuator to drive it" do
     warning = define(revolute_joint(""))
 
-    refute warning =~ "has no sensor"
+    refute warning =~ "nothing reports where it is"
   end
 
   test "stays quiet about a fixed joint, which has nowhere to go" do
@@ -85,7 +130,7 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedbackTest do
           joint :mount do
             type :fixed
 
-            actuator :motor, BB.Test.MockActuator
+            actuator :motor, #{@blind}
 
             link :arm
           end
@@ -93,6 +138,6 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedbackTest do
       end
       """)
 
-    refute warning =~ "has no sensor"
+    refute warning =~ "nothing reports where it is"
   end
 end

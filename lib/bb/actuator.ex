@@ -30,6 +30,9 @@ defmodule BB.Actuator do
 
   ### Optional Callbacks
 
+  - `capabilities/0` - Declare that the driver reads position, velocity or
+    effort back from the hardware. Without it the framework assumes it doesn't,
+    and warns that the joint needs a sensor
   - `handle_options/2` - React to parameter changes at runtime
   - `handle_call/3`, `handle_cast/2`, `handle_info/2` - Standard GenServer-style
     callbacks, for the driver's own traffic
@@ -341,7 +344,43 @@ defmodule BB.Actuator do
   """
   @callback command_payloads(opts :: keyword()) :: [module()]
 
+  @typedoc """
+  Something an actuator can do beyond taking commands.
+
+  Each value names a field of `BB.Message.Sensor.JointState` the driver can
+  fill in for itself, having read it back from the hardware.
+  """
+  @type capability :: :position_feedback | :velocity_feedback | :effort_feedback
+
+  @doc """
+  What this actuator can do besides move.
+
+  Defaults to `[]` - the honest answer for a driver that only writes to its
+  hardware, like a PWM servo or a step/direction driver. Such a joint needs a
+  sensor to say where it ended up, and `BB.Dsl` warns at compile time when it
+  doesn't have one.
+
+  A driver that reads state back from the hardware - a smart servo answering
+  position queries on its bus - says so here, and publishes what it reads as
+  `BB.Message.Sensor.JointState` on its joint's sensor topic:
+
+      @impl BB.Actuator
+      def capabilities, do: [:position_feedback, :velocity_feedback]
+
+  Declaring `:position_feedback` tells the framework this actuator is its own
+  position sensor, so no warning is issued for the joint it drives. Declare it
+  only if the driver really does publish `JointState`: the warning exists
+  because `BB.Robot.State` is written from those messages and from nothing
+  else, so a joint nobody reports on never moves as far as the rest of the
+  framework is concerned.
+
+  Answered without options or state, because it describes the driver rather
+  than any one instance of it, and the DSL asks at compile time.
+  """
+  @callback capabilities() :: [capability()]
+
   @optional_callbacks [
+    capabilities: 0,
     command_payloads: 1,
     handle_options: 2,
     handle_call: 3,
@@ -381,6 +420,9 @@ defmodule BB.Actuator do
 
       # Default implementations - all overridable
       @impl BB.Actuator
+      def capabilities, do: []
+
+      @impl BB.Actuator
       def command_payloads(_opts), do: BB.Actuator.default_command_payloads()
 
       @impl BB.Actuator
@@ -401,7 +443,8 @@ defmodule BB.Actuator do
       @impl BB.Actuator
       def terminate(_reason, _state), do: :ok
 
-      defoverridable command_payloads: 1,
+      defoverridable capabilities: 0,
+                     command_payloads: 1,
                      handle_options: 2,
                      handle_call: 3,
                      handle_cast: 2,

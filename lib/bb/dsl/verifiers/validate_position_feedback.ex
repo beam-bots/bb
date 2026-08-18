@@ -8,24 +8,26 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedback do
 
   `BB.Robot.State` is written from `BB.Message.Sensor.JointState` messages and
   from nothing else - commanding a joint doesn't move it in state, because a
-  commanded position isn't a measured one. A joint with an actuator and no
-  sensor therefore stays at its initial configuration forever, which quietly
-  ruins anything reading it: forward kinematics, the URDF-driven visualisers,
-  and inverse kinematics, which seeds each solve from the current
-  configuration.
+  commanded position isn't a measured one. A joint that nothing reports on
+  therefore stays at its initial configuration forever, which quietly ruins
+  anything reading it: forward kinematics, the URDF-driven visualisers, and
+  inverse kinematics, which seeds each solve from the current configuration.
 
-  Hardware without position feedback is served by
-  `BB.Sensor.OpenLoopPositionEstimator`, which interpolates from the actuator's
-  `BeginMotion` messages. Simulation adds one to every unsensed actuator
-  automatically; hardware doesn't, since only the author knows whether the real
-  device reports its own position.
+  Two things can report on a joint. A sensor declared alongside the actuator -
+  an encoder, or `BB.Sensor.OpenLoopPositionEstimator` interpolating from the
+  actuator's `BeginMotion` messages for hardware with no feedback at all. Or
+  the actuator itself, if it reads position back from the hardware and says so
+  through `c:BB.Actuator.capabilities/0`. A joint with neither gets a warning
+  naming both fixes.
 
-  Which is the case this can't see: a smart servo that answers position queries
-  on its bus is its own sensor, and the driver may publish `JointState` without
-  anything appearing in the topology. `sensor false` on the actuator says so
-  and silences the warning.
+  The driver is asked directly rather than the robot's author being made to
+  declare it, because whether a smart servo answers position queries is a
+  property of the driver, not of the robot it's wired into.
 
-  This warns rather than failing the build. A robot that is only ever driven
+  Simulation adds an estimator to every actuator without a declared position
+  sensor; hardware doesn't, which is why this check exists.
+
+  It warns rather than failing the build. A robot that is only ever driven
   open-loop, never asked where it is, is unusual but not wrong.
   """
 
@@ -52,16 +54,14 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedback do
     Enum.flat_map(entities, &unsensed_joints_in/1)
   end
 
-  defp unsensed_joints_in(%Link{} = link) do
-    unsensed_joints(link.joints)
-  end
+  defp unsensed_joints_in(%Link{} = link), do: unsensed_joints(link.joints)
 
   defp unsensed_joints_in(%Joint{type: :fixed}), do: []
 
   defp unsensed_joints_in(%Joint{sensors: [_ | _]} = joint), do: nested_joints(joint)
 
   defp unsensed_joints_in(%Joint{} = joint) do
-    case Enum.filter(joint.actuators, & &1.sensor) do
+    case Enum.reject(joint.actuators, &senses_position?/1) do
       [] -> nested_joints(joint)
       actuators -> [{joint, actuators} | nested_joints(joint)]
     end
@@ -72,23 +72,51 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedback do
   defp nested_joints(%Joint{link: nil}), do: []
   defp nested_joints(%Joint{link: link}), do: unsensed_joints_in(link)
 
+  # A driver BB can't load can't be asked, and refusing to compile over it would
+  # break the cross-package builds `ValidateChildSpecBehavioursTransformer`
+  # already goes out of its way to allow. Say nothing rather than guess.
+  defp senses_position?(actuator) do
+    module = module_for(actuator.child_spec)
+
+    case Code.ensure_compiled(module) do
+      {:module, _} -> :position_feedback in capabilities(module)
+      {:error, _reason} -> true
+    end
+  end
+
+  defp capabilities(module) do
+    if function_exported?(module, :capabilities, 0) do
+      module.capabilities()
+    else
+      []
+    end
+  end
+
+  defp module_for(module) when is_atom(module), do: module
+  defp module_for({module, _opts}) when is_atom(module), do: module
+
+  # Sorted because the DSL hands entities back in whatever order it holds them,
+  # and a warning that reorders itself between builds is a warning people learn
+  # to distrust.
   defp warn({joint, actuators}, robot, file) do
-    names = Enum.map_join(actuators, ", ", &inspect(&1.name))
-    example = actuators |> List.first() |> Map.fetch!(:name)
+    [example | _] = sorted = actuators |> Enum.map(& &1.name) |> Enum.sort()
+    names = Enum.map_join(sorted, ", ", &inspect/1)
 
     IO.warn(
       """
-      #{inspect(robot)}: joint #{inspect(joint.name)} is driven by #{names} but has no sensor, \
-      so nothing ever reports where it is. Its configuration in `BB.Robot.State` will stay at \
-      its initial value, and inverse kinematics will keep solving from there.
+      #{inspect(robot)}: joint #{inspect(joint.name)} is driven by #{names} but nothing reports \
+      where it is, so its configuration in `BB.Robot.State` will stay at its initial value and \
+      inverse kinematics will keep solving from there.
 
       If the hardware has no position feedback, estimate it from the commands:
 
           sensor :#{example}_position, {BB.Sensor.OpenLoopPositionEstimator, actuator: :#{example}}
 
-      If the actuator reports its own position, say so:
+      If the driver does read position back from the hardware, it should say so and publish it as \
+      `BB.Message.Sensor.JointState`:
 
-          actuator :#{example}, ..., sensor: false
+          @impl BB.Actuator
+          def capabilities, do: [:position_feedback]
       """,
       file: file,
       line: 1

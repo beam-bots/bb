@@ -1278,11 +1278,7 @@ An actuator attached to a joint.
 |------|------|---------|------|
 | [`name`](#topology-joint-actuator-name){: #topology-joint-actuator-name .spark-required} | `atom` |  | A unique name for the actuator |
 | [`child_spec`](#topology-joint-actuator-child_spec){: #topology-joint-actuator-child_spec .spark-required} | `module \| {module, keyword}` |  | The child specification for the actuator process. Either a module or `{module, keyword_list}` |
-### Options
 
-| Name | Type | Default | Docs |
-|------|------|---------|------|
-| [`sensor`](#topology-joint-actuator-sensor){: #topology-joint-actuator-sensor } | `boolean` | `true` | Whether this actuator needs a separate sensor to report where its joint actually is. Set it to `false` for hardware that reports its own position - a smart servo answering position queries on its bus - to say that the missing position sensor is deliberate. |
 
 
 ### topology.joint.actuator.transmission

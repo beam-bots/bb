@@ -44,6 +44,9 @@ defmodule BB.Test.RecordingActuator do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
+  def capabilities, do: [:position_feedback]
+
+  @impl BB.Actuator
   def init(opts) do
     bb = Keyword.fetch!(opts, :bb)
     recipient = :persistent_term.get({__MODULE__, bb.robot}, nil)
