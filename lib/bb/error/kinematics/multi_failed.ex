@@ -25,7 +25,9 @@ defmodule BB.Error.Kinematics.MultiFailed do
   end
 
   def message(%{failed_link: link, error: error, partial_results: results}) do
-    successful_count = map_size(results)
+    # `partial_results` carries the failed target's own error alongside the
+    # solved ones, so the successes have to be counted rather than assumed.
+    successful_count = Enum.count(results, &match?({_link, {:ok, _positions, _meta}}, &1))
 
     "Multi-target IK failed for #{inspect(link)}: #{format_error(error)}. " <>
       "#{successful_count} target(s) solved before failure."

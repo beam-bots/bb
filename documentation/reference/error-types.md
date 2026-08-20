@@ -573,7 +573,7 @@ error = BB.Error.State.NotAllowed.exception(
 BB.Error.Severity.severity(error)  #=> :error
 
 # Get message
-BB.Error.message(error)  #=> "Command not allowed in state :disarmed..."
+Exception.message(error)  #=> "Command not allowed in state :disarmed..."
 ```
 
 Do **not** create error structs directly - this bypasses Splode's backtrace capture:

@@ -38,7 +38,7 @@ defmodule BB.Motion do
       case BB.Motion.move_to(MyRobot, :gripper, {0.3, 0.2, 0.1},
              source_link: :base_link, solver: BB.IK.FABRIK) do
         {:ok, meta} -> IO.puts("Reached target in \#{meta.iterations} iterations")
-        {:error, %{class: :kinematics} = error} -> IO.puts("Failed: \#{BB.Error.message(error)}")
+        {:error, %{class: :kinematics} = error} -> IO.puts("Failed: \#{Exception.message(error)}")
       end
 
       # Multiple targets (for gait, coordinated motion)
@@ -46,7 +46,7 @@ defmodule BB.Motion do
       case BB.Motion.move_to_multi(MyRobot, targets,
              source_link: :body, solver: BB.IK.FABRIK) do
         {:ok, results} -> IO.puts("All targets reached")
-        {:error, error} -> IO.puts("Failed: \#{BB.Error.message(error)}")
+        {:error, error} -> IO.puts("Failed: \#{Exception.message(error)}")
       end
 
       # In a custom command handler
@@ -305,10 +305,10 @@ defmodule BB.Motion do
           IO.puts("All targets reached")
 
         {:error, %MultiFailed{failed_link: link} = error} ->
-          IO.puts("Failed to reach \#{link}: \#{BB.Error.message(error)}")
+          IO.puts("Failed to reach \#{link}: \#{Exception.message(error)}")
 
         {:error, error} ->
-          IO.puts("An actuator refused: \#{BB.Error.message(error)}")
+          IO.puts("An actuator refused: \#{Exception.message(error)}")
       end
   """
   @spec move_to_multi(robot_or_context(), targets(), keyword()) :: multi_motion_result()
@@ -367,7 +367,7 @@ defmodule BB.Motion do
           end)
 
         {:error, %MultiFailed{failed_link: link} = error} ->
-          IO.puts("\#{link} is unreachable: \#{BB.Error.message(error)}")
+          IO.puts("\#{link} is unreachable: \#{Exception.message(error)}")
       end
   """
   @spec solve_only_multi(robot_or_context(), targets(), keyword()) :: multi_solve_result()
