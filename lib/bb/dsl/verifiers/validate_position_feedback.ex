@@ -57,7 +57,11 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedback do
 
   defp unsensed_joints_in(%Link{} = link), do: unsensed_joints(link.joints)
 
-  defp unsensed_joints_in(%Joint{type: :fixed}), do: []
+  # A fixed joint has nowhere to go. A continuous one rotates without limit - a
+  # wheel, a spinner - so it has no position to hold, nothing solves toward it,
+  # and the estimator this warning recommends can't help: it interpolates
+  # position moves, which a velocity- or effort-driven wheel never issues.
+  defp unsensed_joints_in(%Joint{type: type}) when type in [:fixed, :continuous], do: []
 
   defp unsensed_joints_in(%Joint{sensors: [_ | _]} = joint), do: nested_joints(joint)
 

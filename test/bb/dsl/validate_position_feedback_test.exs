@@ -175,6 +175,30 @@ defmodule BB.Dsl.Verifiers.ValidatePositionFeedbackTest do
     refute warning =~ "nothing reports where it is"
   end
 
+  test "stays quiet about a continuous joint, which has no position to hold" do
+    warning =
+      define("""
+      topology do
+        link :base do
+          joint :wheel do
+            type :continuous
+
+            limit do
+              effort(~u(10 newton_meter))
+              velocity(~u(1 radian_per_second))
+            end
+
+            actuator :drive, #{@blind}
+
+            link :tyre
+          end
+        end
+      end
+      """)
+
+    refute warning =~ "nothing reports where it is"
+  end
+
   test "stays quiet about a fixed joint, which has nowhere to go" do
     warning =
       define("""
