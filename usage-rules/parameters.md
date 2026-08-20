@@ -23,7 +23,11 @@ end
 
 Each `param` needs a `type` (`:float`, `:integer`, `:boolean`, `:string`,
 `:atom`, or `{:unit, unit_type}` for physical quantities) and a `default`.
-`min`/`max` bound numeric types.
+
+`min`/`max` bound numeric types, and every write is checked against them —
+either bound can be given on its own. Bounds on a `{:unit, _}` parameter are
+units themselves (`min: ~u(0 meter)`); bounds on a non-numeric type, a `min`
+above its `max`, or a `default` outside its own bounds are compile errors.
 
 ## Reading and writing at runtime
 

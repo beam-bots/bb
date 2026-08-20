@@ -80,6 +80,23 @@ defmodule BB.Dsl.ParameterTest do
     end
   end
 
+  defmodule RobotWithBoundedParams do
+    @moduledoc false
+    use BB
+
+    parameters do
+      param :gain, type: :float, default: 0.5, min: 0.0, max: 1.0
+      param :offset, type: :float, default: 0.0, min: -1.0
+      param :tap_duration, type: :integer, default: 4, max: 127
+      param :reach, type: {:unit, :meter}, default: ~u(0.5 meter), max: ~u(1 meter)
+    end
+
+    topology do
+      link :base_link do
+      end
+    end
+  end
+
   describe "generated functions" do
     test "robot module has __bb_parameter_schema__/0" do
       assert function_exported?(RobotWithParameters, :__bb_parameter_schema__, 0)
@@ -122,6 +139,16 @@ defmodule BB.Dsl.ParameterTest do
       assert [:controller, :pid, :kp] in paths
       assert [:controller, :pid, :ki] in paths
       assert [:controller, :pid, :kd] in paths
+    end
+
+    test "bounds are folded into the generated type" do
+      schema = RobotWithBoundedParams.__bb_parameter_schema__()
+
+      {[:gain], opts} = Enum.find(schema, fn {path, _} -> path == [:gain] end)
+
+      assert Keyword.get(opts, :type) ==
+               {:custom, BB.Parameter.Type, :validate_bounds,
+                [[type: :float, min: 0.0, max: 1.0]]}
     end
 
     test "robot with no parameters has empty functions" do
@@ -323,6 +350,212 @@ defmodule BB.Dsl.ParameterTest do
     end
   end
 
+  describe "bounded parameters" do
+    setup do
+      start_supervised!(RobotWithBoundedParams)
+      :ok
+    end
+
+    test "values within the bounds are accepted" do
+      assert :ok = Parameter.set(RobotWithBoundedParams, [:gain], 0.75)
+      assert {:ok, 0.75} = Parameter.get(RobotWithBoundedParams, [:gain])
+    end
+
+    test "values below min are rejected" do
+      assert {:error, error} = Parameter.set(RobotWithBoundedParams, [:gain], -0.5)
+
+      assert Exception.message(error) =~
+               "invalid value for :gain option: expected value to be at least 0.0, got: -0.5"
+
+      assert {:ok, 0.5} = Parameter.get(RobotWithBoundedParams, [:gain])
+    end
+
+    test "values above max are rejected" do
+      assert {:error, error} = Parameter.set(RobotWithBoundedParams, [:gain], 1000.0)
+
+      assert Exception.message(error) =~
+               "invalid value for :gain option: expected value to be at most 1.0, got: 1000.0"
+
+      assert {:ok, 0.5} = Parameter.get(RobotWithBoundedParams, [:gain])
+    end
+
+    test "min on its own bounds one end only" do
+      assert {:error, _} = Parameter.set(RobotWithBoundedParams, [:offset], -2.0)
+      assert :ok = Parameter.set(RobotWithBoundedParams, [:offset], 1_000_000.0)
+    end
+
+    test "max on its own bounds one end only" do
+      assert {:error, _} = Parameter.set(RobotWithBoundedParams, [:tap_duration], 128)
+      assert :ok = Parameter.set(RobotWithBoundedParams, [:tap_duration], -1_000_000)
+    end
+
+    test "type validation still applies to bounded parameters" do
+      assert {:error, error} = Parameter.set(RobotWithBoundedParams, [:gain], "nope")
+
+      assert Exception.message(error) =~
+               "invalid value for :gain option: expected float, got: \"nope\""
+
+      assert {:error, _} = Parameter.set(RobotWithBoundedParams, [:tap_duration], 1.5)
+    end
+
+    test "unit parameters are bounded by unit values" do
+      assert {:error, _} = Parameter.set(RobotWithBoundedParams, [:reach], ~u(3 meter))
+      assert :ok = Parameter.set(RobotWithBoundedParams, [:reach], ~u(30 centimeter))
+    end
+
+    test "set_many rejects the whole batch when one value is out of bounds" do
+      assert {:error, [{[:tap_duration], _}]} =
+               Parameter.set_many(RobotWithBoundedParams, [
+                 {[:gain], 0.9},
+                 {[:tap_duration], 999}
+               ])
+
+      assert {:ok, 0.5} = Parameter.get(RobotWithBoundedParams, [:gain])
+    end
+
+    test "bounds are reported in parameter metadata" do
+      params = Parameter.list(RobotWithBoundedParams)
+
+      {_path, gain} = Enum.find(params, fn {path, _} -> path == [:gain] end)
+      assert gain.type == :float
+      assert gain.min == 0.0
+      assert gain.max == 1.0
+
+      {_path, offset} = Enum.find(params, fn {path, _} -> path == [:offset] end)
+      assert offset.min == -1.0
+      assert offset.max == nil
+
+      {_path, reach} = Enum.find(params, fn {path, _} -> path == [:reach] end)
+      assert reach.type == {:unit, :meter}
+      assert Localize.Unit.compare(reach.max, ~u(1 meter)) == :eq
+    end
+  end
+
+  describe "invalid bound declarations" do
+    test "bounds on a non-numeric type are rejected at compile time" do
+      error =
+        assert_raise Spark.Error.DslError, fn ->
+          defmodule BoundedString do
+            use BB
+
+            parameters do
+              param :name, type: :string, default: "x", min: 0
+            end
+
+            topology do
+              link :base_link do
+              end
+            end
+          end
+        end
+
+      assert Exception.message(error) =~
+               "`min` and `max` are only supported for numeric parameter types"
+    end
+
+    test "min greater than max is rejected at compile time" do
+      error =
+        assert_raise Spark.Error.DslError, fn ->
+          defmodule InvertedBounds do
+            use BB
+
+            parameters do
+              param :gain, type: :float, default: 0.5, min: 1.0, max: 0.0
+            end
+
+            topology do
+              link :base_link do
+              end
+            end
+          end
+        end
+
+      assert Exception.message(error) =~ "`min` must not be greater than `max`"
+    end
+
+    test "a default outside its own bounds is rejected at compile time" do
+      error =
+        assert_raise Spark.Error.DslError, fn ->
+          defmodule DefaultBelowMin do
+            use BB
+
+            parameters do
+              param :gain, type: :float, default: -1.0, min: 0.0, max: 1.0
+            end
+
+            topology do
+              link :base_link do
+              end
+            end
+          end
+        end
+
+      assert Exception.message(error) =~ "invalid `default`: expected value to be at least 0.0"
+    end
+
+    test "bounds in a nested group name the full parameter path" do
+      error =
+        assert_raise Spark.Error.DslError, fn ->
+          defmodule BoundedGroupParam do
+            use BB
+
+            parameters do
+              group :motion do
+                param :mode, type: :atom, default: :fast, max: 10
+              end
+            end
+
+            topology do
+              link :base_link do
+              end
+            end
+          end
+        end
+
+      assert Exception.message(error) =~ "parameters -> motion -> mode"
+    end
+
+    test "a numeric bound on a unit parameter is rejected at compile time" do
+      error =
+        assert_raise Spark.Error.DslError, fn ->
+          defmodule NumericBoundOnUnit do
+            use BB
+
+            parameters do
+              param :reach, type: {:unit, :meter}, default: ~u(1 meter), max: 2.0
+            end
+
+            topology do
+              link :base_link do
+              end
+            end
+          end
+        end
+
+      assert Exception.message(error) =~ "`max` must be a `Localize.Unit` compatible with `meter`"
+    end
+
+    test "an incompatible unit bound is rejected at compile time" do
+      error =
+        assert_raise Spark.Error.DslError, fn ->
+          defmodule IncompatibleUnitBound do
+            use BB
+
+            parameters do
+              param :reach, type: {:unit, :meter}, default: ~u(1 meter), max: ~u(2 second)
+            end
+
+            topology do
+              link :base_link do
+              end
+            end
+          end
+        end
+
+      assert Exception.message(error) =~ "`max` must be compatible with `meter`"
+    end
+  end
+
   describe "start_link params" do
     test "params override defaults" do
       start_supervised!({RobotWithParameters, params: [motion: [max_speed: 5.0]]})
@@ -407,6 +640,19 @@ defmodule BB.Dsl.ParameterTest do
 
       assert {:ok, value} = Parameter.get(RobotWithUnitParams, [:motion, :max_speed])
       assert Localize.Unit.compare(value, ~u(3.0 meter_per_second)) == :eq
+    end
+
+    test "params outside a parameter's bounds cause startup failure" do
+      assert {:error, {{:shutdown, {:failed_to_start_child, _, reason}}, _}} =
+               start_supervised({RobotWithBoundedParams, params: [gain: 5.0]})
+
+      assert Exception.message(reason) =~ "expected value to be at most 1.0, got: 5.0"
+    end
+
+    test "params within a parameter's bounds are applied at startup" do
+      start_supervised!({RobotWithBoundedParams, params: [gain: 0.25]})
+
+      assert {:ok, 0.25} = Parameter.get(RobotWithBoundedParams, [:gain])
     end
 
     test "unit params with incompatible units cause startup failure" do
