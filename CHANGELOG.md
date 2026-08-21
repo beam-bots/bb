@@ -11,6 +11,17 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.30.0](https://github.com/beam-bots/bb/compare/v0.29.0...v0.30.0) (2026-08-21)
+### Breaking Changes:
+
+* make `BB.Actuator.set_position/4` synchronous so a refusal reaches the caller (#235) by James Harton
+
+
+
+### Improvements:
+
+* enforce `min`/`max` bounds on parameters (#234) by James Harton
+
 ## [v0.29.0](https://github.com/beam-bots/bb/compare/v0.28.1...v0.29.0) (2026-08-09)
 ### Breaking Changes:
 
