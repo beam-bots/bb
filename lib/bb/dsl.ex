@@ -1281,6 +1281,7 @@ defmodule BB.Dsl do
       __MODULE__.Verifiers.ValidateChildSpecs,
       __MODULE__.Verifiers.ValidateEstimators,
       __MODULE__.Verifiers.ValidateParamRefs,
+      __MODULE__.Verifiers.ValidatePositionFeedback,
       __MODULE__.Verifiers.ValidateStateRefs,
       __MODULE__.Verifiers.ValidateCategoryRefs
     ]

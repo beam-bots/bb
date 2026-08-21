@@ -46,7 +46,7 @@ defmodule BB.Sim.ActuatorTest do
       # Move from 0 to 1.0 rad. v=60°/s≈1.047 rad/s, a=120°/s²≈2.094 rad/s².
       # 2 * d_accel = 2 * 0.5 * a * (v/a)² = v²/a ≈ 0.524 rad.
       # 1.0 > 0.524, so trapezoid; peak_velocity should equal velocity limit.
-      BB.Actuator.set_position!(TrapRobot, :motor, 1.0)
+      :ok = BB.Actuator.set_position(TrapRobot, :motor, 1.0)
 
       assert_receive {:bb, _path,
                       %Message{
@@ -72,7 +72,7 @@ defmodule BB.Sim.ActuatorTest do
 
       # Move 0.1 rad — below the cruise threshold of ~0.524 rad. Should be
       # triangular: peak_velocity < velocity limit, peak = sqrt(d * a).
-      BB.Actuator.set_position!(TrapRobot, :motor, 0.1)
+      :ok = BB.Actuator.set_position(TrapRobot, :motor, 0.1)
 
       assert_receive {:bb, _path,
                       %Message{
@@ -124,7 +124,7 @@ defmodule BB.Sim.ActuatorTest do
       PubSub.subscribe(RectRobot, [:actuator, :base, :shoulder, :motor])
       :ok = BB.Safety.arm(RectRobot)
 
-      BB.Actuator.set_position!(RectRobot, :motor, 1.0)
+      :ok = BB.Actuator.set_position(RectRobot, :motor, 1.0)
 
       assert_receive {:bb, _path,
                       %Message{
@@ -171,7 +171,7 @@ defmodule BB.Sim.ActuatorTest do
 
       # First move: 0 → 1.0 rad. Velocity = 10°/s ≈ 0.175 rad/s, so travel
       # time ≈ 5.7s. We deliberately interrupt long before arrival.
-      BB.Actuator.set_position!(RapidRobot, :motor, 1.0)
+      :ok = BB.Actuator.set_position(RapidRobot, :motor, 1.0)
 
       assert_receive {:bb, _path, %Message{payload: %BeginMotion{}}}, 1000
 
@@ -179,7 +179,7 @@ defmodule BB.Sim.ActuatorTest do
       # Second command: should NOT report initial_position=1.0 (the previous
       # commanded target); it should report a position partway between 0 and
       # 1.0 reflecting elapsed interpolation.
-      BB.Actuator.set_position!(RapidRobot, :motor, 0.5)
+      :ok = BB.Actuator.set_position(RapidRobot, :motor, 0.5)
 
       assert_receive {:bb, _path,
                       %Message{

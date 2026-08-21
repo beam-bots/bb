@@ -5,6 +5,8 @@
 defmodule BB.Actuator.ServerCommandPipelineTest do
   use ExUnit.Case
 
+  import ExUnit.CaptureLog
+
   alias BB.Error.State.NotArmed
   alias BB.Message
   alias BB.Message.Actuator.BeginMotion
@@ -45,6 +47,27 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
           end
 
           actuator :motor, BB.Test.RecordingActuator
+
+          link :arm
+        end
+      end
+    end
+  end
+
+  defmodule SlowRobot do
+    use BB
+
+    topology do
+      link :base do
+        joint :shoulder do
+          type :revolute
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(180 degree_per_second))
+          end
+
+          actuator :motor, {BB.Test.RecordingActuator, delay_ms: 300}
 
           link :arm
         end
@@ -108,6 +131,29 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
                      500
     end
 
+    test "set_position/4 still publishes the command for observers" do
+      BB.subscribe(ArmedRobot, @actuator_topic)
+
+      :ok = BB.Actuator.set_position(ArmedRobot, [:base, :shoulder, :motor], 0.25)
+
+      assert_receive {:bb, @actuator_topic, %Message{payload: %Command.Position{position: 0.25}}},
+                     500
+    end
+
+    test "set_position/4 drives the actuator once, not once per transport" do
+      :ok = BB.Actuator.set_position(ArmedRobot, [:base, :shoulder, :motor], 0.25)
+
+      assert_receive {:received, :command, %Message{payload: %Command.Position{}}}, 500
+      refute_receive {:received, :command, %Message{payload: %Command.Position{}}}, 200
+    end
+
+    test "delivery: :direct reaches the driver without waiting" do
+      :ok = BB.Actuator.set_position(ArmedRobot, :motor, 0.25, delivery: :direct)
+
+      assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.25}}},
+                     500
+    end
+
     test "a cast command reaches the driver" do
       :ok = BB.cast(ArmedRobot, :motor, {:command, position(0.5)})
 
@@ -137,6 +183,23 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
   end
 
+  describe "waiting" do
+    setup do
+      start_robot(SlowRobot)
+      :ok = BB.Safety.arm(SlowRobot)
+      :ok
+    end
+
+    test ":timeout bounds how long the caller waits for a slow driver" do
+      assert {:timeout, _} =
+               catch_exit(BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50))
+    end
+
+    test "and the default is long enough for one that merely takes its time" do
+      assert :ok = BB.Actuator.set_position(SlowRobot, :motor, 0.5)
+    end
+  end
+
   describe "arm gating" do
     setup do
       start_robot(DisarmedRobot)
@@ -147,6 +210,25 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       :ok = BB.publish(DisarmedRobot, @actuator_topic, position(0.5))
 
       refute_receive {:received, :command, _message}, 200
+    end
+
+    test "set_position/4 reports the refusal rather than leaving the caller guessing" do
+      assert {:error, %NotArmed{actuator: :motor, command: Command.Position}} =
+               BB.Actuator.set_position(DisarmedRobot, :motor, 0.5, timeout: 500)
+
+      refute_receive {:received, :command, _message}, 200
+    end
+
+    test "a refusal is logged, whichever transport delivered the command" do
+      log =
+        capture_log(fn ->
+          :ok = BB.Actuator.set_position(DisarmedRobot, :motor, 0.5, delivery: :direct)
+          refute_receive {:received, :command, _message}, 200
+        end)
+
+      assert log =~ "refused"
+      assert log =~ "robot is not armed"
+      assert log =~ ":motor"
     end
 
     test "a cast command is dropped while disarmed" do

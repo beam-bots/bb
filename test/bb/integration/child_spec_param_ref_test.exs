@@ -43,6 +43,9 @@ defmodule BB.Integration.ChildSpecParamRefTest do
     def disarm(_opts), do: :ok
 
     @impl BB.Actuator
+    def capabilities(_opts), do: [:position_feedback]
+
+    @impl BB.Actuator
     def init(opts) do
       max_effort = Keyword.get(opts, :max_effort)
       StateTracker.record({:actuator_init, max_effort})

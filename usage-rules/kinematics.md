@@ -37,7 +37,7 @@ matrices; angles are radians throughout.
 
 IK solvers are **pluggable** and ship in satellite packages (`bb_ik_dls`,
 `bb_ik_fabrik`) implementing the `BB.IK.Solver` behaviour. Drive them through
-`BB.Motion`, which solves, updates state, and commands the actuators:
+`BB.Motion`, which solves and commands the actuators:
 
 ```elixir
 {:ok, meta} =
@@ -55,6 +55,14 @@ IK solvers are **pluggable** and ship in satellite packages (`bb_ik_dls`,
   `BB.Robot.root_link(robot)` when you do mean the whole tree.
 - Targets are `{x, y, z}` in metres.
 - Use `BB.Motion.solve_only/4` to compute angles without moving.
+- **Commanding a joint doesn't move it in `BB.Robot.State`.** That table is
+  written from `JointState` sensor messages only, because a commanded position
+  isn't a measured one — and IK seeds each solve from it. A joint whose
+  actuator has no position feedback needs a
+  `BB.Sensor.OpenLoopPositionEstimator`, or its configuration never changes and
+  every solve starts from the same place. The DSL warns at compile time when a
+  driven joint has nothing reporting on it — a driver that reads position back
+  from its hardware says so with `c:BB.Actuator.capabilities/0` instead.
 - Solver options (`:max_iterations`, `:tolerance`, `:respect_limits`) are
   passed through untyped; defaults differ between solvers, so set them
   explicitly when it matters.

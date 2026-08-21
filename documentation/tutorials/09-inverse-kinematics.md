@@ -267,7 +267,7 @@ case Motion.move_to(MyRobot.Robot, :tip, {0.3, 0.2, 0.1},
 end
 ```
 
-This solves IK, updates the robot state, and sends position commands to all actuators.
+This solves IK and sends position commands to all actuators. It does **not** write the solved positions into `BB.Robot.State` — a commanded position isn't a measured one. Where the joints actually end up is reported by their sensors, so a joint whose actuator has no position feedback needs a `BB.Sensor.OpenLoopPositionEstimator` (the DSL warns at compile time if one is missing).
 
 ### Using FABRIK Convenience Functions
 
@@ -306,8 +306,11 @@ case Motion.move_to_multi(MyRobot.Robot, targets,
       IO.puts("#{link}: #{meta.iterations} iterations")
     end)
 
-  {:error, failed_link, reason, _results} ->
-    IO.puts("#{failed_link} failed: #{reason}")
+  {:error, %BB.Error.Kinematics.MultiFailed{failed_link: link} = error} ->
+    IO.puts("#{link} failed: #{Exception.message(error)}")
+
+  {:error, error} ->
+    IO.puts("An actuator refused its command: #{Exception.message(error)}")
 end
 ```
 

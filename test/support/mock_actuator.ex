@@ -5,11 +5,20 @@
 defmodule BB.Test.MockActuator do
   @moduledoc """
   Minimal mock actuator for testing.
+
+  Every double in this file claims `:position_feedback`, standing in for a
+  smart servo that reads its own position back. Fixtures whose subject isn't
+  position feedback then don't trip
+  `BB.Dsl.Verifiers.ValidatePositionFeedback` for a sensor they have no use
+  for.
   """
   use BB.Actuator, options_schema: []
 
   @impl BB.Actuator
   def disarm(_opts), do: :ok
+
+  @impl BB.Actuator
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts) do
@@ -33,6 +42,9 @@ defmodule ServoMotor do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
+  def capabilities(_opts), do: [:position_feedback]
+
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 
   @impl BB.Actuator
@@ -45,6 +57,9 @@ defmodule MainMotor do
 
   @impl BB.Actuator
   def disarm(_opts), do: :ok
+
+  @impl BB.Actuator
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -61,6 +76,9 @@ defmodule BrakeActuator do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
+  def capabilities(_opts), do: [:position_feedback]
+
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 
   @impl BB.Actuator
@@ -73,6 +91,9 @@ defmodule ShoulderMotor do
 
   @impl BB.Actuator
   def disarm(_opts), do: :ok
+
+  @impl BB.Actuator
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -89,6 +110,9 @@ defmodule ElbowMotor do
   def disarm(_opts), do: :ok
 
   @impl BB.Actuator
+  def capabilities(_opts), do: [:position_feedback]
+
+  @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
 
   @impl BB.Actuator
@@ -101,6 +125,9 @@ defmodule MyMotor do
 
   @impl BB.Actuator
   def disarm(_opts), do: :ok
+
+  @impl BB.Actuator
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}
@@ -119,6 +146,9 @@ defmodule TestActuator do
 
   @impl BB.Actuator
   def disarm(_opts), do: :ok
+
+  @impl BB.Actuator
+  def capabilities(_opts), do: [:position_feedback]
 
   @impl BB.Actuator
   def init(opts), do: {:ok, %{bb: Keyword.fetch!(opts, :bb)}}

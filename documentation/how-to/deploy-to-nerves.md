@@ -171,7 +171,7 @@ alias MyRobotFirmware.Robot
 {:ok, :armed, _} = BB.Command.await(cmd)
 
 # Move joints
-BB.Actuator.set_position!(Robot, :servo, 0.5)
+:ok = BB.Actuator.set_position(Robot, :servo, 0.5)
 ```
 
 ## Network Control
@@ -217,7 +217,7 @@ defmodule MyRobotFirmware.RemoteControl do
   def handle_info({:tcp, _socket, data}, state) do
     case Jason.decode(data) do
       {:ok, %{"command" => "move", "joint" => joint, "position" => pos}} ->
-        BB.Actuator.set_position!(MyRobotFirmware.Robot, String.to_atom(joint), pos)
+        BB.Actuator.set_position(MyRobotFirmware.Robot, String.to_atom(joint), pos)
 
       _ ->
         :ok

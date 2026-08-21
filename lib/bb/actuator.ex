@@ -30,6 +30,9 @@ defmodule BB.Actuator do
 
   ### Optional Callbacks
 
+  - `capabilities/1` - Declare that the driver reads position, velocity or
+    effort back from the hardware. Without it the framework assumes it doesn't,
+    and warns that the joint needs a sensor
   - `handle_options/2` - React to parameter changes at runtime
   - `handle_call/3`, `handle_cast/2`, `handle_info/2` - Standard GenServer-style
     callbacks, for the driver's own traffic
@@ -106,21 +109,25 @@ defmodule BB.Actuator do
 
   ## API
 
-  Supports both pubsub delivery (for orchestration, logging, replay) and
-  direct GenServer delivery (for time-critical control paths).
-
   ### Delivery Methods
 
-  - **Pubsub** (`set_position/4`, etc.) - Commands published to `[:actuator | path]`.
-    Enables logging, replay, and multi-subscriber patterns.
+  `set_position/4` takes a `:delivery` option, the same one `BB.Motion` takes:
 
-  - **Direct** (`set_position!/4`, etc.) - Commands sent directly via `BB.Process.cast`.
-    Lower latency for time-critical control.
+  - **`:pubsub`** (default) - The command is published to `[:actuator | path]`
+    so orchestration and logging can observe it, and delivered to the actuator
+    by a call. Returns `:ok` or `{:error, reason}`, so a caller finds out that
+    a joint isn't moving rather than assuming it is.
 
-  - **Synchronous** (`set_position_sync/5`, etc.) - Commands sent via `BB.Process.call`.
-    Returns acknowledgement or error.
+  - **`:direct`** - Sent via `BB.Process.cast`, publishing nothing. Lower
+    latency for time-critical control, at the price of a refusal that only the
+    log and telemetry ever see. It always returns `:ok`.
 
-  All three converge on `c:handle_command/2`. Which transport a caller chose
+  The other payloads still offer the older trio - a pubsub function, a `!` cast
+  and a `_sync` call (`set_velocity/4`, `set_velocity!/4`,
+  `set_velocity_sync/5`) - in which the pubsub form cannot report a refusal at
+  all.
+
+  All of them converge on `c:handle_command/2`. Which transport a caller chose
   is not something a driver has to know about, and choosing one cannot skip
   the checks `BB.Actuator.Server` applies on the way in.
 
@@ -138,14 +145,11 @@ defmodule BB.Actuator do
 
   ### Examples
 
-      # Pubsub delivery (for kinematics/orchestration)
-      BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57)
+      # Published for observers, acknowledged by the actuator
+      :ok = BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57)
 
-      # Direct delivery (for time-critical control)
-      BB.Actuator.set_position!(MyRobot, :shoulder_servo, 1.57)
-
-      # Synchronous with acknowledgement
-      {:ok, :accepted} = BB.Actuator.set_position_sync(MyRobot, :shoulder_servo, 1.57)
+      # Fire-and-forget (for time-critical control)
+      BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57, delivery: :direct)
   """
 
   # ----------------------------------------------------------------------------
@@ -175,9 +179,11 @@ defmodule BB.Actuator do
   the robot is armed and translated the payload from joint-space into
   motor-space, so the values are ready to write to hardware.
 
-  The reply is used only by the synchronous transport (`set_position_sync/5`
-  and friends); it is discarded for pubsub and direct delivery. Returning
-  `{:noreply, state}` replies `{:ok, :accepted}` to a synchronous caller.
+  The reply is used only by callers that wait for one (`set_position/4`,
+  `set_velocity_sync/5` and friends); it is discarded for cast delivery.
+  Returning `{:noreply, state}` replies `{:ok, :accepted}` to such a caller,
+  which `set_position/4` reports as `:ok`. Only an `{:error, reason}` reply
+  tells a caller its command was refused.
 
       @impl BB.Actuator
       def handle_command(%BB.Message{payload: %Command.Position{} = cmd}, state) do
@@ -338,7 +344,67 @@ defmodule BB.Actuator do
   """
   @callback command_payloads(opts :: keyword()) :: [module()]
 
+  @typedoc """
+  Something an actuator can do beyond taking commands.
+
+  Each value names a field of `BB.Message.Sensor.JointState` the driver can
+  fill in for itself, having read it back from the hardware.
+  """
+  @type capability :: :position_feedback | :velocity_feedback | :effort_feedback
+
+  @doc """
+  What this actuator can do besides move.
+
+  Defaults to `[]` - the honest answer for a driver that only writes to its
+  hardware, like a PWM servo or a step/direction driver. Such a joint needs a
+  sensor to say where it ended up, and `BB.Dsl` warns at compile time when it
+  doesn't have one.
+
+  A driver that reads state back from the hardware - a smart servo answering
+  position queries on its bus - says so here, and publishes what it reads as
+  `BB.Message.Sensor.JointState` on its joint's sensor topic:
+
+      @impl BB.Actuator
+      def capabilities(_opts), do: [:position_feedback, :velocity_feedback]
+
+  Declaring `:position_feedback` tells the framework this actuator is its own
+  position sensor, so no warning is issued for the joint it drives. Declare it
+  only if the driver really does publish `JointState`: the warning exists
+  because `BB.Robot.State` is written from those messages and from nothing
+  else, so a joint nobody reports on never moves as far as the rest of the
+  framework is concerned.
+
+  ## Options
+
+  `opts` lets a driver answer for how it was wired up, rather than for the
+  hardware in general - an encoder input that may or may not be connected:
+
+      @impl BB.Actuator
+      def capabilities(opts) do
+        if opts[:feedback_pin], do: [:position_feedback], else: []
+      end
+
+  > #### These are not the options `init/1` receives {: .warning}
+  >
+  > This is asked at compile time, by a DSL verifier, so `opts` is what the
+  > robot's author wrote in the DSL, checked against `c:options_schema/0` and
+  > with its defaults applied. Two things follow:
+  >
+  > - There is no `:bb` key, and no `:motor_profile`. The robot doesn't exist
+  >   yet.
+  > - A `param()` reference can't be resolved before the robot is running, so a
+  >   parameterised option arrives holding its schema default instead of the
+  >   value the robot will run with. A capability that genuinely depends on one
+  >   can't be answered here; say what is true of the common case, and prefer
+  >   claiming a capability you sometimes lack over disclaiming one you usually
+  >   have - a spurious warning teaches people to ignore warnings.
+  >
+  > Keep it pure for the same reason: no hardware, no processes, no `Mix`.
+  """
+  @callback capabilities(opts :: keyword()) :: [capability()]
+
   @optional_callbacks [
+    capabilities: 1,
     command_payloads: 1,
     handle_options: 2,
     handle_call: 3,
@@ -378,6 +444,9 @@ defmodule BB.Actuator do
 
       # Default implementations - all overridable
       @impl BB.Actuator
+      def capabilities(_opts), do: []
+
+      @impl BB.Actuator
       def command_payloads(_opts), do: BB.Actuator.default_command_payloads()
 
       @impl BB.Actuator
@@ -398,7 +467,8 @@ defmodule BB.Actuator do
       @impl BB.Actuator
       def terminate(_reason, _state), do: :ok
 
-      defoverridable command_payloads: 1,
+      defoverridable capabilities: 1,
+                     command_payloads: 1,
                      handle_options: 2,
                      handle_call: 3,
                      handle_cast: 2,
@@ -489,69 +559,95 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
-  Send a position command via pubsub.
+  Send a position command.
 
-  The command is published to `[:actuator | path]` where subscribers can
-  receive it via `handle_info({:bb, path, message}, state)`.
+  Under the default `delivery: :pubsub` the command is published to
+  `[:actuator | path]` for whoever is watching the topic, and delivered to the
+  actuator itself by a call, so the caller learns whether the joint is actually
+  moving. An actuator refuses a command it doesn't accept, or any command at
+  all while the robot is disarmed.
+
+  The publication records that a command was issued; the return value says
+  whether it was accepted. A refused command still appears on the topic.
+
+  Runs in the caller's process, so a driver must not call this from inside its
+  own `c:handle_command/2` - it would be waiting on itself.
 
   ## Options
 
+  - `:delivery` - `:pubsub` (default) publishes the command and waits for the
+    actuator to accept it; `:direct` casts to the actuator and returns at once,
+    publishing nothing. Use `:direct` for control paths where the round trip
+    costs more than knowing the outcome is worth
   - `:velocity` - Velocity hint (rad/s or m/s)
   - `:duration` - Duration hint (milliseconds)
   - `:command_id` - Correlation ID for feedback tracking
-
-  ## Examples
-
-      BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :servo], 1.57)
-      BB.Actuator.set_position(MyRobot, [:shoulder, :servo], 1.57, velocity: 0.5)
-  """
-  @spec set_position(module(), target(), number(), keyword()) :: :ok
-  def set_position(robot, target, position, opts \\ []) do
-    path = actuator_path!(robot, target)
-    message = build_position_message(path, position, opts)
-    BB.publish(robot, [:actuator | path], message)
-  end
-
-  @doc """
-  Send a position command directly to an actuator (bypasses pubsub).
-
-  Uses `BB.Process.cast` for fire-and-forget delivery. The actuator receives
-  the command via `handle_cast({:command, message}, state)`.
-
-  ## Options
-
-  Same as `set_position/4`.
-  """
-  @spec set_position!(module(), target(), number(), keyword()) :: :ok
-  def set_position!(robot, target, position, opts \\ []) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_position_message(actuator_name, position, opts)
-    BB.cast(robot, actuator_name, {:command, message})
-  end
-
-  @doc """
-  Send a position command and wait for acknowledgement.
-
-  Uses `BB.Process.call` for synchronous delivery. Returns the actuator's
-  response or raises on timeout.
-
-  ## Options
-
-  Same as `set_position/4`, plus:
-  - Fifth argument is timeout in milliseconds (default 5000)
+  - `:timeout` - How long to wait for the actuator, in milliseconds (default
+    5000). Unused under `:direct`, which waits for nothing
 
   ## Returns
 
-  - `{:ok, :accepted}` - Command accepted
-  - `{:ok, :accepted, map()}` - Command accepted with additional info
-  - `{:error, reason}` - Command rejected
+  - `:ok` - Command accepted
+  - `{:error, reason}` - Command refused, `reason` being a `BB.Error` struct
+
+  Under `delivery: :pubsub`, exits if the actuator isn't running or doesn't
+  answer within `:timeout`, like any other `GenServer.call/3`.
+
+  > #### `delivery: :direct` always returns `:ok` {: .warning}
+  >
+  > A cast has nowhere to put an answer, so `:direct` returns `:ok` whether the
+  > actuator accepted the command or refused it. The refusal reaches the log
+  > and a `[:bb, :actuator, :rejected]` telemetry event, and nowhere else —
+  > matching on `{:error, reason}` there is a branch that can never run.
+  >
+
+  ## Commanding several joints
+
+  This is an ordinary blocking call, so several joints cost several round
+  trips and how they overlap is yours to choose:
+
+      [shoulder: 1.57, elbow: 0.5]
+      |> Enum.map(fn {joint, position} ->
+        Task.async(fn -> BB.Actuator.set_position(MyRobot, joint, position) end)
+      end)
+      |> Task.await_many()
+
+  Three things to know before reaching for that:
+
+  - `Task.async/1` **links**. From a long-lived process - a controller loop -
+    use `Task.Supervisor.async_nolink/3` instead, or an actuator that has died
+    takes the caller down with it.
+  - `Task.await_many/2` applies one deadline to the whole set and kills the
+    stragglers when it expires. It isn't "collect as they land".
+  - Each command publishes from inside its own task, so observers see the
+    commands interleaved rather than in the order you listed them.
+
+  `BB.Motion.send_positions/3` already does this for the joints of one motion.
+
+  ## Examples
+
+      :ok = BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :servo], 1.57)
+
+      case BB.Actuator.set_position(MyRobot, :servo, 1.57, velocity: 0.5) do
+        :ok -> :moving
+        {:error, error} -> Logger.error(Exception.message(error))
+      end
   """
-  @spec set_position_sync(module(), target(), number(), keyword(), timeout()) ::
-          {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def set_position_sync(robot, target, position, opts \\ [], timeout \\ 5000) do
+  @spec set_position(module(), target(), number(), keyword()) :: :ok | {:error, term()}
+  def set_position(robot, target, position, opts \\ []) do
+    deliver_position(Keyword.get(opts, :delivery, :pubsub), robot, target, position, opts)
+  end
+
+  defp deliver_position(:pubsub, robot, target, position, opts) do
+    path = actuator_path!(robot, target)
+    message = build_position_message(path, position, opts)
+    send_command(robot, path, message, opts)
+  end
+
+  defp deliver_position(:direct, robot, target, position, opts) do
     actuator_name = actuator_name!(robot, target)
     message = build_position_message(actuator_name, position, opts)
-    BB.call(robot, actuator_name, {:command, message}, timeout)
+    BB.cast(robot, actuator_name, {:command, message})
   end
 
   defp build_position_message(frame_id, position, opts) do
@@ -832,6 +928,34 @@ defmodule BB.Actuator do
     frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
     Message.new!(Command.Hold, frame_id, command_id: opts[:command_id])
   end
+
+  # ----------------------------------------------------------------------------
+  # Delivery
+  # ----------------------------------------------------------------------------
+
+  @default_timeout 5000
+
+  # The actuator is excluded from the publication because it is about to be
+  # handed the same command directly: it subscribes to its own command topic,
+  # and would otherwise drive the hardware twice for one call.
+  @spec send_command(module(), [atom()], Message.t(), keyword()) :: :ok | {:error, term()}
+  defp send_command(robot, path, message, opts) do
+    actuator_name = List.last(path)
+
+    BB.publish(robot, [:actuator | path], message,
+      except: [BB.Process.whereis(robot, actuator_name)]
+    )
+
+    robot
+    |> BB.call(actuator_name, {:command, message}, Keyword.get(opts, :timeout, @default_timeout))
+    |> command_result()
+  end
+
+  # A driver may answer `c:handle_command/2` with anything it likes; only a
+  # refusal changes what the caller should do next.
+  @spec command_result(term()) :: :ok | {:error, term()}
+  defp command_result({:error, reason}), do: {:error, reason}
+  defp command_result(_accepted), do: :ok
 
   # ----------------------------------------------------------------------------
   # Addressing

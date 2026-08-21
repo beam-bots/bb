@@ -17,7 +17,7 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
 
   use Spark.Dsl.Verifier
 
-  alias BB.Dsl.{Actuator, Bridge, Controller, Estimator, Joint, Link, ParamRef, Sensor}
+  alias BB.Dsl.{Actuator, Bridge, ChildSpecOptions, Controller, Estimator, Joint, Link, Sensor}
   alias Spark.Dsl.Verifier
   alias Spark.Error.DslError
 
@@ -177,20 +177,14 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
   end
 
   defp validate_child_spec(child_spec, path, robot_module) do
-    {module, opts} = normalize_child_spec(child_spec)
+    {module, opts} = ChildSpecOptions.module_and_options(child_spec)
     validate_options(module, opts, path, robot_module)
   end
 
-  defp normalize_child_spec(module) when is_atom(module), do: {module, []}
-  defp normalize_child_spec({module, opts}) when is_atom(module), do: {module, opts}
-
   defp validate_options(module, opts, path, robot_module) do
     schema = module.options_schema()
-    param_ref_keys = get_param_ref_keys(opts)
-    schema_for_validation = mark_keys_as_optional(schema, param_ref_keys)
-    opts_without_param_refs = filter_param_refs(opts)
 
-    case Spark.Options.validate(opts_without_param_refs, schema_for_validation) do
+    case ChildSpecOptions.validate(module, opts) do
       {:ok, _validated} ->
         :ok
 
@@ -209,30 +203,6 @@ defmodule BB.Dsl.Verifiers.ValidateChildSpecs do
            """
          )}
     end
-  end
-
-  defp filter_param_refs(opts) do
-    Enum.reject(opts, fn {_key, value} -> is_struct(value, ParamRef) end)
-  end
-
-  defp get_param_ref_keys(opts) do
-    opts
-    |> Enum.filter(fn {_key, value} -> is_struct(value, ParamRef) end)
-    |> Keyword.keys()
-  end
-
-  defp mark_keys_as_optional(%Spark.Options{schema: schema} = spark_opts, keys) do
-    %{spark_opts | schema: mark_keys_as_optional(schema, keys)}
-  end
-
-  defp mark_keys_as_optional(schema, keys) when is_list(schema) do
-    Enum.map(schema, fn {key, opts} ->
-      if key in keys do
-        {key, Keyword.put(opts, :required, false)}
-      else
-        {key, opts}
-      end
-    end)
   end
 
   defp format_schema(%Spark.Options{schema: schema}) do

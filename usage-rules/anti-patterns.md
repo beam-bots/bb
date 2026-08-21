@@ -11,13 +11,13 @@ matching sub-rule.
 
 ### Don't command a disarmed robot
 
-A new robot is `:disarmed` and ignores motion. Arm it first through the command
+A new robot is `:disarmed` and refuses motion. Arm it first through the command
 system:
 
 ```elixir
 {:ok, cmd} = MyRobot.Robot.arm()
 {:ok, :armed, _} = BB.Command.await(cmd)
-BB.Actuator.set_position!(MyRobot.Robot, :servo, 0.5)
+:ok = BB.Actuator.set_position(MyRobot.Robot, :servo, 0.5)
 ```
 
 ### Don't manipulate the safety system directly

@@ -11,6 +11,7 @@ defmodule BB do
   defdelegate subscribe(module, path, opts \\ []), to: BB.PubSub
   defdelegate unsubscribe(module, path), to: BB.PubSub
   defdelegate publish(module, path, message), to: BB.PubSub
+  defdelegate publish(module, path, message, opts), to: BB.PubSub
 
   defdelegate call(module, name, message, timeout \\ 5000), to: BB.Process
   defdelegate cast(module, name, message), to: BB.Process

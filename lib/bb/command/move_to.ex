@@ -33,7 +33,12 @@ defmodule BB.Command.MoveTo do
   - `max_iterations` - Maximum solver iterations (default: 50)
   - `tolerance` - Convergence tolerance in metres (default: 1.0e-4)
   - `respect_limits` - Whether to clamp to joint limits (default: true)
-  - `delivery` - Actuator command delivery: `:pubsub` (default), `:direct`, or `:sync`
+  - `delivery` - Actuator command delivery: `:pubsub` (default) waits for each
+    actuator to accept its command, `:direct` doesn't wait
+  - `velocity` - Velocity hint for actuators (rad/s or m/s)
+  - `duration` - Duration hint for actuators (milliseconds)
+  - `timeout` - How long to wait for each actuator to accept its command, in
+    milliseconds (default: 5000). Unused under `delivery: :direct`
 
   ## Usage
 
@@ -87,7 +92,6 @@ defmodule BB.Command.MoveTo do
   use BB.Command
 
   alias BB.Error.Invalid.Command, as: InvalidCommand
-  alias BB.Error.Kinematics.MultiFailed
   alias BB.Math.Vec3
   alias BB.Message.Geometry.Point3D
   alias BB.Motion
@@ -125,13 +129,7 @@ defmodule BB.Command.MoveTo do
       opts = build_opts(goal, source_link, solver)
       target = normalize_target(target)
 
-      case Motion.move_to(context, target_link, target, opts) do
-        {:ok, meta} ->
-          {:ok, meta}
-
-        {:error, error} ->
-          {:error, error}
-      end
+      Motion.move_to(context, target_link, target, opts)
     end
   end
 
@@ -141,18 +139,7 @@ defmodule BB.Command.MoveTo do
          {:ok, source_link} <- fetch_required(goal, :source_link) do
       opts = build_opts(goal, source_link, solver)
 
-      case Motion.move_to_multi(context, targets, opts) do
-        {:ok, results} ->
-          {:ok, results}
-
-        {:error, failed_link, error, results} ->
-          {:error,
-           MultiFailed.exception(
-             failed_link: failed_link,
-             error: error,
-             partial_results: results
-           )}
-      end
+      Motion.move_to_multi(context, targets, opts)
     end
   end
 
@@ -173,7 +160,10 @@ defmodule BB.Command.MoveTo do
       max_iterations: Map.get(goal, :max_iterations),
       tolerance: Map.get(goal, :tolerance),
       respect_limits: Map.get(goal, :respect_limits),
-      delivery: Map.get(goal, :delivery)
+      delivery: Map.get(goal, :delivery),
+      velocity: Map.get(goal, :velocity),
+      duration: Map.get(goal, :duration),
+      timeout: Map.get(goal, :timeout)
     ]
     |> Keyword.reject(fn {_k, v} -> is_nil(v) end)
   end

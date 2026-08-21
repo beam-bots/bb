@@ -179,7 +179,8 @@ Inverse kinematics found no solution.
 
 ### MultiFailed
 
-Multiple IK attempts failed.
+A multi-target IK operation failed on one of its targets. Returned by
+`BB.Motion.move_to_multi/3` and `BB.Motion.solve_only_multi/3`.
 
 **Module:** `BB.Error.Kinematics.MultiFailed`
 
@@ -187,8 +188,9 @@ Multiple IK attempts failed.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `attempts` | `integer` | Number of attempts |
-| `errors` | `[term]` | Individual errors |
+| `failed_link` | `atom` | The target link that could not be solved |
+| `error` | `term` | The underlying kinematics error |
+| `partial_results` | `map` | Results of the targets solved before the failure |
 
 **Severity:** `:error`
 
@@ -571,7 +573,7 @@ error = BB.Error.State.NotAllowed.exception(
 BB.Error.Severity.severity(error)  #=> :error
 
 # Get message
-BB.Error.message(error)  #=> "Command not allowed in state :disarmed..."
+Exception.message(error)  #=> "Command not allowed in state :disarmed..."
 ```
 
 Do **not** create error structs directly - this bypasses Splode's backtrace capture:

@@ -8,17 +8,17 @@ SPDX-License-Identifier: Apache-2.0
 
 Send an actuator a target with `BB.Actuator`. The robot must be **armed**
 first (see `bb:safety-and-commands`) — commands to a disarmed robot are
-ignored.
+refused.
 
 ```elixir
 # By the actuator's unique name, value in radians:
-BB.Actuator.set_position(MyRobot.Robot, :servo, 0.785)
+:ok = BB.Actuator.set_position(MyRobot.Robot, :servo, 0.785)
 
 # Or by its full path through the topology ([link, joint, actuator]):
-BB.Actuator.set_position(MyRobot.Robot, [:base_link, :pan_joint, :servo], 0.785)
+:ok = BB.Actuator.set_position(MyRobot.Robot, [:base_link, :pan_joint, :servo], 0.785)
 
-# Bypassing pubsub, for time-critical control:
-BB.Actuator.set_position!(MyRobot.Robot, :servo, 0.785)
+# Without waiting for an answer, for time-critical control:
+BB.Actuator.set_position(MyRobot.Robot, :servo, 0.785, delivery: :direct)
 ```
 
 The DSL takes `~u` sigil values; the runtime command functions take plain
@@ -29,12 +29,18 @@ numbers in SI base units (radians here).
   actuator the robot doesn't have raises rather than publishing to a topic
   nothing listens on. A full path must be complete: every link and joint from
   the root, not just the joint.
-- `set_position/4` publishes via pubsub; `set_position!/4` bypasses it for
-  lower latency. `set_velocity` and `set_effort` follow the same pair.
+- `set_position/4` publishes the command for observers and waits for the
+  actuator to accept it, returning `:ok` or `{:error, reason}`. Match on it:
+  a refusal means the joint is not moving.
+- `delivery: :direct` casts instead, for control paths that can't afford the
+  round trip. It **always returns `:ok`** — a refusal then reaches the log and
+  telemetry only, so don't write an error branch that can never run.
+- `set_velocity`, `set_effort`, `follow_trajectory`, `stop` and `hold` still
+  use the older trio — a pubsub function, a `!` cast and a `_sync` call — in
+  which the pubsub form can't report a refusal. Use their `_sync` variants
+  where the outcome matters.
 - Positions are in **radians**, velocities in rad/s — SI base units, the same
   units the compiled robot struct uses.
-- Use `set_position_sync/5` when you need to wait for acknowledgement rather
-  than fire-and-forget.
 
 ## Joint-space in, motor-space handled for you
 
@@ -48,7 +54,7 @@ in motor-space — the driver does no joint-to-motor maths.
 
 `use BB.Actuator`, define `init/1`, the **required** `handle_command/2`, and
 the **required** `disarm/1`. Every command arrives at `handle_command/2`
-whichever of the three functions above sent it — a driver can't tell, and
+whichever of the functions above sent it — a driver can't tell, and
 doesn't need to:
 
 ```elixir
@@ -62,9 +68,22 @@ end
 def disarm(opts), do: cut_power(opts)   # must work without GenServer state
 ```
 
-Return `{:reply, reply, state}` to answer a `set_position_sync/5` caller;
-`{:noreply, state}` replies `{:ok, :accepted}` for you. The reply is discarded
-for the other two transports.
+Return `{:reply, reply, state}` to answer a caller that is waiting —
+`set_position/4`, `set_velocity_sync/5` and friends; `{:noreply, state}`
+replies `{:ok, :accepted}` for you. The reply is discarded for cast delivery.
+
+If your driver reads position back from the hardware — a smart servo answering
+position queries on its bus — say so, and publish what you read as
+`BB.Message.Sensor.JointState`:
+
+```elixir
+@impl BB.Actuator
+def capabilities(_opts), do: [:position_feedback]
+```
+
+`BB.Robot.State` is written from `JointState` messages and nothing else, so a
+joint with neither a sensor nor a self-reporting driver never moves as far as
+kinematics is concerned. The DSL warns at compile time when it finds one.
 
 Don't check `BB.Safety.armed?/1` in a driver — `BB.Actuator.Server` refuses
 commands to a disarmed robot before they reach you.

@@ -180,7 +180,7 @@ end
 defp handle_ros_command(msg) do
   for {name, position} <- Enum.zip(msg.name, msg.position) do
     joint = String.to_atom(name)
-    BB.Actuator.set_position!(MyRobot.Robot, joint, position)
+    BB.Actuator.set_position(MyRobot.Robot, joint, position)
   end
 end
 ```
