@@ -102,8 +102,8 @@ defmodule BB.Parameter.StoreTest do
       :ok = Dets.save(state, [:string_val], "hello")
       # Atom
       :ok = Dets.save(state, [:atom_val], :test_atom)
-      # Unit (Cldr.Unit struct)
-      :ok = Dets.save(state, [:unit_val], Localize.Unit.new!(1.5, "meter"))
+      # Unit (BB.Unit struct)
+      :ok = Dets.save(state, [:unit_val], BB.Unit.new!(1.5, "meter"))
 
       {:ok, params} = Dets.load(state)
       assert length(params) == 6
@@ -115,7 +115,7 @@ defmodule BB.Parameter.StoreTest do
       assert {[:atom_val], :test_atom} in params
 
       {[:unit_val], unit} = Enum.find(params, fn {path, _} -> path == [:unit_val] end)
-      assert %Localize.Unit{} = unit
+      assert %BB.Unit{} = unit
       assert unit.name == "meter"
 
       :ok = Dets.close(state)

@@ -133,13 +133,13 @@ defmodule BB.Sensor.OpenLoopPositionEstimator do
 
     publish_interval_ms =
       publish_rate
-      |> Localize.Unit.convert!("hertz")
+      |> BB.Unit.convert!("hertz")
       |> Units.extract_float()
       |> then(&round(1000 / &1))
 
     max_silence_ms =
       max_silence
-      |> Localize.Unit.convert!("second")
+      |> BB.Unit.convert!("second")
       |> Units.extract_float()
       |> then(&round(&1 * 1000))
 

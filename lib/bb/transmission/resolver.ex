@@ -171,13 +171,13 @@ defmodule BB.Transmission.Resolver do
 
   defp convert_for_field(:reversed?, value, _joint_type) when is_boolean(value), do: value
 
-  defp convert_for_field(:offset, %Localize.Unit{} = value, type)
+  defp convert_for_field(:offset, %BB.Unit{} = value, type)
        when type in [:revolute, :continuous],
        do: Units.to_radians(value)
 
-  defp convert_for_field(:offset, %Localize.Unit{} = value, :prismatic),
+  defp convert_for_field(:offset, %BB.Unit{} = value, :prismatic),
     do: Units.to_meters(value)
 
-  defp convert_for_field(:offset, %Localize.Unit{} = value, _),
+  defp convert_for_field(:offset, %BB.Unit{} = value, _),
     do: Units.to_radians(value)
 end

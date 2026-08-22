@@ -12,7 +12,7 @@ defmodule BB.Dsl.Box do
             y: nil,
             z: nil
 
-  alias Localize.Unit
+  alias BB.Unit
   alias Spark.Dsl.Entity
 
   @type t :: %__MODULE__{

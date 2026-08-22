@@ -20,11 +20,11 @@ defmodule BB.Dsl.Inertia do
   @type t :: %__MODULE__{
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
-          ixx: Localize.Unit.t(),
-          iyy: Localize.Unit.t(),
-          izz: Localize.Unit.t(),
-          ixy: Localize.Unit.t(),
-          ixz: Localize.Unit.t(),
-          iyz: Localize.Unit.t()
+          ixx: BB.Unit.t(),
+          iyy: BB.Unit.t(),
+          izz: BB.Unit.t(),
+          ixy: BB.Unit.t(),
+          ixz: BB.Unit.t(),
+          iyz: BB.Unit.t()
         }
 end

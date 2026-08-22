@@ -138,12 +138,12 @@ Specifies where the link's center of mass is located, relative to the link's ref
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#topology-link-inertial-origin-roll){: #topology-link-inertial-origin-roll } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `x` axis |
-| [`pitch`](#topology-link-inertial-origin-pitch){: #topology-link-inertial-origin-pitch } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `y` axis |
-| [`yaw`](#topology-link-inertial-origin-yaw){: #topology-link-inertial-origin-yaw } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `z` axis |
-| [`x`](#topology-link-inertial-origin-x){: #topology-link-inertial-origin-x } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `x` axis |
-| [`y`](#topology-link-inertial-origin-y){: #topology-link-inertial-origin-y } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `y` axis |
-| [`z`](#topology-link-inertial-origin-z){: #topology-link-inertial-origin-z } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `z` axis |
+| [`roll`](#topology-link-inertial-origin-roll){: #topology-link-inertial-origin-roll } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `x` axis |
+| [`pitch`](#topology-link-inertial-origin-pitch){: #topology-link-inertial-origin-pitch } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `y` axis |
+| [`yaw`](#topology-link-inertial-origin-yaw){: #topology-link-inertial-origin-yaw } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `z` axis |
+| [`x`](#topology-link-inertial-origin-x){: #topology-link-inertial-origin-x } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `x` axis |
+| [`y`](#topology-link-inertial-origin-y){: #topology-link-inertial-origin-y } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `y` axis |
+| [`z`](#topology-link-inertial-origin-z){: #topology-link-inertial-origin-z } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `z` axis |
 
 
 
@@ -444,12 +444,12 @@ The refrence frame of the visual element with respect to the reference frame of 
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#topology-link-visual-origin-roll){: #topology-link-visual-origin-roll } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `x` axis |
-| [`pitch`](#topology-link-visual-origin-pitch){: #topology-link-visual-origin-pitch } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `y` axis |
-| [`yaw`](#topology-link-visual-origin-yaw){: #topology-link-visual-origin-yaw } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `z` axis |
-| [`x`](#topology-link-visual-origin-x){: #topology-link-visual-origin-x } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `x` axis |
-| [`y`](#topology-link-visual-origin-y){: #topology-link-visual-origin-y } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `y` axis |
-| [`z`](#topology-link-visual-origin-z){: #topology-link-visual-origin-z } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `z` axis |
+| [`roll`](#topology-link-visual-origin-roll){: #topology-link-visual-origin-roll } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `x` axis |
+| [`pitch`](#topology-link-visual-origin-pitch){: #topology-link-visual-origin-pitch } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `y` axis |
+| [`yaw`](#topology-link-visual-origin-yaw){: #topology-link-visual-origin-yaw } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `z` axis |
+| [`x`](#topology-link-visual-origin-x){: #topology-link-visual-origin-x } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `x` axis |
+| [`y`](#topology-link-visual-origin-y){: #topology-link-visual-origin-y } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `y` axis |
+| [`z`](#topology-link-visual-origin-z){: #topology-link-visual-origin-z } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `z` axis |
 
 
 
@@ -505,12 +505,12 @@ The refrence frame of the collision element, relative to the reference frame of 
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#topology-link-collision-origin-roll){: #topology-link-collision-origin-roll } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `x` axis |
-| [`pitch`](#topology-link-collision-origin-pitch){: #topology-link-collision-origin-pitch } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `y` axis |
-| [`yaw`](#topology-link-collision-origin-yaw){: #topology-link-collision-origin-yaw } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `z` axis |
-| [`x`](#topology-link-collision-origin-x){: #topology-link-collision-origin-x } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `x` axis |
-| [`y`](#topology-link-collision-origin-y){: #topology-link-collision-origin-y } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `y` axis |
-| [`z`](#topology-link-collision-origin-z){: #topology-link-collision-origin-z } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `z` axis |
+| [`roll`](#topology-link-collision-origin-roll){: #topology-link-collision-origin-roll } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `x` axis |
+| [`pitch`](#topology-link-collision-origin-pitch){: #topology-link-collision-origin-pitch } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `y` axis |
+| [`yaw`](#topology-link-collision-origin-yaw){: #topology-link-collision-origin-yaw } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `z` axis |
+| [`x`](#topology-link-collision-origin-x){: #topology-link-collision-origin-x } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `x` axis |
+| [`y`](#topology-link-collision-origin-y){: #topology-link-collision-origin-y } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `y` axis |
+| [`z`](#topology-link-collision-origin-z){: #topology-link-collision-origin-z } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `z` axis |
 
 
 
@@ -1004,12 +1004,12 @@ This is the transform from the parent link to the child link. The joint is locat
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#topology-joint-origin-roll){: #topology-joint-origin-roll } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `x` axis |
-| [`pitch`](#topology-joint-origin-pitch){: #topology-joint-origin-pitch } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `y` axis |
-| [`yaw`](#topology-joint-origin-yaw){: #topology-joint-origin-yaw } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the `z` axis |
-| [`x`](#topology-joint-origin-x){: #topology-joint-origin-x } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `x` axis |
-| [`y`](#topology-joint-origin-y){: #topology-joint-origin-y } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `y` axis |
-| [`z`](#topology-joint-origin-z){: #topology-joint-origin-z } | `any` | `Localize.Unit.new!(0, "meter")` | translation along the `z` axis |
+| [`roll`](#topology-joint-origin-roll){: #topology-joint-origin-roll } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `x` axis |
+| [`pitch`](#topology-joint-origin-pitch){: #topology-joint-origin-pitch } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `y` axis |
+| [`yaw`](#topology-joint-origin-yaw){: #topology-joint-origin-yaw } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the `z` axis |
+| [`x`](#topology-joint-origin-x){: #topology-joint-origin-x } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `x` axis |
+| [`y`](#topology-joint-origin-y){: #topology-joint-origin-y } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `y` axis |
+| [`z`](#topology-joint-origin-z){: #topology-joint-origin-z } | `any` | `BB.Unit.new!(0, "meter")` | translation along the `z` axis |
 
 
 
@@ -1040,9 +1040,9 @@ What it means depends on the joint type:
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`roll`](#topology-joint-axis-roll){: #topology-joint-axis-roll } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the X axis |
-| [`pitch`](#topology-joint-axis-pitch){: #topology-joint-axis-pitch } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the Y axis |
-| [`yaw`](#topology-joint-axis-yaw){: #topology-joint-axis-yaw } | `any` | `Localize.Unit.new!(0, "degree")` | rotation around the Z axis |
+| [`roll`](#topology-joint-axis-roll){: #topology-joint-axis-roll } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the X axis |
+| [`pitch`](#topology-joint-axis-pitch){: #topology-joint-axis-pitch } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the Y axis |
+| [`yaw`](#topology-joint-axis-yaw){: #topology-joint-axis-yaw } | `any` | `BB.Unit.new!(0, "degree")` | rotation around the Z axis |
 
 
 
