@@ -50,6 +50,7 @@ defmodule BB.Robot.Runtime do
   alias BB.Message.Sensor.JointState
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.Parameter.Schema, as: ParameterSchema
+  alias BB.Parameter.Type, as: ParameterType
   alias BB.Robot.ParamResolver
   alias BB.Robot.State, as: RobotState
   alias BB.Safety.Controller, as: SafetyController
@@ -569,9 +570,9 @@ defmodule BB.Robot.Runtime do
 
   def handle_call({:set_parameter, path, value}, _from, state) do
     case validate_and_set_parameter(state, path, value) do
-      {:ok, old_value} ->
-        save_to_store(state, path, value)
-        publish_parameter_change(state.robot_module, path, old_value, value, :local)
+      {:ok, old_value, new_value} ->
+        save_to_store(state, path, new_value)
+        publish_parameter_change(state.robot_module, path, old_value, new_value, :local)
         {:reply, :ok, state}
 
       {:error, _} = error ->
@@ -581,9 +582,8 @@ defmodule BB.Robot.Runtime do
 
   def handle_call({:set_parameters, params}, _from, state) do
     case validate_all_parameters(state, params) do
-      :ok ->
-        # All valid - apply changes, save, and notify
-        Enum.each(params, fn {path, value} ->
+      {:ok, validated} ->
+        Enum.each(validated, fn {path, value} ->
           old_value = get_current_param_value(state, path)
           RobotState.set_parameter(state.robot_state, path, value)
           save_to_store(state, path, value)
@@ -1020,9 +1020,9 @@ defmodule BB.Robot.Runtime do
     old_value = get_current_param_value(state, path)
 
     case validate_parameter(state, path, value) do
-      :ok ->
-        RobotState.set_parameter(state.robot_state, path, value)
-        {:ok, old_value}
+      {:ok, new_value} ->
+        RobotState.set_parameter(state.robot_state, path, new_value)
+        {:ok, old_value, new_value}
 
       {:error, _} = error ->
         error
@@ -1030,19 +1030,30 @@ defmodule BB.Robot.Runtime do
   end
 
   defp validate_all_parameters(state, params) do
-    errors =
-      params
-      |> Enum.map(fn {path, value} ->
-        case validate_parameter(state, path, value) do
-          :ok -> nil
-          {:error, reason} -> {path, reason}
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
+    results =
+      Enum.map(params, fn {path, value} -> {path, validate_parameter(state, path, value)} end)
 
-    case errors do
-      [] -> :ok
-      errors -> {:error, errors}
+    case Enum.filter(results, &match?({_path, {:error, _reason}}, &1)) do
+      [] ->
+        {:ok, Enum.map(results, fn {path, {:ok, value}} -> {path, value} end)}
+
+      errors ->
+        {:error, Enum.map(errors, fn {path, {:error, reason}} -> {path, reason} end)}
+    end
+  end
+
+  defp coerce_to_declared_unit(state, path, value),
+    do: ParameterType.coerce(declared_type(state, path), value)
+
+  defp declared_type(state, path) do
+    with {:ok, schema_path, %Spark.Options{schema: schema_opts}} <-
+           RobotState.find_schema_for_parameter(state.robot_state, path),
+         param_name = path |> Enum.drop(length(schema_path)) |> List.first(),
+         {:ok, param_opts} <- Keyword.fetch(schema_opts, param_name) do
+      {type, _min, _max} = ParameterType.describe(Keyword.get(param_opts, :type))
+      type
+    else
+      _ -> nil
     end
   end
 
@@ -1069,8 +1080,12 @@ defmodule BB.Robot.Runtime do
         mini_schema = Spark.Options.new!([{param_name, param_opts}])
 
         case Spark.Options.validate([{param_name, value}], mini_schema) do
-          {:ok, _} -> :ok
-          {:error, error} -> {:error, error}
+          {:ok, validated} ->
+            {type, _min, _max} = ParameterType.describe(Keyword.get(param_opts, :type))
+            {:ok, ParameterType.coerce(type, Keyword.fetch!(validated, param_name))}
+
+          {:error, error} ->
+            {:error, error}
         end
 
       :error ->
@@ -1104,8 +1119,10 @@ defmodule BB.Robot.Runtime do
       case Keyword.fetch(param_opts, :default) do
         {:ok, default} ->
           full_path = base_path ++ [param_name]
-          RobotState.set_parameter(state.robot_state, full_path, default)
-          publish_parameter_change(state.robot_module, full_path, nil, default, :init)
+          {type, _min, _max} = ParameterType.describe(Keyword.get(param_opts, :type))
+          value = ParameterType.coerce(type, default)
+          RobotState.set_parameter(state.robot_state, full_path, value)
+          publish_parameter_change(state.robot_module, full_path, nil, value, :init)
 
         :error ->
           :ok
@@ -1176,6 +1193,7 @@ defmodule BB.Robot.Runtime do
   defp apply_persisted_value(state, {path, value}) do
     case RobotState.get_parameter(state.robot_state, path) do
       {:ok, _current} ->
+        value = coerce_to_declared_unit(state, path, value)
         RobotState.set_parameter(state.robot_state, path, value)
         publish_parameter_change(state.robot_module, path, nil, value, :persisted)
 
@@ -1226,6 +1244,7 @@ defmodule BB.Robot.Runtime do
   end
 
   defp apply_default_value(state, {path, value}) do
+    value = coerce_to_declared_unit(state, path, value)
     RobotState.set_parameter(state.robot_state, path, value)
     publish_parameter_change(state.robot_module, path, nil, value, :init)
   end
@@ -1258,6 +1277,7 @@ defmodule BB.Robot.Runtime do
     validated
     |> ParameterSchema.flatten_params()
     |> Enum.each(fn {path, value} ->
+      value = coerce_to_declared_unit(state, path, value)
       RobotState.set_parameter(state.robot_state, path, value)
       publish_parameter_change(state.robot_module, path, nil, value, :startup)
     end)

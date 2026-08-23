@@ -28,6 +28,18 @@ defmodule BB.Parameter do
         end
       end
 
+  ## Unit-Typed Parameters
+
+  A parameter declared as `{:unit, unit_type}` accepts any value compatible
+  with `unit_type` and is converted into it before being stored, so every
+  reader sees the declared unit regardless of what the writer used:
+
+      :ok = BB.Parameter.set(MyRobot, [:motion, :trim], ~u(0.26 radian))
+      {:ok, ~u(14.8969 degree)} = BB.Parameter.get(MyRobot, [:motion, :trim])
+
+  Bounds are checked against the value as written, so a `min`/`max` declared in
+  one unit still rejects an out-of-range value given in another.
+
   ## Path-Based Identification
 
   Parameters are identified by hierarchical paths that match the PubSub
