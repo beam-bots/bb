@@ -114,15 +114,24 @@ defmodule BB.Unit.Option do
       iex> BB.Unit.Option.validate(Localize.Unit.new!(5, "meter"), min: Localize.Unit.new!(1, "meter"))
       {:ok, Localize.Unit.new!(5, "meter")}
 
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(-45, "degree"), min: Localize.Unit.new!(-30, "degree"))
+      {:error, "Expected -45 degree to be greater than or equal to -30 degree"}
+
   Max constraint - value must be <= max:
 
       iex> BB.Unit.Option.validate(Localize.Unit.new!(5, "meter"), max: Localize.Unit.new!(10, "meter"))
       {:ok, Localize.Unit.new!(5, "meter")}
 
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(45, "degree"), max: Localize.Unit.new!(30, "degree"))
+      {:error, "Expected 45 degree to be less than or equal to 30 degree"}
+
   Eq constraint - value must equal exactly:
 
       iex> BB.Unit.Option.validate(Localize.Unit.new!(5, "meter"), eq: Localize.Unit.new!(5, "meter"))
       {:ok, Localize.Unit.new!(5, "meter")}
+
+      iex> BB.Unit.Option.validate(Localize.Unit.new!(5, "meter"), eq: Localize.Unit.new!(6, "meter"))
+      {:error, "Expected 5 meter to equal 6 meter"}
 
   ParamRef values are accepted and annotated with expected unit type:
 
@@ -167,34 +176,25 @@ defmodule BB.Unit.Option do
 
   defp validate_min(value, min),
     do:
-      validate_cmp(
-        value,
-        min,
-        [:gt, :eq],
-        "Expected #{Unit.to_string!(value, style: :narrow)} to be greater than or equal to #{Unit.to_string!(min, style: :narrow)}"
-      )
+      validate_cmp(value, min, [:gt, :eq], fn ->
+        "Expected #{Unit.describe(value)} to be greater than or equal to #{Unit.describe(min)}"
+      end)
 
   defp validate_max(value, nil), do: {:ok, value}
 
   defp validate_max(value, max),
     do:
-      validate_cmp(
-        value,
-        max,
-        [:lt, :eq],
-        "Expected #{Unit.to_string!(value, style: :narrow)} to be less than or equal to #{Unit.to_string!(max, style: :narrow)}"
-      )
+      validate_cmp(value, max, [:lt, :eq], fn ->
+        "Expected #{Unit.describe(value)} to be less than or equal to #{Unit.describe(max)}"
+      end)
 
   defp validate_eq(value, nil), do: {:ok, value}
 
   defp validate_eq(value, eq),
     do:
-      validate_cmp(
-        value,
-        eq,
-        [:eq],
-        "Expected #{Unit.to_string!(value, style: :short)} to equal #{Unit.to_string!(eq, style: :short)}"
-      )
+      validate_cmp(value, eq, [:eq], fn ->
+        "Expected #{Unit.describe(value)} to equal #{Unit.describe(eq)}"
+      end)
 
   defp validate_cmp(value, cmp, valid, message) do
     result = Unit.compare(value, cmp)
@@ -202,7 +202,7 @@ defmodule BB.Unit.Option do
     if result in valid do
       {:ok, value}
     else
-      {:error, message}
+      {:error, message.()}
     end
   end
 
