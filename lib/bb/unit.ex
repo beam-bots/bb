@@ -112,6 +112,21 @@ defmodule BB.Unit do
           :lt | :eq | :gt | {:error, Exception.t()}
   defdelegate compare(a, b), to: Localize.Unit
 
+  @doc """
+  Render a unit for a developer-facing error message.
+
+  `to_string!/2` needs CLDR locale data, which is loaded by a process in
+  `Localize`'s supervision tree. DSL validators run while the host robot is
+  being compiled, and `mix compile` doesn't start dependency applications, so
+  that process isn't there. This renders the magnitude and canonical unit name
+  directly instead.
+
+      iex> BB.Unit.describe(Localize.Unit.new!(-30, "degree"))
+      "-30 degree"
+  """
+  @spec describe(Localize.Unit.t()) :: String.t()
+  def describe(%Localize.Unit{name: name, value: value}), do: "#{value} #{name}"
+
   @doc "Delegates to `Localize.Unit.to_string!/2`."
   @spec to_string!(Localize.Unit.t() | [Localize.Unit.t()], keyword) :: String.t()
   defdelegate to_string!(unit, options \\ []), to: Localize.Unit

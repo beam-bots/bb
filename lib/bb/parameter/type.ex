@@ -212,8 +212,7 @@ defmodule BB.Parameter.Type do
     if Unit.compatible?(bound, unit_type) do
       :ok
     else
-      {:error,
-       "`#{key}` must be compatible with `#{unit_type}`, got: #{Unit.to_string!(bound, style: :narrow)}"}
+      {:error, "`#{key}` must be compatible with `#{unit_type}`, got: #{Unit.describe(bound)}"}
     end
   end
 
@@ -238,7 +237,7 @@ defmodule BB.Parameter.Type do
       :ok
     else
       {:error,
-       "`min` must not be greater than `max`, got: #{Unit.to_string!(min, style: :narrow)} and #{Unit.to_string!(max, style: :narrow)}"}
+       "`min` must not be greater than `max`, got: #{Unit.describe(min)} and #{Unit.describe(max)}"}
     end
   end
 end

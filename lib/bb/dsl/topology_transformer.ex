@@ -309,7 +309,7 @@ defmodule BB.Dsl.TopologyTransformer do
          module: Transformer.get_persisted(dsl, :module),
          path: to_error_path(path),
          message: """
-         Expected unit `#{Unit.to_string!(unit)}` to be compatible with #{readable_unit_name}
+         Expected unit `#{Unit.describe(unit)}` to be compatible with #{readable_unit_name}
          """
        )}
     end
