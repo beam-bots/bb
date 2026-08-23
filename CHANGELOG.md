@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.30.1](https://github.com/beam-bots/bb/compare/v0.30.0...v0.30.1) (2026-08-23)
+
+
+
+
+### Bug Fixes:
+
+* render units without CLDR in compile-time error messages (#242) by James Harton
+
 ## [v0.30.0](https://github.com/beam-bots/bb/compare/v0.29.0...v0.30.0) (2026-08-21)
 ### Breaking Changes:
 
