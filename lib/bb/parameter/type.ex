@@ -14,6 +14,10 @@ defmodule BB.Parameter.Type do
   `Spark.Options` type generated for the parameter so that they are enforced
   wherever a value is validated, and `describe/1` recovers them from a
   generated type for display.
+
+  A unit-typed parameter accepts any value compatible with its declared unit,
+  so `coerce/2` converts a value into that unit before it is stored. Without it
+  a parameter reports back whichever unit it happened to be written in.
   """
 
   alias BB.Unit
@@ -182,6 +186,58 @@ defmodule BB.Parameter.Type do
     do: {{:unit, options[:compatible]}, options[:min], options[:max]}
 
   def describe(type), do: {type, nil, nil}
+
+  @doc """
+  Converts a value into the unit its parameter type declares.
+
+  A unit-typed parameter accepts any value compatible with its declared unit,
+  so the value that reaches a write is not necessarily in the unit the reader
+  expects. Every parameter write converges on the declared unit by passing the
+  value through here.
+
+  Values of any other type are returned unchanged, as is a unit which cannot be
+  converted - a bound already rejects an incompatible unit wherever the value
+  was validated, and a write which skipped validation is left as it was rather
+  than reported wrong.
+
+  ## Examples
+
+      iex> BB.Parameter.Type.coerce({:unit, :degree}, Localize.Unit.new!(1, "radian"))
+      Localize.Unit.new!(57.29577951308232, "degree")
+
+  A value already in the declared unit is untouched:
+
+      iex> BB.Parameter.Type.coerce({:unit, :degree}, Localize.Unit.new!(30, "degree"))
+      Localize.Unit.new!(30, "degree")
+
+  So is anything which is not a unit:
+
+      iex> BB.Parameter.Type.coerce(:float, 1.5)
+      1.5
+
+      iex> BB.Parameter.Type.coerce(nil, :anything)
+      :anything
+
+  An incompatible unit is left alone for the caller's validation to reject:
+
+      iex> BB.Parameter.Type.coerce({:unit, :meter}, Localize.Unit.new!(90, "degree"))
+      Localize.Unit.new!(90, "degree")
+  """
+  @spec coerce(t | Spark.Options.type() | nil, term) :: term
+  def coerce({:unit, declared}, %Localize.Unit{} = value) when not is_nil(declared) do
+    target = Unit.unit_name(declared)
+
+    if value.name == target do
+      value
+    else
+      case Localize.Unit.convert(value, target) do
+        {:ok, converted} -> converted
+        {:error, _reason} -> value
+      end
+    end
+  end
+
+  def coerce(_type, value), do: value
 
   defp validate_numeric_type(:float, value) when is_float(value), do: {:ok, value}
   defp validate_numeric_type(:integer, value) when is_integer(value), do: {:ok, value}

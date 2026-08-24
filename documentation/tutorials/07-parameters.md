@@ -74,6 +74,10 @@ end
 Bounds on a non-numeric type, a `min` above its `max`, or a `default` outside
 its own bounds are compile errors rather than surprises at runtime.
 
+A bound need only be *compatible* with the parameter's unit, not identical to
+it, and is checked against the value as written - so a `max` of `~u(1.2 meter)`
+still rejects `~u(200 centimeter)`.
+
 ## Organising Parameters with Groups
 
 Use `group` to organise related parameters:
@@ -394,16 +398,29 @@ parameters do
 end
 ```
 
-Unit parameters are validated and can be converted:
+A unit parameter accepts any value compatible with its declared unit, and
+converts it into that unit before storing it. Whatever a writer uses, every
+reader sees the unit the parameter declares:
 
 ```elixir
-iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_speed], ~u(2.0 m/s))
+iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_speed], ~u(2.0 meter_per_second))
 :ok
 
-# Units are converted to SI base for storage
 iex> BB.Parameter.get(MyRobot.Robot, [:motion, :max_speed])
-{:ok, 2.0}  # metres per second
+{:ok, ~u(2.0 meter_per_second)}
+
+# A compatible unit is converted rather than stored as written
+iex> BB.Parameter.set(MyRobot.Robot, [:motion, :max_speed], ~u(300 centimeter_per_second))
+:ok
+
+iex> BB.Parameter.get(MyRobot.Robot, [:motion, :max_speed])
+{:ok, ~u(3.0 meter_per_second)}
 ```
+
+Bounds are checked against the value as written, so a bound declared in one
+unit still rejects an out-of-range value given in another. Conversion happens
+on every write - `set/3`, `set_many/2`, a `params:` override at startup, a
+declared `default`, and a value replayed from a `BB.Parameter.Store`.
 
 ## Complete Example
 
