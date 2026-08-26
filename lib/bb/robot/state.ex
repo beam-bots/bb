@@ -467,17 +467,19 @@ defmodule BB.Robot.State do
   # ----------------------------------------------------------------------------
   # Storage encoding
   #
-  # Nothing backend-specific may reach ETS. A `%Nx.Tensor{}` struct carries
-  # backend state: fine under `Nx.BinaryBackend`, but under EXLA it is a
-  # reference to accelerator memory, which is not meaningfully shareable through
-  # a table and may be invalidated out from under a reader. So tensor-backed
-  # values are stored as their raw bytes.
+  # Every value here is stored as a flat tuple of floats: plain terms, copied
+  # into the table and back with no arithmetic in either direction.
   #
-  # Those bytes are also the only lossless option. Decomposing a 4x4 to a
+  # That the encoding is arithmetic-free is the point. Decomposing a 4x4 to a
   # quaternion and translation is a `sqrt` with a branch on the trace, 16 numbers
   # to 7 is not a bijection, and the round-trip would run on *every read* — so
-  # error would accumulate rather than being a one-off. `Nx.to_binary/1` and
-  # `Nx.from_binary/2` are bit-exact and involve no arithmetic at all.
+  # error would accumulate rather than being a one-off. Storing the entries
+  # themselves is bit-exact by construction.
+  #
+  # Nothing backend-specific may reach ETS: an `%Nx.Tensor{}` carries backend
+  # state, which under EXLA is a reference to accelerator memory that is not
+  # meaningfully shareable through a table and may be invalidated out from under
+  # a reader. No value stored here is tensor-backed, and none should become one.
   # ----------------------------------------------------------------------------
 
   # A fixed joint's configuration space is a single point, so the one thing you
@@ -501,11 +503,13 @@ defmodule BB.Robot.State do
   end
 
   defp encode(%{type: :floating}, :configuration, %Transform{} = value) do
-    {:ok, value |> Transform.tensor() |> Nx.to_binary()}
+    {:ok, Transform.elements(value)}
   end
 
   defp encode(%{type: :floating}, :velocity, %Twist{linear: linear, angular: angular}) do
-    {:ok, Nx.to_binary(Nx.concatenate([Vec3.tensor(linear), Vec3.tensor(angular)]))}
+    {:ok,
+     {Vec3.x(linear), Vec3.y(linear), Vec3.z(linear), Vec3.x(angular), Vec3.y(angular),
+      Vec3.z(angular)}}
   end
 
   defp encode(joint, kind, value), do: {:error, invalid(joint, kind, value)}
@@ -517,29 +521,22 @@ defmodule BB.Robot.State do
   defp decode(:planar, :configuration, {x, y, theta}), do: Transform2D.new(x, y, theta)
   defp decode(:planar, :velocity, {vx, vy, omega}), do: %Twist2D{vx: vx, vy: vy, omega: omega}
 
-  defp decode(:floating, :configuration, bytes) do
-    bytes |> Nx.from_binary(:f64) |> Nx.reshape({4, 4}) |> Transform.from_tensor()
+  defp decode(:floating, :configuration, elements) do
+    Transform.from_elements(elements)
   end
 
-  defp decode(:floating, :velocity, bytes) do
-    components = Nx.from_binary(bytes, :f64)
-
-    %Twist{
-      linear: components |> Nx.slice([0], [3]) |> Vec3.from_tensor(),
-      angular: components |> Nx.slice([3], [3]) |> Vec3.from_tensor()
-    }
+  defp decode(:floating, :velocity, {lx, ly, lz, ax, ay, az}) do
+    %Twist{linear: Vec3.new(lx, ly, lz), angular: Vec3.new(ax, ay, az)}
   end
 
   defp encoded_default(:planar, :configuration), do: {0.0, 0.0, 0.0}
   defp encoded_default(:planar, :velocity), do: {0.0, 0.0, 0.0}
 
   defp encoded_default(:floating, :configuration) do
-    Transform.identity() |> Transform.tensor() |> Nx.to_binary()
+    Transform.elements(Transform.identity())
   end
 
-  defp encoded_default(:floating, :velocity) do
-    Nx.to_binary(Nx.broadcast(Nx.tensor(0.0, type: :f64), {6}))
-  end
+  defp encoded_default(:floating, :velocity), do: {0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 
   defp encoded_default(_type, _kind), do: 0.0
 

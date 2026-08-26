@@ -164,8 +164,9 @@ defmodule BB.Robot.StateTest do
       assert [{{:configuration, :base}, stored}] =
                :ets.lookup(state.table, {:configuration, :base})
 
-      assert is_binary(stored)
-      assert byte_size(stored) == 128
+      assert is_tuple(stored)
+      assert tuple_size(stored) == 16
+      assert Enum.all?(Tuple.to_list(stored), &is_float/1)
     end
 
     test "reject a bare float, naming Transform as expected" do

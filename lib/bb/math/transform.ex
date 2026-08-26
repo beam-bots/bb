@@ -96,10 +96,20 @@ defmodule BB.Math.Transform do
   end
 
   @doc """
-  Returns the sixteen matrix entries as a flat row-major list.
+  Returns the sixteen matrix entries as a flat row-major tuple.
+
+  The inverse of `from_elements/1`. Together they are the cheapest lossless way
+  to move a transform in and out of a plain term - `BB.Robot.State` stores one
+  this way - with no arithmetic and nothing backend-specific in between.
   """
-  @spec to_list(t()) :: [float()]
-  def to_list(%__MODULE__{m: m}), do: Tuple.to_list(m)
+  @spec elements(t()) :: elements()
+  def elements(%__MODULE__{m: m}), do: m
+
+  @doc """
+  Builds a transform from sixteen row-major entries.
+  """
+  @spec from_elements(elements()) :: t()
+  def from_elements(m) when tuple_size(m) == 16, do: %__MODULE__{m: m}
 
   @doc """
   Create a transformation matrix from position and orientation.
