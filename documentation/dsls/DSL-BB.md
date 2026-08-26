@@ -373,7 +373,7 @@ The material of the visual element
 ### topology.link.visual.material.color
 
 
-The color of the meterial
+The color of the material
 
 
 

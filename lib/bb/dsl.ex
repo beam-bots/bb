@@ -660,7 +660,7 @@ defmodule BB.Dsl do
   @color %Entity{
     name: :color,
     describe: """
-    The color of the meterial
+    The color of the material
     """,
     target: BB.Dsl.Color,
     identifier: {:auto, :unique_integer},
