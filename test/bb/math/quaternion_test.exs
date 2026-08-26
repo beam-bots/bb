@@ -20,13 +20,6 @@ defmodule BB.Math.QuaternionTest do
       assert inspect(Quaternion.identity(), limit: 2) ==
                "BB.Math.Quaternion.new(1.0, 0.0, ...)"
     end
-
-    test "falls back to typed tensor inspection for templates" do
-      inspected = inspect(%Quaternion{tensor: Nx.template({4}, :f64)})
-
-      assert inspected =~ "#BB.Math.Quaternion<#Nx.Tensor<"
-      assert inspected =~ "Nx.TemplateBackend"
-    end
   end
 
   describe "new/4" do
@@ -452,9 +445,7 @@ defmodule BB.Math.QuaternionTest do
     test "opposite quaternions (q and -q) have zero distance" do
       q1 = Quaternion.new(0.5, 0.5, 0.5, 0.5)
       # -q represents same rotation
-      q2 = %Quaternion{
-        tensor: Nx.multiply(q1.tensor, -1)
-      }
+      q2 = %Quaternion{w: -q1.w, x: -q1.x, y: -q1.y, z: -q1.z}
 
       assert_in_delta Quaternion.angular_distance(q1, q2), 0.0, @tolerance
     end

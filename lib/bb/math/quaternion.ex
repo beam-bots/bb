@@ -4,13 +4,24 @@
 
 defmodule BB.Math.Quaternion do
   @moduledoc """
-  Unit quaternion for 3D rotations, backed by an Nx tensor.
+  Unit quaternion for 3D rotations, held as four `:f64` floats.
 
-  Quaternions are stored in WXYZ order (scalar first): `[w, x, y, z]`.
-  All math operations use Nx for consistent performance and potential GPU acceleration.
+  Components are named for WXYZ order (scalar first), and every operation
+  returns a normalised unit quaternion suitable for representing a rotation.
 
-  All operations return normalised unit quaternions suitable for representing rotations.
-  The underlying tensor is always `{4}` shape with `:f64` type.
+  ## Not tensor-backed
+
+  Like `BB.Math.Vec3` and `BB.Math.Transform2D`, a single quaternion is far
+  cheaper as four BEAM floats than as an `Nx` tensor. A Hamilton product is
+  sixteen multiplies and twelve adds; dispatching those through eager `Nx` ops -
+  or through a `defn`, which retraces its expression graph per call - costs
+  orders of magnitude more than the arithmetic, and allocates every
+  intermediate. Orientation is built and read on every estimator sample, so that
+  lands squarely in the hot path. `bb_estimator_ahrs` used to carry its own
+  scalar quaternion for exactly this reason.
+
+  `tensor/1` and `from_tensor/1` convert at the boundary of code that genuinely
+  wants tensors, as do `to_rotation_matrix/1` and `from_rotation_matrix/1`.
 
   ## Examples
 
@@ -28,37 +39,23 @@ defmodule BB.Math.Quaternion do
       0.0
   """
 
-  alias BB.Math.Defn
   alias BB.Math.Vec3
 
-  defstruct [:tensor]
+  defstruct [:w, :x, :y, :z]
 
-  @type t :: %__MODULE__{tensor: Nx.Tensor.t()}
+  @type t :: %__MODULE__{w: float(), x: float(), y: float(), z: float()}
+
+  @zero_threshold 1.0e-10
+  @gimbal_threshold 0.99999
+  @slerp_linear_threshold 0.9995
+  @antiparallel_threshold -0.9999
 
   defimpl Inspect do
     import Inspect.Algebra
 
     @spec inspect(@for.t(), Inspect.Opts.t()) :: Inspect.Algebra.t()
-    def inspect(%@for{tensor: %Nx.Tensor{data: %Nx.BinaryBackend{}} = tensor}, opts) do
-      case Nx.shape(tensor) do
-        {4} ->
-          container_doc(
-            "BB.Math.Quaternion.new(",
-            Nx.to_flat_list(tensor),
-            ")",
-            opts,
-            &to_doc/2
-          )
-
-        _ ->
-          fallback(tensor, opts)
-      end
-    end
-
-    def inspect(%@for{tensor: tensor}, opts), do: fallback(tensor, opts)
-
-    defp fallback(tensor, opts) do
-      concat(["#BB.Math.Quaternion<", to_doc(tensor, opts), ">"])
+    def inspect(%@for{w: w, x: x, y: y, z: z}, opts) do
+      container_doc("BB.Math.Quaternion.new(", [w, x, y, z], ")", opts, &to_doc/2)
     end
   end
 
@@ -75,8 +72,7 @@ defmodule BB.Math.Quaternion do
   """
   @spec new(number(), number(), number(), number()) :: t()
   def new(w, x, y, z) do
-    tensor = Nx.tensor([w, x, y, z], type: :f64)
-    %__MODULE__{tensor: normalise_tensor(tensor)}
+    normalise(%__MODULE__{w: w / 1, x: x / 1, y: y / 1, z: z / 1})
   end
 
   @doc """
@@ -86,7 +82,9 @@ defmodule BB.Math.Quaternion do
   """
   @spec from_tensor(Nx.Tensor.t()) :: t()
   def from_tensor(tensor) do
-    %__MODULE__{tensor: normalise_tensor(Nx.as_type(tensor, :f64))}
+    [w, x, y, z] = tensor |> Nx.as_type(:f64) |> Nx.to_flat_list()
+
+    new(w, x, y, z)
   end
 
   @doc """
@@ -99,9 +97,7 @@ defmodule BB.Math.Quaternion do
       {1.0, 0.0, 0.0, 0.0}
   """
   @spec identity() :: t()
-  def identity do
-    %__MODULE__{tensor: Nx.tensor([1.0, 0.0, 0.0, 0.0], type: :f64)}
-  end
+  def identity, do: %__MODULE__{w: 1.0, x: 0.0, y: 0.0, z: 0.0}
 
   @doc """
   Returns an identity quaternion as a raw tensor (for batch operations).
@@ -111,32 +107,29 @@ defmodule BB.Math.Quaternion do
     Nx.tensor([1.0, 0.0, 0.0, 0.0], type: :f64)
   end
 
-  # Component accessors
-
   @doc "Returns the W (scalar) component."
   @spec w(t()) :: float()
-  def w(%__MODULE__{tensor: t}), do: Nx.to_number(t[0])
+  def w(%__MODULE__{w: w}), do: w
 
   @doc "Returns the X component."
   @spec x(t()) :: float()
-  def x(%__MODULE__{tensor: t}), do: Nx.to_number(t[1])
+  def x(%__MODULE__{x: x}), do: x
 
   @doc "Returns the Y component."
   @spec y(t()) :: float()
-  def y(%__MODULE__{tensor: t}), do: Nx.to_number(t[2])
+  def y(%__MODULE__{y: y}), do: y
 
   @doc "Returns the Z component."
   @spec z(t()) :: float()
-  def z(%__MODULE__{tensor: t}), do: Nx.to_number(t[3])
+  def z(%__MODULE__{z: z}), do: z
 
-  @doc "Returns the underlying `{4}` tensor."
+  @doc "Returns the quaternion as a `{4}` `:f64` WXYZ tensor."
   @spec tensor(t()) :: Nx.Tensor.t()
-  def tensor(%__MODULE__{tensor: t}), do: t
+  def tensor(%__MODULE__{w: w, x: x, y: y, z: z}), do: Nx.tensor([w, x, y, z], type: :f64)
 
   @doc """
   Creates a quaternion from an axis-angle representation.
 
-  The axis should be a `BB.Math.Vec3` unit vector (it will be normalised if not).
   The angle is in radians.
 
   ## Examples
@@ -146,26 +139,17 @@ defmodule BB.Math.Quaternion do
       0.707107
   """
   @spec from_axis_angle(Vec3.t(), number()) :: t()
-  def from_axis_angle(%Vec3{tensor: axis_tensor}, angle) do
-    # Normalise axis
-    axis_norm = Nx.LinAlg.norm(axis_tensor)
-    default_axis = Nx.tensor([0.0, 0.0, 1.0], type: :f64)
+  def from_axis_angle(%Vec3{} = axis, angle) do
+    {ax, ay, az} =
+      case Vec3.magnitude(axis) do
+        norm when norm > @zero_threshold -> {axis.x / norm, axis.y / norm, axis.z / norm}
+        _zero -> {0.0, 0.0, 1.0}
+      end
 
-    axis_normalised =
-      Nx.select(
-        Nx.greater(axis_norm, 1.0e-10),
-        Nx.divide(axis_tensor, axis_norm),
-        default_axis
-      )
+    half = angle / 2
+    sin_half = :math.sin(half)
 
-    half_angle = Nx.tensor(angle / 2, type: :f64)
-    sin_half = Nx.sin(half_angle)
-    cos_half = Nx.cos(half_angle)
-
-    xyz = Nx.multiply(axis_normalised, sin_half)
-    tensor = Nx.concatenate([Nx.reshape(cos_half, {1}), xyz])
-
-    %__MODULE__{tensor: tensor}
+    new(:math.cos(half), ax * sin_half, ay * sin_half, az * sin_half)
   end
 
   @doc """
@@ -190,107 +174,57 @@ defmodule BB.Math.Quaternion do
       1.0
   """
   @spec from_two_vectors(Vec3.t(), Vec3.t()) :: t()
-  def from_two_vectors(%Vec3{tensor: from_tensor}, %Vec3{tensor: to_tensor}) do
-    # Normalise both vectors
-    from_norm = Nx.LinAlg.norm(from_tensor)
-    to_norm = Nx.LinAlg.norm(to_tensor)
+  def from_two_vectors(%Vec3{} = from, %Vec3{} = to) do
+    from_unit = unit_or_x(from)
+    to_unit = unit_or_x(to)
 
-    from_unit =
-      Nx.select(
-        Nx.greater(from_norm, 1.0e-10),
-        Nx.divide(from_tensor, from_norm),
-        Nx.tensor([1.0, 0.0, 0.0], type: :f64)
-      )
+    dot = Vec3.dot(from_unit, to_unit)
 
-    to_unit =
-      Nx.select(
-        Nx.greater(to_norm, 1.0e-10),
-        Nx.divide(to_tensor, to_norm),
-        Nx.tensor([1.0, 0.0, 0.0], type: :f64)
-      )
+    if dot < @antiparallel_threshold do
+      perpendicular = perpendicular_to(from_unit)
 
-    # Dot product
-    dot = Nx.dot(from_unit, to_unit)
+      new(0.0, perpendicular.x, perpendicular.y, perpendicular.z)
+    else
+      cross = Vec3.cross(from_unit, to_unit)
 
-    # Cross product: from × to
-    f1 = from_unit[0]
-    f2 = from_unit[1]
-    f3 = from_unit[2]
-    t1 = to_unit[0]
-    t2 = to_unit[1]
-    t3 = to_unit[2]
+      new(1.0 + dot, cross.x, cross.y, cross.z)
+    end
+  end
 
-    cross =
-      Nx.stack([
-        Nx.subtract(Nx.multiply(f2, t3), Nx.multiply(f3, t2)),
-        Nx.subtract(Nx.multiply(f3, t1), Nx.multiply(f1, t3)),
-        Nx.subtract(Nx.multiply(f1, t2), Nx.multiply(f2, t1))
-      ])
+  defp unit_or_x(%Vec3{} = v) do
+    case Vec3.magnitude(v) do
+      magnitude when magnitude > @zero_threshold -> Vec3.scale(v, 1 / magnitude)
+      _zero -> Vec3.unit_x()
+    end
+  end
 
-    # Normal case: q = [1 + dot, cross] then normalise
-    # This works because (1 + dot) = 2*cos²(θ/2) and |cross| = sin(θ)
-    w_normal = Nx.add(1.0, dot)
-    q_normal = Nx.concatenate([Nx.reshape(w_normal, {1}), cross])
+  # The basis vector least aligned with `v` gives the numerically strongest
+  # perpendicular, so cross against that one rather than a fixed axis.
+  defp perpendicular_to(%Vec3{x: x, y: y, z: z} = v) do
+    {ax, ay, az} = {abs(x), abs(y), abs(z)}
 
-    # Anti-parallel case (dot ≈ -1): need to find perpendicular axis
-    # Use the axis with smallest component of from_unit to find perpendicular
-    abs_from = Nx.abs(from_unit)
+    basis =
+      cond do
+        ax <= ay and ax <= az -> Vec3.unit_x()
+        ay <= az -> Vec3.unit_y()
+        true -> Vec3.unit_z()
+      end
 
-    # Find perpendicular by crossing with least-aligned basis vector
-    perp_x =
-      Nx.stack([
-        Nx.tensor(0.0, type: :f64),
-        Nx.negate(f3),
-        f2
-      ])
+    cross = Vec3.cross(v, basis)
 
-    perp_y =
-      Nx.stack([
-        f3,
-        Nx.tensor(0.0, type: :f64),
-        Nx.negate(f1)
-      ])
-
-    perp_z =
-      Nx.stack([
-        Nx.negate(f2),
-        f1,
-        Nx.tensor(0.0, type: :f64)
-      ])
-
-    # Choose perpendicular with largest magnitude (most perpendicular to from)
-    perp =
-      Nx.select(
-        Nx.less(abs_from[0], abs_from[1]),
-        Nx.select(Nx.less(abs_from[0], abs_from[2]), perp_x, perp_z),
-        Nx.select(Nx.less(abs_from[1], abs_from[2]), perp_y, perp_z)
-      )
-
-    perp_norm = Nx.LinAlg.norm(perp)
-
-    perp_unit =
-      Nx.select(
-        Nx.greater(perp_norm, 1.0e-10),
-        Nx.divide(perp, perp_norm),
-        Nx.tensor([0.0, 1.0, 0.0], type: :f64)
-      )
-
-    # 180° rotation: w=0, xyz=perpendicular axis
-    q_antiparallel = Nx.concatenate([Nx.tensor([0.0], type: :f64), perp_unit])
-
-    # Select based on dot product
-    # Anti-parallel: dot < -0.9999
-    # Parallel: dot > 0.9999 (will normalise to identity)
-    is_antiparallel = Nx.less(dot, -0.9999)
-    result = Nx.select(is_antiparallel, q_antiparallel, q_normal)
-
-    %__MODULE__{tensor: normalise_tensor(result)}
+    if Vec3.magnitude(cross) > @zero_threshold do
+      Vec3.normalise(cross)
+    else
+      Vec3.unit_y()
+    end
   end
 
   @doc """
   Creates a quaternion from a 3x3 rotation matrix.
 
-  Uses the Shepperd method for numerical stability.
+  Accepts a `{3, 3}` tensor or a list of three three-element rows. Uses the
+  Shepperd method for numerical stability: the branch is chosen so the value
+  under the square root is largest, which keeps the division well conditioned.
 
   ## Examples
 
@@ -299,105 +233,41 @@ defmodule BB.Math.Quaternion do
       iex> BB.Math.Quaternion.w(q)
       1.0
   """
-  @spec from_rotation_matrix(Nx.Tensor.t()) :: t()
-  def from_rotation_matrix(matrix) do
-    matrix = Nx.as_type(matrix, :f64)
+  @spec from_rotation_matrix(Nx.Tensor.t() | [[number()]]) :: t()
+  def from_rotation_matrix(%Nx.Tensor{} = matrix) do
+    matrix
+    |> Nx.as_type(:f64)
+    |> Nx.to_flat_list()
+    |> from_rotation_elements()
+  end
 
-    # Extract matrix elements
-    m00 = matrix[0][0]
-    m01 = matrix[0][1]
-    m02 = matrix[0][2]
-    m10 = matrix[1][0]
-    m11 = matrix[1][1]
-    m12 = matrix[1][2]
-    m20 = matrix[2][0]
-    m21 = matrix[2][1]
-    m22 = matrix[2][2]
+  def from_rotation_matrix([[_, _, _], [_, _, _], [_, _, _]] = rows) do
+    rows
+    |> List.flatten()
+    |> Enum.map(&(&1 / 1))
+    |> from_rotation_elements()
+  end
 
-    trace = Nx.add(Nx.add(m00, m11), m22)
+  defp from_rotation_elements([m00, m01, m02, m10, m11, m12, m20, m21, m22]) do
+    trace = m00 + m11 + m22
 
-    # Compute all 4 cases and select the best one
-    # Use Nx.max to clamp values to 0 before sqrt to handle floating point errors
-    # Add epsilon to prevent division by zero in unused cases
-    eps = 1.0e-10
+    cond do
+      trace > 0 ->
+        s = :math.sqrt(trace + 1.0) * 2
+        new(s / 4, (m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s)
 
-    # Case 0: trace > 0
-    s0 = Nx.add(Nx.multiply(Nx.sqrt(Nx.max(Nx.add(trace, 1.0), 0.0)), 2.0), eps)
-    w0 = Nx.divide(s0, 4.0)
-    x0 = Nx.divide(Nx.subtract(m21, m12), s0)
-    y0 = Nx.divide(Nx.subtract(m02, m20), s0)
-    z0 = Nx.divide(Nx.subtract(m10, m01), s0)
-    q0 = Nx.stack([w0, x0, y0, z0])
+      m00 > m11 and m00 > m22 ->
+        s = :math.sqrt(1.0 + m00 - m11 - m22) * 2
+        new((m21 - m12) / s, s / 4, (m01 + m10) / s, (m02 + m20) / s)
 
-    # Case 1: m00 is largest diagonal
-    s1 =
-      Nx.add(
-        Nx.multiply(
-          Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m11), m22), m00), 0.0)),
-          2.0
-        ),
-        eps
-      )
+      m11 > m22 ->
+        s = :math.sqrt(1.0 - m00 + m11 - m22) * 2
+        new((m02 - m20) / s, (m01 + m10) / s, s / 4, (m12 + m21) / s)
 
-    w1 = Nx.divide(Nx.subtract(m21, m12), s1)
-    x1 = Nx.divide(s1, 4.0)
-    y1 = Nx.divide(Nx.add(m01, m10), s1)
-    z1 = Nx.divide(Nx.add(m02, m20), s1)
-    q1 = Nx.stack([w1, x1, y1, z1])
-
-    # Case 2: m11 is largest diagonal
-    s2 =
-      Nx.add(
-        Nx.multiply(
-          Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m00), m22), m11), 0.0)),
-          2.0
-        ),
-        eps
-      )
-
-    w2 = Nx.divide(Nx.subtract(m02, m20), s2)
-    x2 = Nx.divide(Nx.add(m01, m10), s2)
-    y2 = Nx.divide(s2, 4.0)
-    z2 = Nx.divide(Nx.add(m12, m21), s2)
-    q2 = Nx.stack([w2, x2, y2, z2])
-
-    # Case 3: m22 is largest diagonal
-    s3 =
-      Nx.add(
-        Nx.multiply(
-          Nx.sqrt(Nx.max(Nx.add(Nx.subtract(Nx.subtract(1.0, m00), m11), m22), 0.0)),
-          2.0
-        ),
-        eps
-      )
-
-    w3 = Nx.divide(Nx.subtract(m10, m01), s3)
-    x3 = Nx.divide(Nx.add(m02, m20), s3)
-    y3 = Nx.divide(Nx.add(m12, m21), s3)
-    z3 = Nx.divide(s3, 4.0)
-    q3 = Nx.stack([w3, x3, y3, z3])
-
-    # Select based on which case applies
-    # trace > 0 -> case 0
-    # else m00 > m11 and m00 > m22 -> case 1
-    # else m11 > m22 -> case 2
-    # else -> case 3
-    result =
-      Nx.select(
-        Nx.greater(trace, 0),
-        q0,
-        Nx.select(
-          Nx.logical_and(Nx.greater(m00, m11), Nx.greater(m00, m22)),
-          q1,
-          Nx.select(
-            Nx.greater(m11, m22),
-            q2,
-            q3
-          )
-        )
-      )
-
-    %__MODULE__{tensor: normalise_tensor(result)}
+      true ->
+        s = :math.sqrt(1.0 - m00 - m11 + m22) * 2
+        new((m10 - m01) / s, (m02 + m20) / s, (m12 + m21) / s, s / 4)
+    end
   end
 
   @doc """
@@ -415,93 +285,38 @@ defmodule BB.Math.Quaternion do
   """
   @spec from_euler(number(), number(), number(), atom()) :: t()
   def from_euler(roll, pitch, yaw, order \\ :xyz) do
-    # Half angles as tensors
-    x2 = Nx.tensor(roll / 2, type: :f64)
-    y2 = Nx.tensor(pitch / 2, type: :f64)
-    z2 = Nx.tensor(yaw / 2, type: :f64)
+    c1 = :math.cos(roll / 2)
+    c2 = :math.cos(pitch / 2)
+    c3 = :math.cos(yaw / 2)
+    s1 = :math.sin(roll / 2)
+    s2 = :math.sin(pitch / 2)
+    s3 = :math.sin(yaw / 2)
 
-    c1 = Nx.cos(x2)
-    c2 = Nx.cos(y2)
-    c3 = Nx.cos(z2)
-    s1 = Nx.sin(x2)
-    s2 = Nx.sin(y2)
-    s3 = Nx.sin(z2)
-
-    tensor = euler_to_quaternion_tensor(order, c1, c2, c3, s1, s2, s3)
-    %__MODULE__{tensor: normalise_tensor(tensor)}
+    euler_to_quaternion(order, c1, c2, c3, s1, s2, s3)
   end
 
-  defp euler_to_quaternion_tensor(:xyz, c1, c2, c3, s1, s2, s3) do
-    # x = s1 * c2 * c3 + c1 * s2 * s3
-    x =
-      Nx.add(
-        Nx.multiply(Nx.multiply(s1, c2), c3),
-        Nx.multiply(Nx.multiply(c1, s2), s3)
-      )
-
-    # y = c1 * s2 * c3 - s1 * c2 * s3
-    y =
-      Nx.subtract(
-        Nx.multiply(Nx.multiply(c1, s2), c3),
-        Nx.multiply(Nx.multiply(s1, c2), s3)
-      )
-
-    # z = c1 * c2 * s3 + s1 * s2 * c3
-    z =
-      Nx.add(
-        Nx.multiply(Nx.multiply(c1, c2), s3),
-        Nx.multiply(Nx.multiply(s1, s2), c3)
-      )
-
-    # w = c1 * c2 * c3 - s1 * s2 * s3
-    w =
-      Nx.subtract(
-        Nx.multiply(Nx.multiply(c1, c2), c3),
-        Nx.multiply(Nx.multiply(s1, s2), s3)
-      )
-
-    Nx.stack([w, x, y, z])
+  defp euler_to_quaternion(:zyx, c1, c2, c3, s1, s2, s3) do
+    new(
+      c1 * c2 * c3 + s1 * s2 * s3,
+      s1 * c2 * c3 - c1 * s2 * s3,
+      c1 * s2 * c3 + s1 * c2 * s3,
+      c1 * c2 * s3 - s1 * s2 * c3
+    )
   end
 
-  defp euler_to_quaternion_tensor(:zyx, c1, c2, c3, s1, s2, s3) do
-    # x = s1 * c2 * c3 - c1 * s2 * s3
-    x =
-      Nx.subtract(
-        Nx.multiply(Nx.multiply(s1, c2), c3),
-        Nx.multiply(Nx.multiply(c1, s2), s3)
-      )
-
-    # y = c1 * s2 * c3 + s1 * c2 * s3
-    y =
-      Nx.add(
-        Nx.multiply(Nx.multiply(c1, s2), c3),
-        Nx.multiply(Nx.multiply(s1, c2), s3)
-      )
-
-    # z = c1 * c2 * s3 - s1 * s2 * c3
-    z =
-      Nx.subtract(
-        Nx.multiply(Nx.multiply(c1, c2), s3),
-        Nx.multiply(Nx.multiply(s1, s2), c3)
-      )
-
-    # w = c1 * c2 * c3 + s1 * s2 * s3
-    w =
-      Nx.add(
-        Nx.multiply(Nx.multiply(c1, c2), c3),
-        Nx.multiply(Nx.multiply(s1, s2), s3)
-      )
-
-    Nx.stack([w, x, y, z])
-  end
-
-  # Default to xyz for unsupported orders
-  defp euler_to_quaternion_tensor(_order, c1, c2, c3, s1, s2, s3) do
-    euler_to_quaternion_tensor(:xyz, c1, c2, c3, s1, s2, s3)
+  defp euler_to_quaternion(_xyz, c1, c2, c3, s1, s2, s3) do
+    new(
+      c1 * c2 * c3 - s1 * s2 * s3,
+      s1 * c2 * c3 + c1 * s2 * s3,
+      c1 * s2 * c3 - s1 * c2 * s3,
+      c1 * c2 * s3 + s1 * s2 * c3
+    )
   end
 
   @doc """
-  Converts a quaternion to a 3x3 rotation matrix.
+  Converts a quaternion to a 3x3 rotation matrix as a `{3, 3}` `:f64` tensor.
+
+  Use `to_rotation_list/1` to avoid building a tensor.
 
   ## Examples
 
@@ -511,44 +326,35 @@ defmodule BB.Math.Quaternion do
       1.0
   """
   @spec to_rotation_matrix(t()) :: Nx.Tensor.t()
-  def to_rotation_matrix(%__MODULE__{tensor: t}) do
-    w = t[0]
-    x = t[1]
-    y = t[2]
-    z = t[3]
+  def to_rotation_matrix(%__MODULE__{} = q) do
+    Nx.tensor(to_rotation_list(q), type: :f64)
+  end
 
-    # Pre-compute products
-    xx = Nx.multiply(x, x)
-    yy = Nx.multiply(y, y)
-    zz = Nx.multiply(z, z)
-    xy = Nx.multiply(x, y)
-    xz = Nx.multiply(x, z)
-    yz = Nx.multiply(y, z)
-    wx = Nx.multiply(w, x)
-    wy = Nx.multiply(w, y)
-    wz = Nx.multiply(w, z)
+  @doc """
+  Converts a quaternion to a 3x3 rotation matrix as a list of rows.
 
-    two = Nx.tensor(2.0, type: :f64)
-    one = Nx.tensor(1.0, type: :f64)
+  ## Examples
 
-    # Build rotation matrix
-    r00 = Nx.subtract(one, Nx.multiply(two, Nx.add(yy, zz)))
-    r01 = Nx.multiply(two, Nx.subtract(xy, wz))
-    r02 = Nx.multiply(two, Nx.add(xz, wy))
+      iex> BB.Math.Quaternion.to_rotation_list(BB.Math.Quaternion.identity())
+      [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+  """
+  @spec to_rotation_list(t()) :: [[float()]]
+  def to_rotation_list(%__MODULE__{w: w, x: x, y: y, z: z}) do
+    xx = x * x
+    yy = y * y
+    zz = z * z
+    xy = x * y
+    xz = x * z
+    yz = y * z
+    wx = w * x
+    wy = w * y
+    wz = w * z
 
-    r10 = Nx.multiply(two, Nx.add(xy, wz))
-    r11 = Nx.subtract(one, Nx.multiply(two, Nx.add(xx, zz)))
-    r12 = Nx.multiply(two, Nx.subtract(yz, wx))
-
-    r20 = Nx.multiply(two, Nx.subtract(xz, wy))
-    r21 = Nx.multiply(two, Nx.add(yz, wx))
-    r22 = Nx.subtract(one, Nx.multiply(two, Nx.add(xx, yy)))
-
-    Nx.stack([
-      Nx.stack([r00, r01, r02]),
-      Nx.stack([r10, r11, r12]),
-      Nx.stack([r20, r21, r22])
-    ])
+    [
+      [1.0 - 2 * (yy + zz), 2 * (xy - wz), 2 * (xz + wy)],
+      [2 * (xy + wz), 1.0 - 2 * (xx + zz), 2 * (yz - wx)],
+      [2 * (xz - wy), 2 * (yz + wx), 1.0 - 2 * (xx + yy)]
+    ]
   end
 
   @doc """
@@ -567,28 +373,15 @@ defmodule BB.Math.Quaternion do
       1.0
   """
   @spec to_axis_angle(t()) :: {Vec3.t(), float()}
-  def to_axis_angle(%__MODULE__{tensor: t}) do
-    w = t[0]
-    xyz = Nx.slice(t, [1], [3])
+  def to_axis_angle(%__MODULE__{w: w, x: x, y: y, z: z}) do
+    angle = 2 * :math.acos(clamp(w, -1.0, 1.0))
+    sin_half = :math.sin(angle / 2)
 
-    # Clamp w to valid range for acos
-    w_clamped = Nx.clip(w, -1.0, 1.0)
-    angle = Nx.multiply(2.0, Nx.acos(w_clamped))
-    angle_float = Nx.to_number(angle)
-
-    sin_half = Nx.sin(Nx.divide(angle, 2.0))
-
-    # If sin_half is near zero, return arbitrary axis
-    default_axis = Nx.tensor([0.0, 0.0, 1.0], type: :f64)
-
-    axis_tensor =
-      Nx.select(
-        Nx.less(Nx.abs(sin_half), 1.0e-10),
-        default_axis,
-        Nx.divide(xyz, sin_half)
-      )
-
-    {Vec3.from_tensor(axis_tensor), angle_float}
+    if abs(sin_half) < @zero_threshold do
+      {Vec3.unit_z(), angle}
+    else
+      {Vec3.new(x / sin_half, y / sin_half, z / sin_half), angle}
+    end
   end
 
   @doc """
@@ -607,80 +400,25 @@ defmodule BB.Math.Quaternion do
   """
   @spec to_euler(t(), atom()) :: {float(), float(), float()}
   def to_euler(%__MODULE__{} = q, order \\ :xyz) do
-    matrix = to_rotation_matrix(q)
-    rotation_matrix_to_euler(order, matrix)
-  end
-
-  # XYZ order (roll-pitch-yaw)
-  # For intrinsic XYZ: R = Rx(roll) * Ry(pitch) * Rz(yaw)
-  defp rotation_matrix_to_euler(:xyz, matrix) do
-    m02 = matrix[0][2]
-    m12 = matrix[1][2]
-    m22 = matrix[2][2]
-    m01 = matrix[0][1]
-    m00 = matrix[0][0]
-    m10 = matrix[1][0]
-    m11 = matrix[1][1]
-
-    # Check for gimbal lock
-    gimbal_pos = Nx.greater_equal(m02, 0.99999)
-    gimbal_neg = Nx.less_equal(m02, -0.99999)
-
-    # Normal case
-    pitch_normal = Nx.asin(Nx.clip(m02, -1.0, 1.0))
-    roll_normal = Nx.atan2(Nx.negate(m12), m22)
-    yaw_normal = Nx.atan2(Nx.negate(m01), m00)
-
-    # Gimbal lock case (pitch ≈ +90°)
-    pitch_pos = Nx.tensor(:math.pi() / 2, type: :f64)
-    roll_pos = Nx.tensor(0.0, type: :f64)
-    yaw_pos = Nx.atan2(m10, m11)
-
-    # Gimbal lock case (pitch ≈ -90°)
-    pitch_neg = Nx.tensor(-:math.pi() / 2, type: :f64)
-    roll_neg = Nx.tensor(0.0, type: :f64)
-    yaw_neg = Nx.atan2(m10, m11)
-
-    roll = Nx.select(gimbal_pos, roll_pos, Nx.select(gimbal_neg, roll_neg, roll_normal))
-    pitch = Nx.select(gimbal_pos, pitch_pos, Nx.select(gimbal_neg, pitch_neg, pitch_normal))
-    yaw = Nx.select(gimbal_pos, yaw_pos, Nx.select(gimbal_neg, yaw_neg, yaw_normal))
-
-    {Nx.to_number(roll), Nx.to_number(pitch), Nx.to_number(yaw)}
+    rotation_to_euler(order, to_rotation_list(q))
   end
 
   # ZYX order (yaw-pitch-roll, common in aerospace)
-  defp rotation_matrix_to_euler(:zyx, matrix) do
-    m20 = matrix[2][0]
-    m21 = matrix[2][1]
-    m22 = matrix[2][2]
-    m10 = matrix[1][0]
-    m00 = matrix[0][0]
-
-    gimbal_pos = Nx.less_equal(m20, -0.99999)
-    gimbal_neg = Nx.greater_equal(m20, 0.99999)
-
-    pitch_normal = Nx.asin(Nx.clip(Nx.negate(m20), -1.0, 1.0))
-    roll_normal = Nx.atan2(m21, m22)
-    yaw_normal = Nx.atan2(m10, m00)
-
-    pitch_pos = Nx.tensor(:math.pi() / 2, type: :f64)
-    roll_pos = Nx.tensor(0.0, type: :f64)
-    yaw_pos = Nx.atan2(Nx.negate(m10), m00)
-
-    pitch_neg = Nx.tensor(-:math.pi() / 2, type: :f64)
-    roll_neg = Nx.tensor(0.0, type: :f64)
-    yaw_neg = Nx.atan2(Nx.negate(m10), m00)
-
-    roll = Nx.select(gimbal_pos, roll_pos, Nx.select(gimbal_neg, roll_neg, roll_normal))
-    pitch = Nx.select(gimbal_pos, pitch_pos, Nx.select(gimbal_neg, pitch_neg, pitch_normal))
-    yaw = Nx.select(gimbal_pos, yaw_pos, Nx.select(gimbal_neg, yaw_neg, yaw_normal))
-
-    {Nx.to_number(roll), Nx.to_number(pitch), Nx.to_number(yaw)}
+  defp rotation_to_euler(:zyx, [[m00, _m01, _m02], [m10, _m11, _m12], [m20, m21, m22]]) do
+    cond do
+      m20 <= -@gimbal_threshold -> {0.0, :math.pi() / 2, :math.atan2(-m10, m00)}
+      m20 >= @gimbal_threshold -> {0.0, -:math.pi() / 2, :math.atan2(-m10, m00)}
+      true -> {:math.atan2(m21, m22), :math.asin(clamp(-m20, -1.0, 1.0)), :math.atan2(m10, m00)}
+    end
   end
 
-  # Default to xyz for unsupported orders
-  defp rotation_matrix_to_euler(_order, matrix) do
-    rotation_matrix_to_euler(:xyz, matrix)
+  # XYZ order (roll-pitch-yaw). For intrinsic XYZ: R = Rx(roll) * Ry(pitch) * Rz(yaw)
+  defp rotation_to_euler(_xyz, [[m00, m01, m02], [m10, m11, m12], [_m20, _m21, m22]]) do
+    cond do
+      m02 >= @gimbal_threshold -> {0.0, :math.pi() / 2, :math.atan2(m10, m11)}
+      m02 <= -@gimbal_threshold -> {0.0, -:math.pi() / 2, :math.atan2(m10, m11)}
+      true -> {:math.atan2(-m12, m22), :math.asin(clamp(m02, -1.0, 1.0)), :math.atan2(-m01, m00)}
+    end
   end
 
   @doc """
@@ -698,8 +436,13 @@ defmodule BB.Math.Quaternion do
       3.141593
   """
   @spec multiply(t(), t()) :: t()
-  def multiply(%__MODULE__{tensor: t1}, %__MODULE__{tensor: t2}) do
-    %__MODULE__{tensor: Defn.quaternion_multiply(t1, t2)}
+  def multiply(%__MODULE__{} = a, %__MODULE__{} = b) do
+    new(
+      a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+      a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+      a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+      a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w
+    )
   end
 
   @doc """
@@ -715,31 +458,32 @@ defmodule BB.Math.Quaternion do
       -0.707107
   """
   @spec conjugate(t()) :: t()
-  def conjugate(%__MODULE__{tensor: t}) do
-    # Conjugate: negate the vector part
-    w = t[0]
-    xyz = Nx.negate(Nx.slice(t, [1], [3]))
-    tensor = Nx.concatenate([Nx.reshape(w, {1}), xyz])
-
-    %__MODULE__{tensor: tensor}
+  def conjugate(%__MODULE__{w: w, x: x, y: y, z: z}) do
+    %__MODULE__{w: w, x: -x, y: -y, z: -z}
   end
 
   @doc """
   Normalises a quaternion to unit length.
 
+  Falls back to the identity quaternion when the input is near-zero, so the
+  result is always a valid unit rotation.
+
   ## Examples
 
-      iex> q = %BB.Math.Quaternion{tensor: Nx.tensor([2.0, 0.0, 0.0, 0.0])}
-      iex> qn = BB.Math.Quaternion.normalise(q)
-      iex> BB.Math.Quaternion.w(qn)
+      iex> q = BB.Math.Quaternion.normalise(%BB.Math.Quaternion{w: 2.0, x: 0.0, y: 0.0, z: 0.0})
+      iex> BB.Math.Quaternion.w(q)
       1.0
   """
   @spec normalise(t()) :: t()
-  def normalise(%__MODULE__{tensor: t}) do
-    %__MODULE__{tensor: normalise_tensor(t)}
-  end
+  def normalise(%__MODULE__{w: w, x: x, y: y, z: z}) do
+    case :math.sqrt(w * w + x * x + y * y + z * z) do
+      norm when norm > @zero_threshold ->
+        %__MODULE__{w: w / norm, x: x / norm, y: y / norm, z: z / norm}
 
-  defp normalise_tensor(tensor), do: Defn.normalise_quaternion(tensor)
+      _zero ->
+        identity()
+    end
+  end
 
   @doc """
   Returns the inverse of a quaternion.
@@ -755,9 +499,7 @@ defmodule BB.Math.Quaternion do
       1.0
   """
   @spec inverse(t()) :: t()
-  def inverse(%__MODULE__{} = q) do
-    conjugate(q)
-  end
+  def inverse(%__MODULE__{} = q), do: conjugate(q)
 
   @doc """
   Rotates a 3D vector by a quaternion.
@@ -771,49 +513,17 @@ defmodule BB.Math.Quaternion do
       {0.0, 1.0}
   """
   @spec rotate_vector(t(), Vec3.t()) :: Vec3.t()
-  def rotate_vector(%__MODULE__{tensor: t}, %Vec3{tensor: v_tensor}) do
-    w = t[0]
-    u = Nx.slice(t, [1], [3])
+  def rotate_vector(%__MODULE__{w: w, x: x, y: y, z: z}, %Vec3{} = v) do
+    # Rodrigues: v' = v + 2w(u × v) + 2(u × (u × v)), with u the vector part.
+    u = %Vec3{x: x, y: y, z: z}
+    uxv = Vec3.cross(u, v)
+    uuxv = Vec3.cross(u, uxv)
 
-    # Rodrigues rotation formula: v' = v + 2*w*(u x v) + 2*(u x (u x v))
-    # Cross product: u x v
-    u1 = u[0]
-    u2 = u[1]
-    u3 = u[2]
-    v1 = v_tensor[0]
-    v2 = v_tensor[1]
-    v3 = v_tensor[2]
-
-    # u x v
-    uxv =
-      Nx.stack([
-        Nx.subtract(Nx.multiply(u2, v3), Nx.multiply(u3, v2)),
-        Nx.subtract(Nx.multiply(u3, v1), Nx.multiply(u1, v3)),
-        Nx.subtract(Nx.multiply(u1, v2), Nx.multiply(u2, v1))
-      ])
-
-    # u x (u x v)
-    uxv1 = uxv[0]
-    uxv2 = uxv[1]
-    uxv3 = uxv[2]
-
-    uuxv =
-      Nx.stack([
-        Nx.subtract(Nx.multiply(u2, uxv3), Nx.multiply(u3, uxv2)),
-        Nx.subtract(Nx.multiply(u3, uxv1), Nx.multiply(u1, uxv3)),
-        Nx.subtract(Nx.multiply(u1, uxv2), Nx.multiply(u2, uxv1))
-      ])
-
-    # v' = v + 2*w*(u x v) + 2*(u x (u x v))
-    two = Nx.tensor(2.0, type: :f64)
-
-    result =
-      Nx.add(
-        Nx.add(v_tensor, Nx.multiply(Nx.multiply(two, w), uxv)),
-        Nx.multiply(two, uuxv)
-      )
-
-    Vec3.from_tensor(result)
+    %Vec3{
+      x: v.x + 2 * w * uxv.x + 2 * uuxv.x,
+      y: v.y + 2 * w * uxv.y + 2 * uuxv.y,
+      z: v.z + 2 * w * uxv.z + 2 * uuxv.z
+    }
   end
 
   @doc """
@@ -831,38 +541,34 @@ defmodule BB.Math.Quaternion do
       1.570796
   """
   @spec slerp(t(), t(), number()) :: t()
-  def slerp(%__MODULE__{tensor: t1}, %__MODULE__{tensor: t2}, t) when t >= 0 and t <= 1 do
-    # Compute dot product
-    dot = Nx.dot(t1, t2)
+  def slerp(%__MODULE__{} = a, %__MODULE__{} = b, t) when t >= 0 and t <= 1 do
+    dot = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z
 
-    # If dot is negative, negate one quaternion to take shorter path
-    t2_adjusted = Nx.select(Nx.less(dot, 0), Nx.negate(t2), t2)
-    dot_adjusted = Nx.abs(dot)
+    # q and -q are the same rotation, so flip to take the shorter arc.
+    {b, dot} = if dot < 0, do: {negate(b), -dot}, else: {b, dot}
 
-    # Clamp dot to valid range for acos
-    dot_clamped = Nx.clip(dot_adjusted, 0.0, 1.0)
+    {s1, s2} =
+      case clamp(dot, 0.0, 1.0) do
+        close when close > @slerp_linear_threshold ->
+          {1 - t, t}
 
-    # Check if quaternions are very close (use linear interpolation)
-    close = Nx.greater(dot_clamped, 0.9995)
+        clamped ->
+          theta = :math.acos(clamped)
+          sin_theta = :math.sin(theta)
 
-    # Linear interpolation path
-    t_tensor = Nx.tensor(t, type: :f64)
-    one_minus_t = Nx.subtract(1.0, t_tensor)
-    lerp_result = Nx.add(Nx.multiply(t1, one_minus_t), Nx.multiply(t2_adjusted, t_tensor))
+          {:math.sin((1 - t) * theta) / sin_theta, :math.sin(t * theta) / sin_theta}
+      end
 
-    # SLERP path
-    theta = Nx.acos(dot_clamped)
-    sin_theta = Nx.sin(theta)
+    new(
+      a.w * s1 + b.w * s2,
+      a.x * s1 + b.x * s2,
+      a.y * s1 + b.y * s2,
+      a.z * s1 + b.z * s2
+    )
+  end
 
-    s1 = Nx.divide(Nx.sin(Nx.multiply(one_minus_t, theta)), sin_theta)
-    s2 = Nx.divide(Nx.sin(Nx.multiply(t_tensor, theta)), sin_theta)
-
-    slerp_result = Nx.add(Nx.multiply(t1, s1), Nx.multiply(t2_adjusted, s2))
-
-    # Select based on closeness
-    result = Nx.select(close, lerp_result, slerp_result)
-
-    %__MODULE__{tensor: normalise_tensor(result)}
+  defp negate(%__MODULE__{w: w, x: x, y: y, z: z}) do
+    %__MODULE__{w: -w, x: -x, y: -y, z: -z}
   end
 
   @doc """
@@ -878,16 +584,10 @@ defmodule BB.Math.Quaternion do
       1.570796
   """
   @spec angular_distance(t(), t()) :: float()
-  def angular_distance(%__MODULE__{tensor: t1}, %__MODULE__{tensor: t2}) do
-    # Compute absolute dot product (both q and -q represent same rotation)
-    dot = Nx.abs(Nx.dot(t1, t2))
+  def angular_distance(%__MODULE__{} = a, %__MODULE__{} = b) do
+    dot = abs(a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z)
 
-    # Clamp to valid range for acos
-    dot_clamped = Nx.clip(dot, 0.0, 1.0)
-
-    # Angular distance = 2 * acos(|dot|)
-    angle = Nx.multiply(2.0, Nx.acos(dot_clamped))
-    Nx.to_number(angle)
+    2 * :math.acos(clamp(dot, 0.0, 1.0))
   end
 
   @doc """
@@ -900,9 +600,7 @@ defmodule BB.Math.Quaternion do
       [0.0, 0.0, 0.0, 1.0]
   """
   @spec to_xyzw_list(t()) :: [float()]
-  def to_xyzw_list(%__MODULE__{tensor: t}) do
-    [Nx.to_number(t[1]), Nx.to_number(t[2]), Nx.to_number(t[3]), Nx.to_number(t[0])]
-  end
+  def to_xyzw_list(%__MODULE__{w: w, x: x, y: y, z: z}), do: [x, y, z, w]
 
   @doc """
   Creates from a list in XYZW order (for ROS/external system compatibility).
@@ -914,9 +612,7 @@ defmodule BB.Math.Quaternion do
       1.0
   """
   @spec from_xyzw_list([number()]) :: t()
-  def from_xyzw_list([x, y, z, w]) do
-    new(w, x, y, z)
-  end
+  def from_xyzw_list([x, y, z, w]), do: new(w, x, y, z)
 
   @doc """
   Converts to a list in WXYZ order.
@@ -928,9 +624,7 @@ defmodule BB.Math.Quaternion do
       [1.0, 0.0, 0.0, 0.0]
   """
   @spec to_list(t()) :: [float()]
-  def to_list(%__MODULE__{tensor: t}) do
-    Nx.to_flat_list(t)
-  end
+  def to_list(%__MODULE__{w: w, x: x, y: y, z: z}), do: [w, x, y, z]
 
   @doc """
   Creates from a list in WXYZ order.
@@ -942,7 +636,7 @@ defmodule BB.Math.Quaternion do
       1.0
   """
   @spec from_list([number()]) :: t()
-  def from_list([w, x, y, z]) do
-    new(w, x, y, z)
-  end
+  def from_list([w, x, y, z]), do: new(w, x, y, z)
+
+  defp clamp(value, min, max), do: value |> max(min) |> min(max)
 end
