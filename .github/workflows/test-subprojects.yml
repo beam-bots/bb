@@ -130,7 +130,7 @@ jobs:
         working-directory: ${{ matrix.project.name }}
         run: mix deps.get
 
-      - name: Force a PLT re-check
+      - name: Re-check the PLT against bb's current source
         # Dialyxir decides a cached PLT is current by hashing the subproject's
         # mix.lock plus its app list. `BB_VERSION=local` makes bb a path dep, so
         # bb's source moves on every PR while that lock sits still — the hash
@@ -138,8 +138,15 @@ jobs:
         # predates bb's newest exports, reporting `call_to_missing` for them.
         # Dropping the hash forces the check, which is incremental (seconds)
         # rather than a full rebuild.
+        #
+        # Run the check here rather than leaving it to `mix check`. It spends
+        # twenty seconds or so reading every beam in the build directory, and
+        # `mix check` runs its tools in parallel — a tool that recompiles that
+        # directory meanwhile can empty it under dialyzer's feet.
         working-directory: ${{ matrix.project.name }}
-        run: rm -f _build/*/*.plt.hash
+        run: |
+          rm -f _build/*/*.plt.hash
+          mix dialyzer --plt
 
       - name: mix check --no-retry
         working-directory: ${{ matrix.project.name }}
