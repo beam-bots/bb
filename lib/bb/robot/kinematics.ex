@@ -113,31 +113,27 @@ defmodule BB.Robot.Kinematics do
   end
 
   def all_link_transforms(%Robot{} = robot, positions) when is_map(positions) do
-    link_order = robot.topology.link_order
-    index_of = link_order |> Enum.with_index() |> Map.new()
+    # `link_order` is root-first, so a link's parent is always already resolved
+    # by the time the link itself is reached — the same property the batched
+    # prefix-product scan in `Defn.link_transforms/9` relies on. The root has no
+    # parent joint and resolves to the identity.
+    Enum.reduce(robot.topology.link_order, %{}, fn link_name, transforms ->
+      {:ok, link} = Robot.get_link(robot, link_name)
 
-    specs =
-      Enum.map(link_order, fn link_name ->
-        {:ok, link} = Robot.get_link(robot, link_name)
-        link_joint_spec(robot, positions, index_of, link_name, link.parent_joint)
-      end)
+      Map.put(transforms, link_name, link_transform(robot, positions, transforms, link))
+    end)
+  end
 
-    result =
-      Defn.link_transforms(
-        col(specs, :position, :f64),
-        col(specs, :rpy, :f64),
-        col(specs, :xyz, :f64),
-        col(specs, :axis, :f64),
-        col(specs, :revolute, :f64),
-        col(specs, :prismatic, :f64),
-        specs |> Enum.map(& &1.stored) |> Nx.stack(),
-        Nx.broadcast(Nx.tensor(0.0, type: :f64), {length(specs), 6}),
-        col(specs, :parent_index, :s64)
-      )
+  defp link_transform(_robot, _positions, _transforms, %{parent_joint: nil}) do
+    Transform.identity()
+  end
 
-    link_order
-    |> Enum.with_index()
-    |> Map.new(fn {link_name, index} -> {link_name, Transform.from_tensor(result[index])} end)
+  defp link_transform(robot, positions, transforms, %{parent_joint: joint_name}) do
+    joint = Map.fetch!(robot.joints, joint_name)
+
+    transforms
+    |> Map.fetch!(joint.parent_link)
+    |> Transform.compose(joint_transform(positions, joint))
   end
 
   @doc """
@@ -326,17 +322,44 @@ defmodule BB.Robot.Kinematics do
   end
 
   defp compute_chain_transform(%Robot{} = robot, configurations, path) do
-    case chain_joints(robot, path) do
-      [] ->
-        Transform.identity()
-
-      joint_names ->
-        robot
-        |> chain_tensors(configurations, joint_names)
-        |> then(&apply(Defn, :fk_chain, &1))
-        |> Transform.from_tensor()
-    end
+    robot
+    |> chain_joints(path)
+    |> Enum.map(&joint_transform(configurations, Map.fetch!(robot.joints, &1)))
+    |> Transform.compose_all()
   end
+
+  # The scalar counterpart of one row of `Defn.joint_matrices/8`: the joint's
+  # origin, then its motion. `motion_transform/2` already covers both halves the
+  # `defn` keeps apart — the masked scalar motion of a single-DoF joint, and the
+  # `stored` matrix a multi-DoF one carries.
+  #
+  # Forward kinematics walks a chain of at most a few dozen links and wants a
+  # single transform back. Pushing that through the batched `defn` costs far more
+  # in trace and dispatch than the ~64 multiply-adds per link it performs, so it
+  # composes here instead. The Jacobians still go through `defn`: they are
+  # differentiated with `grad`, which has no scalar counterpart, and they
+  # genuinely benefit from the batch axis.
+  #
+  # `Defn.joint_matrices/8` also applies `augment(delta)`, which is the identity
+  # at `delta = 0`. Only the Jacobians ever pass a non-zero delta, so there is
+  # nothing to mirror here.
+  defp joint_transform(configurations, joint) do
+    joint.origin
+    |> origin_transform()
+    |> Transform.compose(motion_transform(joint, Map.get(configurations, joint.name)))
+  end
+
+  # `Rx * Ry * Rz` with the translation carried through it, matching
+  # `Defn.build_origins/2`, whose translation is `rotation * xyz` rather than a
+  # bare `xyz`.
+  defp origin_transform(%{orientation: {roll, pitch, yaw}, position: {x, y, z}}) do
+    Transform.rotation_x(roll)
+    |> Transform.compose(Transform.rotation_y(pitch))
+    |> Transform.compose(Transform.rotation_z(yaw))
+    |> Transform.compose(Transform.translation(Vec3.new(x, y, z)))
+  end
+
+  defp origin_transform(_origin), do: Transform.identity()
 
   defp chain_jacobian(robot, configurations, chain_joints, joint_names, kind) do
     case chain_joints do
@@ -475,36 +498,6 @@ defmodule BB.Robot.Kinematics do
   end
 
   defp rows(joints, fun), do: joints |> Enum.map(fun) |> Nx.tensor(type: :f64)
-
-  defp col(specs, key, type), do: specs |> Enum.map(&Map.fetch!(&1, key)) |> Nx.tensor(type: type)
-
-  defp link_joint_spec(_robot, _configurations, index_of, link_name, nil) do
-    %{
-      rpy: origin_rpy(nil),
-      xyz: origin_xyz(nil),
-      axis: axis_row(nil),
-      revolute: revolute_mask(nil),
-      prismatic: prismatic_mask(nil),
-      position: 0.0,
-      stored: Nx.eye(4, type: :f64),
-      parent_index: Map.fetch!(index_of, link_name)
-    }
-  end
-
-  defp link_joint_spec(robot, configurations, index_of, _link_name, joint_name) do
-    joint = Map.fetch!(robot.joints, joint_name)
-
-    %{
-      rpy: origin_rpy(joint.origin),
-      xyz: origin_xyz(joint.origin),
-      axis: axis_row(joint.axis),
-      revolute: revolute_mask(joint),
-      prismatic: prismatic_mask(joint),
-      position: scalar_position(configurations, joint),
-      stored: stored_motion(Map.get(configurations, joint_name), joint),
-      parent_index: Map.fetch!(index_of, joint.parent_link)
-    }
-  end
 
   defp origin_rpy(%{orientation: {roll, pitch, yaw}}), do: [roll, pitch, yaw]
   defp origin_rpy(_), do: [0.0, 0.0, 0.0]
