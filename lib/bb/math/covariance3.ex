@@ -13,8 +13,12 @@ defmodule BB.Math.Covariance3 do
   matrices, in particular, are legitimate "unknown variance" placeholders
   and must remain constructible).
 
-  Follows the same typed-Nx-wrapper pattern as `BB.Math.Vec3`,
-  `BB.Math.Quaternion`, and `BB.Math.Transform`.
+  Unlike `BB.Math.Vec3`, `BB.Math.Quaternion` and `BB.Math.Transform`, this is
+  still tensor-backed. Those three are read and written on every sample, so
+  their `Nx` dispatch cost dominated; a covariance is constructed from a tensor
+  and handed back as one, and no driver in the ecosystem populates it per
+  reading. Holding it as anything else would add a conversion to both ends of
+  its only path.
 
   ## Examples
 

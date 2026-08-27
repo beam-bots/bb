@@ -4,10 +4,20 @@
 
 defmodule BB.Math.Vec3 do
   @moduledoc """
-  3D vector backed by an Nx tensor.
+  A 3D vector, held as three `:f64` floats.
 
-  All operations are performed using Nx for consistent performance
-  and potential GPU acceleration.
+  ## Not tensor-backed
+
+  Like `BB.Math.Transform2D`, and unlike a batched computation, a single 3-vector
+  is far cheaper as three BEAM floats than as an `Nx` tensor: eager per-op
+  dispatch on three elements costs orders of magnitude more than the arithmetic
+  it performs, and allocates a tensor per intermediate. Vectors are built and
+  read on every sensor sample, so that cost lands squarely in the hot path.
+
+  `tensor/1` and `from_tensor/1` convert at the boundary of code that genuinely
+  wants tensors - batched forward kinematics, the IK solvers, `Nx.LinAlg`. Those
+  callers build one tensor for a whole computation rather than one per operation,
+  which is where `Nx` earns its keep.
 
   ## Examples
 
@@ -25,34 +35,18 @@ defmodule BB.Math.Vec3 do
       1.0
   """
 
-  defstruct [:tensor]
+  defstruct [:x, :y, :z]
 
-  @type t :: %__MODULE__{tensor: Nx.Tensor.t()}
+  @type t :: %__MODULE__{x: float(), y: float(), z: float()}
+
+  @zero_threshold 1.0e-10
 
   defimpl Inspect do
     import Inspect.Algebra
 
     @spec inspect(@for.t(), Inspect.Opts.t()) :: Inspect.Algebra.t()
-    def inspect(%@for{tensor: %Nx.Tensor{data: %Nx.BinaryBackend{}} = tensor}, opts) do
-      case Nx.shape(tensor) do
-        {3} ->
-          container_doc(
-            "BB.Math.Vec3.new(",
-            Nx.to_flat_list(tensor),
-            ")",
-            opts,
-            &to_doc/2
-          )
-
-        _ ->
-          fallback(tensor, opts)
-      end
-    end
-
-    def inspect(%@for{tensor: tensor}, opts), do: fallback(tensor, opts)
-
-    defp fallback(tensor, opts) do
-      concat(["#BB.Math.Vec3<", to_doc(tensor, opts), ">"])
+    def inspect(%@for{x: x, y: y, z: z}, opts) do
+      container_doc("BB.Math.Vec3.new(", [x, y, z], ")", opts, &to_doc/2)
     end
   end
 
@@ -67,7 +61,7 @@ defmodule BB.Math.Vec3 do
   """
   @spec new(number(), number(), number()) :: t()
   def new(x, y, z) do
-    %__MODULE__{tensor: Nx.tensor([x, y, z], type: :f64)}
+    %__MODULE__{x: x / 1, y: y / 1, z: z / 1}
   end
 
   @doc """
@@ -75,7 +69,9 @@ defmodule BB.Math.Vec3 do
   """
   @spec from_tensor(Nx.Tensor.t()) :: t()
   def from_tensor(tensor) do
-    %__MODULE__{tensor: Nx.as_type(tensor, :f64)}
+    [x, y, z] = tensor |> Nx.as_type(:f64) |> Nx.to_flat_list()
+
+    %__MODULE__{x: x, y: y, z: z}
   end
 
   @doc """
@@ -88,41 +84,39 @@ defmodule BB.Math.Vec3 do
       {0.0, 0.0, 0.0}
   """
   @spec zero() :: t()
-  def zero do
-    %__MODULE__{tensor: Nx.tensor([0.0, 0.0, 0.0], type: :f64)}
-  end
+  def zero, do: %__MODULE__{x: 0.0, y: 0.0, z: 0.0}
 
   @doc "Returns the unit X vector (1, 0, 0)."
   @spec unit_x() :: t()
-  def unit_x, do: %__MODULE__{tensor: Nx.tensor([1.0, 0.0, 0.0], type: :f64)}
+  def unit_x, do: %__MODULE__{x: 1.0, y: 0.0, z: 0.0}
 
   @doc "Returns the unit Y vector (0, 1, 0)."
   @spec unit_y() :: t()
-  def unit_y, do: %__MODULE__{tensor: Nx.tensor([0.0, 1.0, 0.0], type: :f64)}
+  def unit_y, do: %__MODULE__{x: 0.0, y: 1.0, z: 0.0}
 
   @doc "Returns the unit Z vector (0, 0, 1)."
   @spec unit_z() :: t()
-  def unit_z, do: %__MODULE__{tensor: Nx.tensor([0.0, 0.0, 1.0], type: :f64)}
+  def unit_z, do: %__MODULE__{x: 0.0, y: 0.0, z: 1.0}
 
-  @doc "Returns the underlying tensor."
+  @doc "Returns the vector as a `{3}` `:f64` tensor."
   @spec tensor(t()) :: Nx.Tensor.t()
-  def tensor(%__MODULE__{tensor: t}), do: t
+  def tensor(%__MODULE__{x: x, y: y, z: z}), do: Nx.tensor([x, y, z], type: :f64)
 
   @doc "Returns the X component."
   @spec x(t()) :: float()
-  def x(%__MODULE__{tensor: t}), do: Nx.to_number(t[0])
+  def x(%__MODULE__{x: x}), do: x
 
   @doc "Returns the Y component."
   @spec y(t()) :: float()
-  def y(%__MODULE__{tensor: t}), do: Nx.to_number(t[1])
+  def y(%__MODULE__{y: y}), do: y
 
   @doc "Returns the Z component."
   @spec z(t()) :: float()
-  def z(%__MODULE__{tensor: t}), do: Nx.to_number(t[2])
+  def z(%__MODULE__{z: z}), do: z
 
   @doc "Returns the components as a list [x, y, z]."
   @spec to_list(t()) :: [float()]
-  def to_list(%__MODULE__{tensor: t}), do: Nx.to_flat_list(t)
+  def to_list(%__MODULE__{x: x, y: y, z: z}), do: [x, y, z]
 
   @doc """
   Creates a vector from a list of three numbers.
@@ -148,8 +142,8 @@ defmodule BB.Math.Vec3 do
       [5.0, 7.0, 9.0]
   """
   @spec add(t(), t()) :: t()
-  def add(%__MODULE__{tensor: a}, %__MODULE__{tensor: b}) do
-    %__MODULE__{tensor: Nx.add(a, b)}
+  def add(%__MODULE__{} = a, %__MODULE__{} = b) do
+    %__MODULE__{x: a.x + b.x, y: a.y + b.y, z: a.z + b.z}
   end
 
   @doc """
@@ -164,8 +158,8 @@ defmodule BB.Math.Vec3 do
       [3.0, 3.0, 3.0]
   """
   @spec subtract(t(), t()) :: t()
-  def subtract(%__MODULE__{tensor: a}, %__MODULE__{tensor: b}) do
-    %__MODULE__{tensor: Nx.subtract(a, b)}
+  def subtract(%__MODULE__{} = a, %__MODULE__{} = b) do
+    %__MODULE__{x: a.x - b.x, y: a.y - b.y, z: a.z - b.z}
   end
 
   @doc """
@@ -179,8 +173,8 @@ defmodule BB.Math.Vec3 do
       [-1.0, 2.0, -3.0]
   """
   @spec negate(t()) :: t()
-  def negate(%__MODULE__{tensor: t}) do
-    %__MODULE__{tensor: Nx.negate(t)}
+  def negate(%__MODULE__{x: x, y: y, z: z}) do
+    %__MODULE__{x: -x, y: -y, z: -z}
   end
 
   @doc """
@@ -194,8 +188,8 @@ defmodule BB.Math.Vec3 do
       [2.0, 4.0, 6.0]
   """
   @spec scale(t(), number()) :: t()
-  def scale(%__MODULE__{tensor: t}, scalar) do
-    %__MODULE__{tensor: Nx.multiply(t, Nx.tensor(scalar, type: :f64))}
+  def scale(%__MODULE__{x: x, y: y, z: z}, scalar) do
+    %__MODULE__{x: x * scalar, y: y * scalar, z: z * scalar}
   end
 
   @doc """
@@ -209,8 +203,8 @@ defmodule BB.Math.Vec3 do
       32.0
   """
   @spec dot(t(), t()) :: float()
-  def dot(%__MODULE__{tensor: a}, %__MODULE__{tensor: b}) do
-    Nx.to_number(Nx.dot(a, b))
+  def dot(%__MODULE__{} = a, %__MODULE__{} = b) do
+    a.x * b.x + a.y * b.y + a.z * b.z
   end
 
   @doc """
@@ -225,23 +219,12 @@ defmodule BB.Math.Vec3 do
       [0.0, 0.0, 1.0]
   """
   @spec cross(t(), t()) :: t()
-  def cross(%__MODULE__{tensor: a}, %__MODULE__{tensor: b}) do
-    # Cross product: (a2*b3 - a3*b2, a3*b1 - a1*b3, a1*b2 - a2*b1)
-    a1 = a[0]
-    a2 = a[1]
-    a3 = a[2]
-    b1 = b[0]
-    b2 = b[1]
-    b3 = b[2]
-
-    result =
-      Nx.stack([
-        Nx.subtract(Nx.multiply(a2, b3), Nx.multiply(a3, b2)),
-        Nx.subtract(Nx.multiply(a3, b1), Nx.multiply(a1, b3)),
-        Nx.subtract(Nx.multiply(a1, b2), Nx.multiply(a2, b1))
-      ])
-
-    %__MODULE__{tensor: result}
+  def cross(%__MODULE__{} = a, %__MODULE__{} = b) do
+    %__MODULE__{
+      x: a.y * b.z - a.z * b.y,
+      y: a.z * b.x - a.x * b.z,
+      z: a.x * b.y - a.y * b.x
+    }
   end
 
   @doc """
@@ -254,8 +237,8 @@ defmodule BB.Math.Vec3 do
       5.0
   """
   @spec magnitude(t()) :: float()
-  def magnitude(%__MODULE__{tensor: t}) do
-    Nx.to_number(Nx.sqrt(Nx.dot(t, t)))
+  def magnitude(%__MODULE__{} = v) do
+    :math.sqrt(magnitude_squared(v))
   end
 
   @doc """
@@ -270,8 +253,8 @@ defmodule BB.Math.Vec3 do
       25.0
   """
   @spec magnitude_squared(t()) :: float()
-  def magnitude_squared(%__MODULE__{tensor: t}) do
-    Nx.to_number(Nx.dot(t, t))
+  def magnitude_squared(%__MODULE__{x: x, y: y, z: z}) do
+    x * x + y * y + z * z
   end
 
   @doc """
@@ -287,18 +270,11 @@ defmodule BB.Math.Vec3 do
       [1.0, 0.0, 0.0]
   """
   @spec normalise(t()) :: t()
-  def normalise(%__MODULE__{tensor: t}) do
-    mag_sq = Nx.dot(t, t)
-    mag = Nx.sqrt(mag_sq)
-
-    # Avoid division by zero - return zero vector if magnitude is zero
-    safe_mag = Nx.select(Nx.less(mag, 1.0e-10), Nx.tensor(1.0, type: :f64), mag)
-    normalised = Nx.divide(t, safe_mag)
-
-    # If original magnitude was zero, return zero vector
-    result = Nx.select(Nx.less(mag, 1.0e-10), Nx.tensor([0.0, 0.0, 0.0], type: :f64), normalised)
-
-    %__MODULE__{tensor: result}
+  def normalise(%__MODULE__{x: x, y: y, z: z} = v) do
+    case magnitude(v) do
+      magnitude when magnitude < @zero_threshold -> zero()
+      magnitude -> %__MODULE__{x: x / magnitude, y: y / magnitude, z: z / magnitude}
+    end
   end
 
   @doc """
@@ -328,16 +304,11 @@ defmodule BB.Math.Vec3 do
       [5.0, 5.0, 5.0]
   """
   @spec lerp(t(), t(), number()) :: t()
-  def lerp(%__MODULE__{tensor: a}, %__MODULE__{tensor: b}, t) do
-    # lerp(a, b, t) = a + t * (b - a) = a * (1 - t) + b * t
-    t = Nx.tensor(t, type: :f64)
-
-    result =
-      Nx.add(
-        Nx.multiply(a, Nx.subtract(1, t)),
-        Nx.multiply(b, t)
-      )
-
-    %__MODULE__{tensor: result}
+  def lerp(%__MODULE__{} = a, %__MODULE__{} = b, t) do
+    %__MODULE__{
+      x: a.x * (1 - t) + b.x * t,
+      y: a.y * (1 - t) + b.y * t,
+      z: a.z * (1 - t) + b.z * t
+    }
   end
 end

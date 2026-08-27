@@ -11,7 +11,7 @@ defmodule BB.Math.Covariance6 do
   mathematically expected to be symmetric and positive semi-definite;
   this module does not enforce those invariants on construction.
 
-  Follows the same typed-Nx-wrapper pattern as `BB.Math.Covariance3`.
+  Tensor-backed, for the reasons in `BB.Math.Covariance3`.
 
   ## Examples
 
