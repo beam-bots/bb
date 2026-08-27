@@ -11,6 +11,19 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.31.0](https://github.com/beam-bots/bb/compare/v0.30.1...v0.31.0) (2026-08-27)
+### Breaking Changes:
+
+* convert a unit-typed parameter into the unit it declares (#244) by James Harton
+
+
+
+### Improvements:
+
+* re-check the subproject PLT outside `mix check`'s parallel section (#246) by James Harton
+
+* hold the small math types as floats rather than Nx tensors (#249) by James Harton
+
 ## [v0.30.1](https://github.com/beam-bots/bb/compare/v0.30.0...v0.30.1) (2026-08-23)
 
 
