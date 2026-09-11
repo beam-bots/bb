@@ -86,6 +86,7 @@ defmodule BB.Command do
   alias BB.Command.ResultCache
   alias BB.Robot.Runtime
 
+  @type execution_id :: reference()
   @type goal :: map()
   @type result :: term()
   @type state :: term()
@@ -318,6 +319,109 @@ defmodule BB.Command do
   catch
     :exit, {:noproc, _} -> :ok
   end
+
+  @doc """
+  Cancel a running command by its execution id.
+
+  The execution id is the one reported by `list/1` and carried in the
+  `[:command, name, execution_id]` PubSub path, so a process that did not start
+  the command can still stop it. The encoded form from `encode_execution_id/1`
+  is accepted too, for surfaces that round-trip the id through JSON or markup.
+
+  Returns `{:error, :not_found}` if no command is running under that id.
+  """
+  @spec cancel(module(), execution_id() | String.t()) :: :ok | {:error, :not_found}
+  def cancel(robot_module, execution_id) do
+    case whereis(robot_module, execution_id) do
+      :undefined -> {:error, :not_found}
+      pid -> cancel(pid)
+    end
+  end
+
+  @doc """
+  Look up a running command's pid by its execution id.
+
+  Accepts either the id itself or its encoded form. Returns `:undefined` if the
+  command has already finished.
+  """
+  @spec whereis(module(), execution_id() | String.t()) :: pid() | :undefined
+  def whereis(robot_module, execution_id) when is_reference(execution_id) do
+    case BB.Process.whereis(robot_module, registry_key(execution_id)) do
+      pid when is_pid(pid) -> if Process.alive?(pid), do: pid, else: :undefined
+      :undefined -> :undefined
+    end
+  end
+
+  def whereis(robot_module, encoded) when is_binary(encoded) do
+    case fetch_execution_id(robot_module, encoded) do
+      {:ok, execution_id} -> whereis(robot_module, execution_id)
+      :error -> :undefined
+    end
+  end
+
+  @doc """
+  Render an execution id as a string.
+
+  Execution ids are references, which don't survive a trip through JSON, a URL
+  or a DOM attribute. Encode them on the way out and hand the result back to
+  `whereis/2` or `cancel/2` on the way in.
+  """
+  @spec encode_execution_id(execution_id()) :: String.t()
+  def encode_execution_id(execution_id) when is_reference(execution_id),
+    do: inspect(execution_id)
+
+  @doc """
+  Resolve an encoded execution id back to the id of a running command.
+
+  Matches against the commands currently running on `robot_module`, so an id
+  belonging to a finished command resolves to `:error` rather than a reference
+  that can never be found.
+  """
+  @spec fetch_execution_id(module(), String.t()) :: {:ok, execution_id()} | :error
+  def fetch_execution_id(robot_module, encoded) when is_binary(encoded) do
+    robot_module
+    |> list()
+    |> Enum.find_value(:error, fn %{execution_id: execution_id} ->
+      if encode_execution_id(execution_id) == encoded, do: {:ok, execution_id}
+    end)
+  end
+
+  @doc """
+  List every command currently running on a robot.
+
+  Reads the robot's registry directly, so the listing does not depend on the
+  runtime being responsive.
+
+  Each entry is a map of `:name`, `:execution_id`, `:pid`, `:category` and
+  `:started_at`.
+  """
+  @spec list(module()) :: [
+          %{
+            name: atom(),
+            execution_id: execution_id(),
+            pid: pid(),
+            category: atom(),
+            started_at: DateTime.t()
+          }
+        ]
+  def list(robot_module) do
+    robot_module
+    |> BB.Process.registry_name()
+    |> Registry.select([
+      {{registry_key(:"$1"), :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}
+    ])
+    # A registry entry outlives its process by however long the registry takes
+    # to handle the DOWN, so drop the ones already gone rather than offering a
+    # caller a pid it can't do anything with.
+    |> Enum.filter(fn {_execution_id, pid, _meta} -> Process.alive?(pid) end)
+    |> Enum.map(fn {execution_id, pid, meta} ->
+      Map.merge(meta, %{execution_id: execution_id, pid: pid})
+    end)
+  end
+
+  @doc false
+  @spec registry_key(execution_id() | atom()) :: {:command, execution_id() | atom()}
+  def registry_key(execution_id), do: {:command, execution_id}
 
   @doc """
   Transition to a new operational state during command execution.

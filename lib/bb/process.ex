@@ -7,6 +7,7 @@ defmodule BB.Process do
   Helper functions for building child specs and looking up processes in the robot's registry.
   """
 
+  @type key :: term
   @type process_type :: :actuator | :sensor | :controller
 
   @doc """
@@ -124,10 +125,26 @@ defmodule BB.Process do
 
   @doc """
   Build a `:via` tuple for registry lookup by name.
+
+  Components register under their DSL name, which is an atom. Transient
+  processes that have no DSL name — command servers, for instance — register
+  under a tagged tuple such as `{:command, execution_id}`, so any term is
+  accepted.
   """
-  @spec via(module, atom) :: {:via, module, {atom, atom}}
+  @spec via(module, key) :: {:via, module, {atom, key}}
   def via(robot_module, name) do
     {:via, Registry, {registry_name(robot_module), name}}
+  end
+
+  @doc """
+  Build a `:via` tuple that also stores `value` against the registry entry.
+
+  The value is returned by `Registry.select/2` alongside the key and pid, which
+  lets callers read a process's metadata without sending it a message.
+  """
+  @spec via(module, key, term) :: {:via, module, {atom, key, term}}
+  def via(robot_module, name, value) do
+    {:via, Registry, {registry_name(robot_module), name, value}}
   end
 
   @doc """
@@ -135,7 +152,7 @@ defmodule BB.Process do
 
   Returns `pid` if found, `:undefined` otherwise.
   """
-  @spec whereis(module, atom) :: pid | :undefined
+  @spec whereis(module, key) :: pid | :undefined
   def whereis(robot_module, name) do
     Registry.whereis_name({registry_name(robot_module), name})
   end
@@ -154,7 +171,7 @@ defmodule BB.Process do
   Uses a `:via` tuple so the registry handles lookup atomically.
   Returns `:ok` (GenServer.cast always returns :ok, even if process doesn't exist).
   """
-  @spec cast(module, atom, term) :: :ok
+  @spec cast(module, key, term) :: :ok
   def cast(robot_module, name, message) do
     GenServer.cast(via(robot_module, name), message)
   end
@@ -165,7 +182,7 @@ defmodule BB.Process do
   Uses a `:via` tuple so the registry handles lookup atomically.
   Raises if the process doesn't exist or times out.
   """
-  @spec call(module, atom, term, timeout) :: term
+  @spec call(module, key, term, timeout) :: term
   def call(robot_module, name, message, timeout \\ 5000) do
     GenServer.call(via(robot_module, name), message, timeout)
   end
@@ -176,7 +193,7 @@ defmodule BB.Process do
   Uses `Registry.dispatch/3` to handle lookup atomically.
   Returns `:ok` regardless of whether the process exists.
   """
-  @spec send(module, atom, term) :: :ok
+  @spec send(module, key, term) :: :ok
   def send(robot_module, name, message) do
     Registry.dispatch(registry_name(robot_module), name, fn entries ->
       for {pid, _value} <- entries, do: Kernel.send(pid, message)

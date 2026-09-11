@@ -270,7 +270,109 @@ defmodule BB.Robot.RuntimeTest do
 
       send(cmd, :complete)
     end
+  end
 
+  describe "addressing a running command by execution id" do
+    test "executing_commands/1 reports the execution id used in PubSub paths" do
+      start_supervised!(RobotWithCommands)
+
+      :ok = BB.Safety.arm(RobotWithCommands)
+      {:ok, _} = BB.PubSub.subscribe(RobotWithCommands, [:command])
+
+      {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      assert_receive {:executing, ^cmd}, 500
+      assert_receive {:bb, [:command, :async_cmd, published_id], _}, 500
+
+      [info] = Runtime.executing_commands(RobotWithCommands)
+
+      assert info.execution_id == published_id
+      assert info.name == :async_cmd
+      assert info.pid == cmd
+      assert info.category == :default
+      assert %DateTime{} = info.started_at
+
+      send(cmd, :complete)
+    end
+
+    test "whereis/2 finds the command, and forgets it once it exits" do
+      start_supervised!(RobotWithCommands)
+
+      :ok = BB.Safety.arm(RobotWithCommands)
+
+      {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      assert_receive {:executing, ^cmd}, 500
+
+      [%{execution_id: execution_id}] = Runtime.executing_commands(RobotWithCommands)
+      assert BB.Command.whereis(RobotWithCommands, execution_id) == cmd
+
+      ref = Process.monitor(cmd)
+      send(cmd, :complete)
+      assert_receive {:DOWN, ^ref, :process, ^cmd, _}, 500
+
+      assert BB.Command.whereis(RobotWithCommands, execution_id) == :undefined
+      assert Runtime.executing_commands(RobotWithCommands) == []
+    end
+
+    test "a process which did not start the command can cancel it" do
+      start_supervised!(RobotWithCommands)
+
+      :ok = BB.Safety.arm(RobotWithCommands)
+
+      # Start the command from a process that then goes away, so the only
+      # handle on it is what the registry knows.
+      test_pid = self()
+
+      starter =
+        spawn(fn ->
+          {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: test_pid})
+          send(test_pid, {:started, cmd})
+        end)
+
+      assert_receive {:started, cmd}, 500
+      assert_receive {:executing, ^cmd}, 500
+      refute Process.alive?(starter)
+
+      [%{execution_id: execution_id}] = Runtime.executing_commands(RobotWithCommands)
+      ref = Process.monitor(cmd)
+
+      assert :ok = BB.Command.cancel(RobotWithCommands, execution_id)
+
+      assert_receive {:DOWN, ^ref, :process, ^cmd, {:shutdown, :cancelled}}, 500
+      assert {:error, :cancelled} = BB.Command.await(cmd)
+      assert Runtime.state(RobotWithCommands) == :idle
+    end
+
+    test "cancelling an unknown execution id returns an error" do
+      start_supervised!(RobotWithCommands)
+
+      assert {:error, :not_found} = BB.Command.cancel(RobotWithCommands, make_ref())
+      assert {:error, :not_found} = BB.Command.cancel(RobotWithCommands, "#Reference<0.0.0.0>")
+    end
+
+    test "an execution id survives a round trip through its encoded form" do
+      start_supervised!(RobotWithCommands)
+
+      :ok = BB.Safety.arm(RobotWithCommands)
+
+      {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
+      assert_receive {:executing, ^cmd}, 500
+
+      [%{execution_id: execution_id}] = Runtime.executing_commands(RobotWithCommands)
+      encoded = BB.Command.encode_execution_id(execution_id)
+
+      assert is_binary(encoded)
+      assert BB.Command.fetch_execution_id(RobotWithCommands, encoded) == {:ok, execution_id}
+      assert BB.Command.whereis(RobotWithCommands, encoded) == cmd
+
+      ref = Process.monitor(cmd)
+      assert :ok = BB.Command.cancel(RobotWithCommands, encoded)
+      assert_receive {:DOWN, ^ref, :process, ^cmd, {:shutdown, :cancelled}}, 500
+
+      assert BB.Command.fetch_execution_id(RobotWithCommands, encoded) == :error
+    end
+  end
+
+  describe "command cancellation" do
     test "cancel returns error when nothing executing" do
       start_supervised!(RobotWithCommands)
 

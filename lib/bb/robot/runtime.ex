@@ -189,11 +189,12 @@ defmodule BB.Robot.Runtime do
 
   @doc """
   Get information about all currently executing commands.
+
+  Reads the robot's registry directly, so an unresponsive runtime does not
+  block introspection.
   """
   @spec executing_commands(module()) :: [map()]
-  def executing_commands(robot_module) do
-    GenServer.call(via(robot_module), :executing_commands)
-  end
+  defdelegate executing_commands(robot_module), to: BB.Command, as: :list
 
   @doc """
   Get the availability of each command category.
@@ -490,23 +491,6 @@ defmodule BB.Robot.Runtime do
     {:reply, count > 0, state}
   end
 
-  def handle_call(:executing_commands, _from, state) do
-    commands =
-      state.executing_commands
-      |> Map.values()
-      |> Enum.map(fn %CommandInfo{} = info ->
-        %{
-          name: info.name,
-          execution_id: info.ref,
-          pid: info.pid,
-          category: info.category,
-          started_at: info.started_at
-        }
-      end)
-
-    {:reply, commands, state}
-  end
-
   def handle_call(:category_availability, _from, state) do
     availability =
       Map.new(state.category_limits, fn {category, limit} ->
@@ -790,7 +774,7 @@ defmodule BB.Robot.Runtime do
 
     with :ok <- check_state_allowed(command, state),
          {:ok, state} <- check_category_or_cancel(command, category, state) do
-      {:ok, pid} = spawn_command_server(state, command, goal, execution_id)
+      {:ok, pid} = spawn_command_server(state, command, category, goal, execution_id)
       monitor_ref = Process.monitor(pid)
 
       # Publish command started event
@@ -802,8 +786,7 @@ defmodule BB.Robot.Runtime do
         name: command.name,
         pid: pid,
         ref: monitor_ref,
-        category: category,
-        started_at: DateTime.utc_now()
+        category: category
       }
 
       new_state = %{
@@ -906,7 +889,7 @@ defmodule BB.Robot.Runtime do
     end
   end
 
-  defp spawn_command_server(state, command, goal, execution_id) do
+  defp spawn_command_server(state, command, category, goal, execution_id) do
     robot_module = state.robot_module
     robot = state.robot
     robot_state = state.robot_state
@@ -922,6 +905,13 @@ defmodule BB.Robot.Runtime do
     # Extract handler module and options from child_spec format
     {handler_module, handler_opts} = normalize_handler(command.handler)
 
+    registry_name =
+      BB.Process.via(robot_module, BB.Command.registry_key(execution_id), %{
+        name: command.name,
+        category: category,
+        started_at: DateTime.utc_now()
+      })
+
     child_spec = %{
       id: execution_id,
       start:
@@ -935,7 +925,8 @@ defmodule BB.Robot.Runtime do
              runtime_pid: self(),
              timeout: command.timeout,
              options: handler_opts
-           ]
+           ],
+           [name: registry_name]
          ]},
       restart: :temporary
     }

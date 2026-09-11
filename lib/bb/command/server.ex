@@ -62,6 +62,11 @@ defmodule BB.Command.Server do
     GenServer.start_link(__MODULE__, init_arg)
   end
 
+  @doc false
+  def start_link(init_arg, opts) do
+    GenServer.start_link(__MODULE__, init_arg, opts)
+  end
+
   @impl GenServer
   def init(init_arg) do
     callback_module = Keyword.fetch!(init_arg, :callback_module)

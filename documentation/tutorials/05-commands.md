@@ -588,15 +588,63 @@ Example with cancellable motion:
 
 ## Cancelling Commands
 
-Cancel a running command explicitly:
+If you hold the command's pid, cancel it directly:
 
 ```elixir
 {:ok, cmd} = MyRobot.Robot.long_running_command()
 
 # Later, if needed
-BB.Robot.Runtime.cancel(MyRobot.Robot)
+BB.Command.cancel(cmd)
 
 # The command's result/1 is called and awaiting callers receive the result
+```
+
+Often the process that wants to stop a command isn't the one that started it —
+an operator hitting "stop" in a LiveView has no pid for a command that some
+automation kicked off. Every running command is registered under its execution
+id, so anything with the robot module can find and stop it:
+
+```elixir
+iex> BB.Command.list(MyRobot.Robot)
+[
+  %{
+    name: :long_running_command,
+    execution_id: #Reference<0.1.2.3>,
+    pid: #PID<0.312.0>,
+    category: :motion,
+    started_at: ~U[2026-09-11 03:14:15.926Z]
+  }
+]
+
+iex> BB.Command.cancel(MyRobot.Robot, execution_id)
+:ok
+```
+
+`BB.Command.list/1` reads the robot's registry rather than asking the runtime,
+so entries vanish the moment a command process does and a busy runtime can't
+stall the listing. `BB.Command.whereis/2` returns just the pid if that's all you
+need, and both return `:undefined`/`{:error, :not_found}` once the command has
+finished.
+
+Execution ids are references, which don't survive JSON, a URL or a DOM
+attribute. `BB.Command.encode_execution_id/1` renders one as a string, and
+`whereis/2` and `cancel/2` accept that string back:
+
+```elixir
+# Rendering a stop button
+encoded = BB.Command.encode_execution_id(execution_id)
+
+# Handling the click
+BB.Command.cancel(MyRobot.Robot, encoded)
+```
+
+The same execution id appears in the command's PubSub path, so a UI subscribed
+to `[:command]` can match the `:started` event it saw against the entry it wants
+to cancel:
+
+```elixir
+BB.PubSub.subscribe(MyRobot.Robot, [:command])
+# => {:bb, [:command, :long_running_command, execution_id], %BB.Message{...}}
 ```
 
 ## What's Next?
