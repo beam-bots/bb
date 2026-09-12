@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.31.1](https://github.com/beam-bots/bb/compare/v0.31.0...v0.31.1) (2026-09-12)
+
+
+
+
+### Improvements:
+
+* register running commands so anyone can cancel them (#260) by James Harton
+
 ## [v0.31.0](https://github.com/beam-bots/bb/compare/v0.30.1...v0.31.0) (2026-08-27)
 ### Breaking Changes:
 
