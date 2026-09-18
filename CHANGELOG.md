@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.31.2](https://github.com/beam-bots/bb/compare/v0.31.1...v0.31.2) (2026-09-18)
+
+
+
+
+### Bug Fixes:
+
+* stop restarting a robot's topology once it has given up (#263) by James Harton
+
 ## [v0.31.1](https://github.com/beam-bots/bb/compare/v0.31.0...v0.31.1) (2026-09-12)
 
 
