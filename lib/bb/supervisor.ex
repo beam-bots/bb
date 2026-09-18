@@ -39,6 +39,24 @@ defmodule BB.Supervisor do
   budget and bring down the entire robot. The topology supervisor groups all
   hardware-facing subtrees so they share a restart budget; when that budget is
   exhausted the safety controller force-disarms the robot.
+
+  ## Losing the hardware is not a reason to keep trying
+
+  The topology supervisor is `:transient`, so exhausting its budget stops it for
+  good rather than starting another round. Hardware that has gone away — a servo
+  bus losing power, a cable pulled — does not come back because a supervisor
+  asked a second time, and retrying only spends the root's budget until the root
+  dies too. Losing the root is worse than losing the topology: it takes the
+  registries, the runtime and the robot's registration with
+  `BB.Safety.Controller` with it, and with them any record that the robot
+  faulted at all.
+
+  Stopping instead leaves the root standing, so the robot stays registered and
+  the `:error` the safety controller latches on the way down survives to be read.
+  The arm is gone; the robot still knows it had one. Recovery is deliberate —
+  `Supervisor.restart_child(robot_module, BB.TopologySupervisor)` once the
+  operator has acknowledged the fault, which is also what re-arms the monitor for
+  next time.
   """
 
   alias BB.Dsl.Info
@@ -103,9 +121,14 @@ defmodule BB.Supervisor do
     # External communication, not hardware - stays at root
     bridge_supervisor_child = {BB.BridgeSupervisor, {robot_module, opts}}
 
-    # All hardware-facing subsystems share a restart budget under the
-    # topology supervisor; its death triggers safety force-disarm.
-    topology_supervisor_child = {BB.TopologySupervisor, {robot_module, opts}}
+    # All hardware-facing subsystems share a restart budget under the topology
+    # supervisor; its death triggers safety force-disarm. Transient rather than
+    # permanent: a supervisor that exhausts its budget exits `:shutdown`, which
+    # transient declines to restart, so the hardware subtree stays down and the
+    # root — and with it the robot's safety registration — stays up. The child
+    # spec is retained, so acknowledging the fault can start it again.
+    topology_supervisor_child =
+      Supervisor.child_spec({BB.TopologySupervisor, {robot_module, opts}}, restart: :transient)
 
     [
       registry_child,
