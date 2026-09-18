@@ -277,4 +277,69 @@ defmodule BB.SupervisorTest do
       assert result == :undefined
     end
   end
+
+  describe "topology giving up" do
+    defmodule GivingUpRobot do
+      @moduledoc false
+      use BB
+
+      settings do
+        # Give up the first time a hardware subtree fails, so the test does not
+        # have to flap one to exhaust a budget.
+        topology_max_restarts 0
+      end
+
+      topology do
+        link :base_link do
+        end
+      end
+    end
+
+    defp eventually(fun, attempts \\ 50) do
+      cond do
+        fun.() -> true
+        attempts == 0 -> false
+        true -> Process.sleep(20) && eventually(fun, attempts - 1)
+      end
+    end
+
+    setup do
+      root = start_supervised!(GivingUpRobot)
+      topology = BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor)
+
+      Supervisor.which_children(topology)
+      |> Enum.find_value(fn {_id, pid, _type, _mods} -> if is_pid(pid), do: pid end)
+      |> Process.exit(:kill)
+
+      assert eventually(fn ->
+               BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor) == :undefined
+             end)
+
+      %{root: root}
+    end
+
+    test "the hardware subtree stays down rather than restarting into the same failure", %{
+      root: root
+    } do
+      refute eventually(
+               fn -> BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor) != :undefined end,
+               10
+             )
+
+      assert Process.alive?(root)
+    end
+
+    test "the root survives, so the robot is still there to say it faulted", %{root: root} do
+      assert Process.alive?(root)
+      assert eventually(fn -> BB.Safety.state(GivingUpRobot) == :error end)
+    end
+
+    test "the child spec is kept, so acknowledging the fault can start it again" do
+      assert {:ok, _child} = Supervisor.restart_child(GivingUpRobot, BB.TopologySupervisor)
+
+      assert eventually(fn ->
+               BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor) != :undefined
+             end)
+    end
+  end
 end
