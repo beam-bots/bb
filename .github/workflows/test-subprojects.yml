@@ -101,6 +101,29 @@ jobs:
             git clone --depth 1 "https://github.com/beam-bots/${name}.git" "${name}"
           done
 
+      - name: Install the OS packages the checked-out repos declare
+        # A package whose deps build C against a system library names it as
+        # `os-packages` in its own `ci.yml` (bb_nsk -> libmnl-dev, via
+        # `nerves_runtime` -> `nerves_uevent`). That input reaches the shared
+        # workflow, not this one, so read it out of the files instead.
+        #
+        # Union across every checked-out repo rather than just the target: under
+        # `BB_VERSION=local` a sibling is a path dep, and its deps are fetched
+        # and compiled inside the target's build, so the target has to satisfy
+        # them too.
+        run: |
+          set -euo pipefail
+          declared=""
+          for workflow in */.github/workflows/*.yml; do
+            declared="${declared} $(yq '[.jobs[].with."os-packages" // ""] | join(" ")' "${workflow}")"
+          done
+          packages=$(tr ' ' '\n' <<<"${declared}" | sort -u | xargs)
+          if [ -n "${packages}" ]; then
+            echo "Installing: ${packages}"
+            sudo apt-get update
+            sudo apt-get install -y ${packages}
+          fi
+
       - id: beam
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
