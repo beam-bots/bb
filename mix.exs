@@ -203,7 +203,7 @@ defmodule BB.MixProject do
     [
       {:ease, "~> 1.0"},
       {:localize, "~> 1.0"},
-      {:nx, "~> 0.10"},
+      {:nx, "~> 1.0"},
       {:spark, "~> 2.3"},
       {:splode, "~> 0.2"},
       {:telemetry, "~> 1.0"},
