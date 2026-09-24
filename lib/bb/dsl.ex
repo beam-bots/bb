@@ -283,6 +283,12 @@ defmodule BB.Dsl do
         default: false,
         doc:
           "When `true`, this input drives dispatch: the framework fires `handle_input/2` whenever a message arrives on this path, fanning in the most-recent value of every other input."
+      ],
+      max_input_age: [
+        type: unit_type(compatible: :second),
+        required: false,
+        doc:
+          "The maximum age an envelope on this path may have before it is discarded and the estimator transitions to `:degraded` with reason `:stale_input`. Overrides the estimator's `max_input_age`. Omit to inherit it."
       ]
     ]
   }
@@ -317,6 +323,12 @@ defmodule BB.Dsl do
   }
 
   @estimator_health_schema [
+    max_input_age: [
+      type: unit_type(compatible: :second),
+      required: false,
+      doc:
+        "The maximum age an input envelope may have when it arrives. Older envelopes are discarded before `handle_input/2` is called and the estimator transitions to `:degraded` with reason `:stale_input`. Individual `input` blocks may override this. Independent of `latency_budget`, which measures callback execution rather than input age."
+    ],
     latency_budget: [
       type: unit_type(compatible: :second),
       required: false,
@@ -327,7 +339,7 @@ defmodule BB.Dsl do
       type: unit_type(compatible: :second),
       required: false,
       doc:
-        "If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires."
+        "If no driver input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. Non-driver inputs do not reset the timer."
     ],
     recover_after: [
       type: :pos_integer,

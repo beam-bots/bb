@@ -280,6 +280,63 @@ defmodule BB.EstimatorTest do
 
       assert_receive {:bb, ^out_path, %Message{payload: %Imu{}}}, 500
     end
+
+    test "latency telemetry reports nanoseconds on both measurements" do
+      handler_id = "latency-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :latency],
+        fn _event, measurements, _meta, _ -> send(test_pid, {:latency, measurements}) end,
+        nil
+      )
+
+      try do
+        start_supervised!(EchoRobot)
+
+        age_ns = 100_000_000
+        {:ok, msg} = build_imu_message_with_offset(-age_ns)
+        BB.publish(EchoRobot, [:sensor, :base_link, :imu], msg)
+
+        assert_receive {:latency, %{duration: duration, input_to_output: input_to_output}}, 500
+
+        assert duration >= 0
+        assert duration < 1_000_000_000
+        assert input_to_output >= age_ns
+        assert input_to_output < age_ns + 1_000_000_000
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "drops a remote envelope and degrades instead of dispatching it" do
+      handler_id = "cross-node-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach_many(
+        handler_id,
+        [[:bb, :estimator, :dropped], [:bb, :estimator, :transition]],
+        fn event, _meas, metadata, _ -> send(test_pid, {List.last(event), metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!(EchoRobot)
+
+        out_path = [:sensor, :base_link, :imu, :orientation]
+        {:ok, _} = BB.subscribe(EchoRobot, out_path)
+
+        {:ok, msg} = build_imu_message()
+        BB.publish(EchoRobot, [:sensor, :base_link, :imu], %{msg | node: :other@nowhere})
+
+        assert_receive {:dropped, %{reason: :cross_node}}, 500
+        assert_receive {:transition, %{to: :degraded, reason: :cross_node}}, 500
+        refute_receive {:bb, ^out_path, _}, 100
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
   end
 
   describe "Runtime - link-nested multi-input fan-in" do
@@ -339,6 +396,166 @@ defmodule BB.EstimatorTest do
         BB.publish(FanInRobot, [:sensor, :imu], imu_msg)
 
         assert_receive {:dropped, %{reason: :sync_miss}}, 500
+        refute_receive {:multi_input, _}, 100
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "a remote non-driver envelope leaves its alias missing" do
+      handler_id = "cross-node-fan-in-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :dropped],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:dropped, metadata}) end,
+        nil
+      )
+
+      try do
+        {:ok, odom_msg} = build_imu_message()
+        BB.publish(FanInRobot, [:sensor, :odom], %{odom_msg | node: :other@nowhere})
+
+        assert_receive {:dropped, %{source_input: :odom, reason: :cross_node}}, 500
+
+        {:ok, imu_msg} = build_imu_message()
+        BB.publish(FanInRobot, [:sensor, :imu], imu_msg)
+
+        assert_receive {:dropped, %{source_input: :odom, reason: :sync_miss}}, 500
+        refute_receive {:multi_input, _}, 100
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+  end
+
+  describe "Runtime - max_input_age" do
+    defmodule FreshnessRobot do
+      @moduledoc false
+      use BB
+
+      topology do
+        link :base_link do
+          sensor :imu, MySensor do
+            estimator :orientation, EchoEstimator do
+              max_input_age(~u(50 millisecond))
+            end
+          end
+        end
+      end
+    end
+
+    defmodule PerInputFreshnessRobot do
+      @moduledoc false
+      use BB
+
+      sensors do
+        sensor :imu, MySensor
+        sensor :odom, MySensor
+      end
+
+      topology do
+        link :base_link do
+          estimator :pose, MultiInputEstimator do
+            max_input_age(~u(500 millisecond))
+            input :imu, [:sensor, :imu], driver?: true
+            input :odom, [:sensor, :odom], max_input_age: ~u(20 millisecond)
+          end
+        end
+      end
+    end
+
+    setup do
+      :persistent_term.put(:estimator_test_pid, self())
+      on_exit(fn -> :persistent_term.erase(:estimator_test_pid) end)
+      :ok
+    end
+
+    test "discards an envelope older than the estimator-level budget" do
+      handler_id = "stale-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach_many(
+        handler_id,
+        [[:bb, :estimator, :dropped], [:bb, :estimator, :transition]],
+        fn event, _meas, metadata, _ -> send(test_pid, {List.last(event), metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!(FreshnessRobot)
+
+        out_path = [:sensor, :base_link, :imu, :orientation]
+        {:ok, _} = BB.subscribe(FreshnessRobot, out_path)
+
+        {:ok, stale} = build_imu_message_with_offset(-200_000_000)
+        BB.publish(FreshnessRobot, [:sensor, :base_link, :imu], stale)
+
+        assert_receive {:dropped, %{reason: :stale_input}}, 500
+        assert_receive {:transition, %{to: :degraded, reason: :stale_input}}, 500
+        refute_receive {:bb, ^out_path, _}, 100
+
+        {:ok, fresh} = build_imu_message()
+        BB.publish(FreshnessRobot, [:sensor, :base_link, :imu], fresh)
+
+        assert_receive {:bb, ^out_path, %Message{}}, 500
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "an input's own max_input_age overrides the estimator's" do
+      handler_id = "stale-per-input-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :dropped],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:dropped, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({PerInputFreshnessRobot, []})
+
+        {:ok, odom_msg} = build_imu_message_with_offset(-100_000_000)
+        BB.publish(PerInputFreshnessRobot, [:sensor, :odom], odom_msg)
+
+        assert_receive {:dropped, %{source_input: :odom, reason: :stale_input}}, 500
+
+        {:ok, imu_msg} = build_imu_message_with_offset(-100_000_000)
+        BB.publish(PerInputFreshnessRobot, [:sensor, :imu], imu_msg)
+
+        refute_receive {:dropped, %{source_input: :imu, reason: :stale_input}}, 100
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "a retained non-driver envelope that ages out drops the dispatch" do
+      handler_id = "stale-snapshot-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :dropped],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:dropped, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({PerInputFreshnessRobot, []})
+
+        {:ok, odom_msg} = build_imu_message()
+        BB.publish(PerInputFreshnessRobot, [:sensor, :odom], odom_msg)
+
+        Process.sleep(40)
+
+        {:ok, imu_msg} = build_imu_message()
+        BB.publish(PerInputFreshnessRobot, [:sensor, :imu], imu_msg)
+
+        assert_receive {:dropped, %{source_input: :odom, reason: :stale_input}}, 500
         refute_receive {:multi_input, _}, 100
       after
         :telemetry.detach(handler_id)
@@ -462,10 +679,82 @@ defmodule BB.EstimatorTest do
       end
     end
 
+    defmodule DriverLivenessRobot do
+      @moduledoc false
+      use BB
+
+      sensors do
+        sensor :imu, MySensor
+        sensor :odom, MySensor
+      end
+
+      topology do
+        link :base_link do
+          estimator :pose, MultiInputEstimator do
+            input :imu, [:sensor, :imu], driver?: true
+            input :odom, [:sensor, :odom]
+            lost_after(~u(150 millisecond))
+          end
+        end
+      end
+    end
+
     setup do
       :persistent_term.put(:slow_estimator_sleep_ms, 0)
       on_exit(fn -> :persistent_term.erase(:slow_estimator_sleep_ms) end)
       :ok
+    end
+
+    test "a live non-driver input does not keep a dead driver alive" do
+      handler_id = "aux-lost-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({DriverLivenessRobot, []})
+
+        for _ <- 1..15 do
+          {:ok, msg} = build_imu_message()
+          BB.publish(DriverLivenessRobot, [:sensor, :odom], msg)
+          Process.sleep(20)
+        end
+
+        assert_receive {:transition, %{to: :lost, reason: :lost}}, 500
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "driver arrivals keep the lost timer alive" do
+      handler_id = "driver-alive-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({DriverLivenessRobot, []})
+
+        for _ <- 1..15 do
+          {:ok, msg} = build_imu_message()
+          BB.publish(DriverLivenessRobot, [:sensor, :imu], msg)
+          Process.sleep(20)
+        end
+
+        refute_received {:transition, %{to: :lost}}
+      after
+        :telemetry.detach(handler_id)
+      end
     end
 
     test "transitions to :degraded when handle_input exceeds latency_budget" do
@@ -508,6 +797,34 @@ defmodule BB.EstimatorTest do
         start_supervised!({LostRobot, []})
 
         assert_receive {:transition, %{to: :lost, reason: :lost}}, 500
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "recovers from :lost when no latency_budget is configured" do
+      handler_id = "recover-no-budget-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({LostRobot, []})
+
+        assert_receive {:transition, %{to: :lost, reason: :lost}}, 500
+
+        for _ <- 1..2 do
+          {:ok, msg} = build_imu_message()
+          BB.publish(LostRobot, [:sensor, :base_link, :imu], msg)
+        end
+
+        assert_receive {:transition, %{from: :lost, to: :degraded, reason: :recovered}}, 500
+        assert_receive {:transition, %{from: :degraded, to: :healthy, reason: :recovered}}, 500
       after
         :telemetry.detach(handler_id)
       end

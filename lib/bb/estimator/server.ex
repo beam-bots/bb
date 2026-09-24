@@ -11,11 +11,23 @@ defmodule BB.Estimator.Server do
   - Resolves parameter references in opts at startup and on parameter
     changes (mirroring `BB.Sensor.Server` / `BB.Controller.Server`).
   - Subscribes to the estimator's declared input paths.
+  - Rejects any envelope stamped with a `node` other than the local one
+    before it is compared against another envelope's timestamp, since
+    monotonic clocks are node-local. A rejected envelope is dropped with
+    reason `:cross_node` and is not retained, so a multi-input alias whose
+    newest envelope came from another node stays missing until a local one
+    arrives.
   - Dispatches incoming input messages to the callback module via
     `c:BB.Estimator.handle_input/2`. Single-input estimators receive the
     bare `%BB.Message{}`; multi-input estimators receive a
     `%{input_name => %BB.Message{}}` map gathered when the driver input
     arrives.
+  - Enforces `max_input_age`: an envelope older than its input's budget is
+    discarded before `handle_input/2` is called, and the estimator
+    transitions to `:degraded` with reason `:stale_input`. Retained
+    non-driver envelopes are re-checked when the driver arrives, since they
+    can age past their budget while they wait. This is independent of
+    `latency_budget`, which measures callback execution time.
   - For multi-input estimators, enforces `sync_tolerance`: if any
     non-driver input is stale relative to the driver by more than the
     configured tolerance, the dispatch is dropped (with
@@ -23,10 +35,14 @@ defmodule BB.Estimator.Server do
     snapshot.
   - Publishes each `{output_name, message}` returned from a callback's
     `{:reply, outputs, state}` reply to that output's configured path.
-  - Emits `:input`, `:output`, `:latency`, and `:dropped` telemetry.
-
-  Health transitions, lost-detection, and `on_degraded` / `on_lost` /
-  `on_recovered` command dispatch are Phase 2 and not handled here yet.
+  - Runs the `:healthy` / `:degraded` / `:lost` health state machine and
+    dispatches the configured `on_degraded` / `on_lost` / `on_recovered`
+    commands on each transition. For multi-input estimators only driver
+    arrivals reset the `lost_after` timer, so a live auxiliary stream
+    cannot mask a driver that has stopped publishing.
+  - Emits `:input`, `:output`, `:latency`, `:dropped`, and `:transition`
+    telemetry. Every timing measurement is in nanoseconds, the same unit as
+    `%BB.Message{}.monotonic_time`.
 
   ## Init args
 
@@ -38,7 +54,9 @@ defmodule BB.Estimator.Server do
 
   - `:__callback_module__` - the user's estimator module.
   - `:__estimator_inputs__` - `%{mode: :single | :multi, inputs: [...],
-    sync_tolerance_ns: integer() | nil}` describing the input wiring.
+    sync_tolerance_ns: integer() | nil}` describing the input wiring. Each
+    input spec carries `:name`, `:path`, `:driver?` and a resolved
+    `:max_input_age_ns`.
   - `:__estimator_outputs__` - `%{output_name => [atom()]}` mapping output
     names to their full pubsub paths.
   - `:bb` - `%{robot: module, path: [atom]}`, the per-process context.
@@ -70,6 +88,7 @@ defmodule BB.Estimator.Server do
     :inputs,
     :driver_input,
     :input_name_by_path,
+    :max_input_age_ns,
     :sync_tolerance_ns,
     :outputs,
     :last_messages,
@@ -88,7 +107,8 @@ defmodule BB.Estimator.Server do
   @type input_spec :: %{
           required(:name) => atom(),
           required(:path) => [atom()],
-          required(:driver?) => boolean()
+          required(:driver?) => boolean(),
+          optional(:max_input_age_ns) => integer() | nil
         }
 
   @type health_state :: :healthy | :degraded | :lost
@@ -104,6 +124,7 @@ defmodule BB.Estimator.Server do
           inputs: [input_spec()],
           driver_input: atom() | nil,
           input_name_by_path: %{[atom()] => atom()},
+          max_input_age_ns: %{atom() => integer() | nil},
           sync_tolerance_ns: integer() | nil,
           outputs: %{atom() => [atom()]},
           last_messages: %{atom() => Message.t()},
@@ -159,6 +180,11 @@ defmodule BB.Estimator.Server do
       |> Enum.map(fn input -> {input.path, input.name} end)
       |> Map.new()
 
+    max_input_age_ns =
+      Map.new(input_config.inputs, fn input ->
+        {input.name, Map.get(input, :max_input_age_ns)}
+      end)
+
     driver_input =
       Enum.find_value(input_config.inputs, fn
         %{driver?: true, name: name} -> name
@@ -185,6 +211,7 @@ defmodule BB.Estimator.Server do
           inputs: input_config.inputs,
           driver_input: driver_input,
           input_name_by_path: input_name_by_path,
+          max_input_age_ns: max_input_age_ns,
           sync_tolerance_ns: Map.get(input_config, :sync_tolerance_ns),
           outputs: outputs,
           last_messages: %{},
@@ -262,8 +289,7 @@ defmodule BB.Estimator.Server do
     case Map.fetch(state.input_name_by_path, source_path) do
       {:ok, input_name} ->
         emit_input_telemetry(state, source_path)
-        state = reset_lost_timer(state)
-        dispatch_input(state, input_name, message, source_path)
+        accept_input(state, input_name, message, source_path)
 
       :error ->
         delegate_handle_info({:bb, source_path, message}, state)
@@ -272,6 +298,35 @@ defmodule BB.Estimator.Server do
 
   def handle_info(msg, state) do
     delegate_handle_info(msg, state)
+  end
+
+  defp accept_input(state, input_name, message, source_path) do
+    case check_intake(state, input_name, message) do
+      :ok ->
+        state = maybe_reset_lost_timer(state, input_name)
+        dispatch_input(state, input_name, message, source_path)
+
+      {:reject, reason} ->
+        emit_dropped_telemetry(state, input_name, reason)
+        {:noreply, transition_to(state, :degraded, reason, source_path)}
+    end
+  end
+
+  # Monotonic clocks are node-local, so a remote envelope's `monotonic_time`
+  # cannot be compared with anything this node has recorded.
+  defp check_intake(_state, _input_name, %Message{node: message_node})
+       when message_node != node(),
+       do: {:reject, :cross_node}
+
+  defp check_intake(state, input_name, message) do
+    if stale?(state, input_name, message), do: {:reject, :stale_input}, else: :ok
+  end
+
+  defp stale?(state, input_name, message) do
+    case Map.get(state.max_input_age_ns, input_name) do
+      nil -> false
+      max_age_ns -> System.monotonic_time(:nanosecond) - message.monotonic_time > max_age_ns
+    end
   end
 
   defp dispatch_input(%{mode: :single} = state, _input_name, message, source_path) do
@@ -295,10 +350,9 @@ defmodule BB.Estimator.Server do
       :ok ->
         invoke_handle_input(state, snapshot, driver_message, source_path)
 
-      {:sync_miss, late_input} ->
-        emit_dropped_telemetry(state, late_input, :sync_miss)
-        state = transition_to(state, :degraded, :sync_miss, source_path)
-        {:noreply, state}
+      {reason, rejected_input} ->
+        emit_dropped_telemetry(state, rejected_input, reason)
+        {:noreply, transition_to(state, :degraded, reason, source_path)}
     end
   end
 
@@ -313,16 +367,25 @@ defmodule BB.Estimator.Server do
   end
 
   defp check_sync(state, driver_message, snapshot) do
-    cond do
-      map_size(snapshot) < length(state.inputs) ->
-        {:sync_miss, first_missing_input(state.inputs, snapshot)}
-
-      is_nil(state.sync_tolerance_ns) ->
-        :ok
-
-      true ->
-        check_tolerance(snapshot, driver_message, state.sync_tolerance_ns, state.driver_input)
+    with :ok <- check_complete(state, snapshot),
+         :ok <- check_freshness(state, snapshot) do
+      check_tolerance(snapshot, driver_message, state.sync_tolerance_ns, state.driver_input)
     end
+  end
+
+  defp check_complete(state, snapshot) when map_size(snapshot) < length(state.inputs),
+    do: {:sync_miss, first_missing_input(state.inputs, snapshot)}
+
+  defp check_complete(_state, _snapshot), do: :ok
+
+  # A retained non-driver envelope can age past its budget while it waits for
+  # the next driver arrival, so the snapshot is re-checked at dispatch.
+  defp check_freshness(state, snapshot) do
+    Enum.reduce_while(snapshot, :ok, fn {name, message}, :ok ->
+      if stale?(state, name, message),
+        do: {:halt, {:stale_input, name}},
+        else: {:cont, :ok}
+    end)
   end
 
   defp first_missing_input(inputs, snapshot) do
@@ -330,6 +393,8 @@ defmodule BB.Estimator.Server do
       if Map.has_key?(snapshot, name), do: nil, else: name
     end)
   end
+
+  defp check_tolerance(_snapshot, _driver_message, nil, _driver_name), do: :ok
 
   defp check_tolerance(snapshot, driver_message, tolerance_ns, driver_name) do
     Enum.reduce_while(snapshot, :ok, fn
@@ -343,16 +408,16 @@ defmodule BB.Estimator.Server do
   end
 
   defp invoke_handle_input(state, input, driver_message, source_path) do
-    start_time = System.monotonic_time()
+    start_time_ns = System.monotonic_time(:nanosecond)
     result = state.callback_module.handle_input(input, state.user_state)
-    duration_ns = native_to_ns(System.monotonic_time() - start_time)
+    duration_ns = System.monotonic_time(:nanosecond) - start_time_ns
 
     state = record_dispatch_outcome(state, duration_ns, source_path)
     handle_callback_result(result, state, driver_message: driver_message, duration: duration_ns)
   end
 
-  defp record_dispatch_outcome(%{latency_budget_ns: nil} = state, _duration, _source_path),
-    do: state
+  defp record_dispatch_outcome(%{latency_budget_ns: nil} = state, _duration_ns, _source_path),
+    do: handle_in_budget(state)
 
   defp record_dispatch_outcome(state, duration_ns, source_path) do
     if duration_ns > state.latency_budget_ns do
@@ -380,8 +445,6 @@ defmodule BB.Estimator.Server do
         transition_to(%{state | consecutive_ok: 1}, :degraded, :recovered, nil)
     end
   end
-
-  defp native_to_ns(native), do: System.convert_time_unit(native, :native, :nanosecond)
 
   # ----------------------------------------------------------------------------
   # Other GenServer callbacks (with output-routing support)
@@ -528,7 +591,7 @@ defmodule BB.Estimator.Server do
         [:bb, :estimator, :latency],
         %{
           duration: duration,
-          input_to_output: System.monotonic_time() - driver_message.monotonic_time
+          input_to_output: System.monotonic_time(:nanosecond) - driver_message.monotonic_time
         },
         %{
           robot: state.bb.robot,
@@ -607,6 +670,13 @@ defmodule BB.Estimator.Server do
   # ----------------------------------------------------------------------------
   # Lost-detection timer
   # ----------------------------------------------------------------------------
+
+  defp maybe_reset_lost_timer(%{mode: :single} = state, _input_name), do: reset_lost_timer(state)
+
+  defp maybe_reset_lost_timer(%{driver_input: input_name} = state, input_name),
+    do: reset_lost_timer(state)
+
+  defp maybe_reset_lost_timer(state, _input_name), do: state
 
   defp reset_lost_timer(%{lost_after_ns: nil} = state), do: state
 

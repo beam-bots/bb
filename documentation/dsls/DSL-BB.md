@@ -756,8 +756,9 @@ See `BB.Estimator` for the behaviour contract.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
+| [`max_input_age`](#topology-link-sensor-estimator-max_input_age){: #topology-link-sensor-estimator-max_input_age } | `any` |  | The maximum age an input envelope may have when it arrives. Older envelopes are discarded before `handle_input/2` is called and the estimator transitions to `:degraded` with reason `:stale_input`. Individual `input` blocks may override this. Independent of `latency_budget`, which measures callback execution rather than input age. |
 | [`latency_budget`](#topology-link-sensor-estimator-latency_budget){: #topology-link-sensor-estimator-latency_budget } | `any` |  | Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires. |
-| [`lost_after`](#topology-link-sensor-estimator-lost_after){: #topology-link-sensor-estimator-lost_after } | `any` |  | If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. |
+| [`lost_after`](#topology-link-sensor-estimator-lost_after){: #topology-link-sensor-estimator-lost_after } | `any` |  | If no driver input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. Non-driver inputs do not reset the timer. |
 | [`recover_after`](#topology-link-sensor-estimator-recover_after){: #topology-link-sensor-estimator-recover_after } | `pos_integer` | `1` | Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping. |
 | [`on_degraded`](#topology-link-sensor-estimator-on_degraded){: #topology-link-sensor-estimator-on_degraded } | `atom` |  | Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] \| nil, previous_state: atom, new_state: :degraded}`. |
 | [`on_lost`](#topology-link-sensor-estimator-on_lost){: #topology-link-sensor-estimator-on_lost } | `atom` |  | Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`. |
@@ -850,8 +851,9 @@ See `BB.Estimator` for the behaviour contract.
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`sync_tolerance`](#topology-link-estimator-sync_tolerance){: #topology-link-estimator-sync_tolerance } | `any` |  | For multi-input estimators, the maximum age a non-driver input may have relative to the driver before its dispatch is dropped. Omit for unbounded tolerance (always dispatch with the latest snapshot). |
+| [`max_input_age`](#topology-link-estimator-max_input_age){: #topology-link-estimator-max_input_age } | `any` |  | The maximum age an input envelope may have when it arrives. Older envelopes are discarded before `handle_input/2` is called and the estimator transitions to `:degraded` with reason `:stale_input`. Individual `input` blocks may override this. Independent of `latency_budget`, which measures callback execution rather than input age. |
 | [`latency_budget`](#topology-link-estimator-latency_budget){: #topology-link-estimator-latency_budget } | `any` |  | Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires. |
-| [`lost_after`](#topology-link-estimator-lost_after){: #topology-link-estimator-lost_after } | `any` |  | If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. |
+| [`lost_after`](#topology-link-estimator-lost_after){: #topology-link-estimator-lost_after } | `any` |  | If no driver input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. Non-driver inputs do not reset the timer. |
 | [`recover_after`](#topology-link-estimator-recover_after){: #topology-link-estimator-recover_after } | `pos_integer` | `1` | Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping. |
 | [`on_degraded`](#topology-link-estimator-on_degraded){: #topology-link-estimator-on_degraded } | `atom` |  | Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] \| nil, previous_state: atom, new_state: :degraded}`. |
 | [`on_lost`](#topology-link-estimator-on_lost){: #topology-link-estimator-on_lost } | `atom` |  | Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`. |
@@ -892,6 +894,7 @@ sensor's output is implicitly consumed.
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`driver?`](#topology-link-estimator-input-driver?){: #topology-link-estimator-input-driver? } | `boolean` | `false` | When `true`, this input drives dispatch: the framework fires `handle_input/2` whenever a message arrives on this path, fanning in the most-recent value of every other input. |
+| [`max_input_age`](#topology-link-estimator-input-max_input_age){: #topology-link-estimator-input-max_input_age } | `any` |  | The maximum age an envelope on this path may have before it is discarded and the estimator transitions to `:degraded` with reason `:stale_input`. Overrides the estimator's `max_input_age`. Omit to inherit it. |
 
 
 
@@ -1198,8 +1201,9 @@ See `BB.Estimator` for the behaviour contract.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
+| [`max_input_age`](#topology-joint-sensor-estimator-max_input_age){: #topology-joint-sensor-estimator-max_input_age } | `any` |  | The maximum age an input envelope may have when it arrives. Older envelopes are discarded before `handle_input/2` is called and the estimator transitions to `:degraded` with reason `:stale_input`. Individual `input` blocks may override this. Independent of `latency_budget`, which measures callback execution rather than input age. |
 | [`latency_budget`](#topology-joint-sensor-estimator-latency_budget){: #topology-joint-sensor-estimator-latency_budget } | `any` |  | Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires. |
-| [`lost_after`](#topology-joint-sensor-estimator-lost_after){: #topology-joint-sensor-estimator-lost_after } | `any` |  | If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. |
+| [`lost_after`](#topology-joint-sensor-estimator-lost_after){: #topology-joint-sensor-estimator-lost_after } | `any` |  | If no driver input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. Non-driver inputs do not reset the timer. |
 | [`recover_after`](#topology-joint-sensor-estimator-recover_after){: #topology-joint-sensor-estimator-recover_after } | `pos_integer` | `1` | Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping. |
 | [`on_degraded`](#topology-joint-sensor-estimator-on_degraded){: #topology-joint-sensor-estimator-on_degraded } | `atom` |  | Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] \| nil, previous_state: atom, new_state: :degraded}`. |
 | [`on_lost`](#topology-joint-sensor-estimator-on_lost){: #topology-joint-sensor-estimator-on_lost } | `atom` |  | Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`. |
@@ -1463,8 +1467,9 @@ See `BB.Estimator` for the behaviour contract.
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
+| [`max_input_age`](#sensors-sensor-estimator-max_input_age){: #sensors-sensor-estimator-max_input_age } | `any` |  | The maximum age an input envelope may have when it arrives. Older envelopes are discarded before `handle_input/2` is called and the estimator transitions to `:degraded` with reason `:stale_input`. Individual `input` blocks may override this. Independent of `latency_budget`, which measures callback execution rather than input age. |
 | [`latency_budget`](#sensors-sensor-estimator-latency_budget){: #sensors-sensor-estimator-latency_budget } | `any` |  | Time budget per input dispatch. If `handle_input/2` takes longer than this, the estimator transitions to `:degraded` and (if configured) the `on_degraded` command fires. |
-| [`lost_after`](#sensors-sensor-estimator-lost_after){: #sensors-sensor-estimator-lost_after } | `any` |  | If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. |
+| [`lost_after`](#sensors-sensor-estimator-lost_after){: #sensors-sensor-estimator-lost_after } | `any` |  | If no driver input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. Non-driver inputs do not reset the timer. |
 | [`recover_after`](#sensors-sensor-estimator-recover_after){: #sensors-sensor-estimator-recover_after } | `pos_integer` | `1` | Number of consecutive in-budget completions required before transitioning from `:degraded` back to `:healthy`. Hysteresis to prevent flapping. |
 | [`on_degraded`](#sensors-sensor-estimator-on_degraded){: #sensors-sensor-estimator-on_degraded } | `atom` |  | Name of a command to fire when the estimator transitions into `:degraded`. The command receives `%{estimator: name, reason: atom, source_path: [atom] \| nil, previous_state: atom, new_state: :degraded}`. |
 | [`on_lost`](#sensors-sensor-estimator-on_lost){: #sensors-sensor-estimator-on_lost } | `atom` |  | Name of a command to fire when the estimator transitions into `:lost`. Receives the same metadata shape as `on_degraded`. |

@@ -77,6 +77,7 @@ spark_locals_without_parens = [
   material: 0,
   material: 1,
   max: 1,
+  max_input_age: 1,
   mesh: 0,
   mesh: 1,
   min: 1,

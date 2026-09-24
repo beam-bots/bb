@@ -506,7 +506,7 @@ State-estimation errors. Raised by `BB.Estimator` implementations or by `BB.Esti
 
 ### StaleInput
 
-An input arrived too late to be useful — either it exceeded the estimator's `latency_budget` or it landed outside the configured `sync_tolerance` and the algorithm opted to surface the failure rather than silently drop.
+An input arrived too late to be useful — its age exceeded the estimator's `max_input_age`. The framework drops such envelopes and degrades the estimator itself; this type is for algorithms that want to surface the overrun as a structured value instead.
 
 **Module:** `BB.Error.Estimator.StaleInput`
 

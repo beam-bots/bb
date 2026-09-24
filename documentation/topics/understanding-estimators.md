@@ -96,7 +96,8 @@ Multi-input estimators need a strategy for "I have a new message on input A — 
 
 1. **Driver-triggered dispatch.** Exactly one input is marked `driver?: true`. The driver's arrival triggers `handle_input/2`.
 2. **Last-known fan-in.** Non-driver inputs are sourced from a per-input "last known" cache the server maintains. On each driver arrival, the server snapshots that cache and builds a `%{input_name => message}` map.
-3. **Sync tolerance.** If any non-driver input's `monotonic_time` is older than the driver's by more than `sync_tolerance`, the dispatch is dropped instead of fired with a stale snapshot. The framework emits `[:bb, :estimator, :dropped]` telemetry with reason `:sync_miss`.
+3. **Intake freshness.** Each envelope is checked against its input's `max_input_age` on arrival, and again when the driver fans it in — a cached non-driver envelope can age out while it waits. Over-age envelopes are discarded with reason `:stale_input`. Age is an absolute budget per source; `sync_tolerance` is a relative one between sources.
+4. **Sync tolerance.** If any non-driver input's `monotonic_time` is older than the driver's by more than `sync_tolerance`, the dispatch is dropped instead of fired with a stale snapshot. The framework emits `[:bb, :estimator, :dropped]` telemetry with reason `:sync_miss`.
 
 The driver choice is a policy decision. Pick the input with the most reliable cadence (an IMU sampling at 200 Hz is a better driver than an odom topic that may stall when wheels stop). The non-driver inputs are then implicitly interpolated by "use the most recent reading you have" — a deliberately simple choice. Algorithms that need cleverer interpolation (linear interpolation between samples bracketing the driver's timestamp, for example) can implement that themselves on top of the raw inputs.
 
@@ -105,7 +106,7 @@ The driver choice is a policy decision. Pick the input with the most reliable ca
 The proposal explicitly avoided introducing a structured "health" payload or a separate health-monitoring process. Instead, three configurable transition commands fire on hysteresis-debounced state changes:
 
 - `on_degraded` — fires when the estimator transitions from `:healthy` to `:degraded` (latency overrun, sync miss, stale input, algorithm-reported divergence).
-- `on_lost` — fires when no input arrives within `lost_after`.
+- `on_lost` — fires when no driver input arrives within `lost_after`.
 - `on_recovered` — fires after `recover_after` consecutive in-budget completions return the estimator to `:healthy`.
 
 This shape is deliberate. Two reasons:
