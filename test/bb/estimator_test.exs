@@ -309,6 +309,34 @@ defmodule BB.EstimatorTest do
         :telemetry.detach(handler_id)
       end
     end
+
+    test "drops a remote envelope and degrades instead of dispatching it" do
+      handler_id = "cross-node-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach_many(
+        handler_id,
+        [[:bb, :estimator, :dropped], [:bb, :estimator, :transition]],
+        fn event, _meas, metadata, _ -> send(test_pid, {List.last(event), metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!(EchoRobot)
+
+        out_path = [:sensor, :base_link, :imu, :orientation]
+        {:ok, _} = BB.subscribe(EchoRobot, out_path)
+
+        {:ok, msg} = build_imu_message()
+        BB.publish(EchoRobot, [:sensor, :base_link, :imu], %{msg | node: :other@nowhere})
+
+        assert_receive {:dropped, %{reason: :cross_node}}, 500
+        assert_receive {:transition, %{to: :degraded, reason: :cross_node}}, 500
+        refute_receive {:bb, ^out_path, _}, 100
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
   end
 
   describe "Runtime - link-nested multi-input fan-in" do
@@ -368,6 +396,33 @@ defmodule BB.EstimatorTest do
         BB.publish(FanInRobot, [:sensor, :imu], imu_msg)
 
         assert_receive {:dropped, %{reason: :sync_miss}}, 500
+        refute_receive {:multi_input, _}, 100
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "a remote non-driver envelope leaves its alias missing" do
+      handler_id = "cross-node-fan-in-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :dropped],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:dropped, metadata}) end,
+        nil
+      )
+
+      try do
+        {:ok, odom_msg} = build_imu_message()
+        BB.publish(FanInRobot, [:sensor, :odom], %{odom_msg | node: :other@nowhere})
+
+        assert_receive {:dropped, %{source_input: :odom, reason: :cross_node}}, 500
+
+        {:ok, imu_msg} = build_imu_message()
+        BB.publish(FanInRobot, [:sensor, :imu], imu_msg)
+
+        assert_receive {:dropped, %{source_input: :odom, reason: :sync_miss}}, 500
         refute_receive {:multi_input, _}, 100
       after
         :telemetry.detach(handler_id)

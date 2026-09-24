@@ -190,7 +190,7 @@ Duration from a driver-input message arriving to the estimator emitting its outp
 
 ### `[:bb, :estimator, :dropped]`
 
-Counter emitted when a dispatch is dropped instead of fired. Currently emitted only for `:sync_miss` (multi-input fan-in: a non-driver input older than `sync_tolerance`).
+Counter emitted when an input is rejected at intake, or a dispatch is dropped instead of fired.
 
 **Measurements:**
 
@@ -205,7 +205,7 @@ Counter emitted when a dispatch is dropped instead of fired. Currently emitted o
 | `robot` | `atom` | Robot module |
 | `estimator` | `atom` | The estimator's name |
 | `source_input` | `atom` | The input that triggered the drop (`nil` if not input-specific) |
-| `reason` | `atom` | `:sync_miss` |
+| `reason` | `atom` | `:sync_miss` (multi-input fan-in: an input missing, or older than `sync_tolerance`) or `:cross_node` (the envelope was stamped with another node) |
 
 ### `[:bb, :estimator, :transition]`
 
@@ -225,7 +225,7 @@ Counter emitted on every health state transition. Fires whether or not an `on_*`
 | `estimator` | `atom` | The estimator's name |
 | `from` | `:healthy \| :degraded \| :lost` | Previous health state |
 | `to` | `:healthy \| :degraded \| :lost` | New health state |
-| `reason` | `atom` | `:latency_overrun`, `:sync_miss`, `:lost`, or `:recovered` |
+| `reason` | `atom` | `:latency_overrun`, `:sync_miss`, `:cross_node`, `:lost`, or `:recovered` |
 
 ## Diagnostic Events
 

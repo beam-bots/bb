@@ -11,6 +11,12 @@ defmodule BB.Estimator.Server do
   - Resolves parameter references in opts at startup and on parameter
     changes (mirroring `BB.Sensor.Server` / `BB.Controller.Server`).
   - Subscribes to the estimator's declared input paths.
+  - Rejects any envelope stamped with a `node` other than the local one
+    before it is compared against another envelope's timestamp, since
+    monotonic clocks are node-local. A rejected envelope is dropped with
+    reason `:cross_node` and is not retained, so a multi-input alias whose
+    newest envelope came from another node stays missing until a local one
+    arrives.
   - Dispatches incoming input messages to the callback module via
     `c:BB.Estimator.handle_input/2`. Single-input estimators receive the
     bare `%BB.Message{}`; multi-input estimators receive a
@@ -266,8 +272,7 @@ defmodule BB.Estimator.Server do
     case Map.fetch(state.input_name_by_path, source_path) do
       {:ok, input_name} ->
         emit_input_telemetry(state, source_path)
-        state = maybe_reset_lost_timer(state, input_name)
-        dispatch_input(state, input_name, message, source_path)
+        accept_input(state, input_name, message, source_path)
 
       :error ->
         delegate_handle_info({:bb, source_path, message}, state)
@@ -277,6 +282,26 @@ defmodule BB.Estimator.Server do
   def handle_info(msg, state) do
     delegate_handle_info(msg, state)
   end
+
+  defp accept_input(state, input_name, message, source_path) do
+    case check_intake(state, input_name, message) do
+      :ok ->
+        state = maybe_reset_lost_timer(state, input_name)
+        dispatch_input(state, input_name, message, source_path)
+
+      {:reject, reason} ->
+        emit_dropped_telemetry(state, input_name, reason)
+        {:noreply, transition_to(state, :degraded, reason, source_path)}
+    end
+  end
+
+  # Monotonic clocks are node-local, so a remote envelope's `monotonic_time`
+  # cannot be compared with anything this node has recorded.
+  defp check_intake(_state, _input_name, %Message{node: message_node})
+       when message_node != node(),
+       do: {:reject, :cross_node}
+
+  defp check_intake(_state, _input_name, _message), do: :ok
 
   defp dispatch_input(%{mode: :single} = state, _input_name, message, source_path) do
     invoke_handle_input(state, message, message, source_path)

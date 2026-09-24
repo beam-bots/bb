@@ -27,6 +27,7 @@ Wire an estimator's `latency_budget` / `lost_after` / `recover_after` timing con
 |---|---|---|
 | `handle_input/2` exceeds `latency_budget` | `:healthy → :degraded` | Reason `:latency_overrun` |
 | `sync_miss` on a multi-input dispatch | `:healthy → :degraded` | Reason `:sync_miss` |
+| An input envelope stamped with another node | `:healthy → :degraded` | Reason `:cross_node`; the envelope is discarded |
 | No input for `lost_after` | any → `:lost` | Reason `:lost`; reset by the driver input only |
 | First input after `:lost` | `:lost → :degraded` | Reason `:recovered`; counter resets to 1 |
 | `recover_after` consecutive in-budget dispatches | `:degraded → :healthy` | Reason `:recovered`; hysteresis prevents flapping |
@@ -203,6 +204,10 @@ If `on_lost: :emergency_stop` fires but the robot is in a state where `:emergenc
 ### `lost_after` tracks the driver input only
 
 For multi-input estimators the lost timer resets on driver arrivals, not on every declared input. A non-driver stream that keeps publishing cannot hide a driver that has stopped, which is the failure the timer exists to catch. Single-input estimators are unaffected — their sole input *is* the driver.
+
+### A remote envelope is treated as missing, not late
+
+Monotonic clocks are node-local, so an envelope whose `node` is not this node cannot be compared against anything recorded here. Such envelopes are dropped at intake with reason `:cross_node` and are *not* retained, which means a multi-input alias whose newest envelope came from another node stays missing — the next driver arrival drops with `:sync_miss` until a local envelope shows up. Publish across nodes by re-stamping on arrival, or run the estimator on the node that produces its inputs.
 
 ## See also
 
