@@ -351,8 +351,8 @@ defmodule BB.Estimator.Server do
     handle_callback_result(result, state, driver_message: driver_message, duration: duration_ns)
   end
 
-  defp record_dispatch_outcome(%{latency_budget_ns: nil} = state, _duration, _source_path),
-    do: state
+  defp record_dispatch_outcome(%{latency_budget_ns: nil} = state, _duration_ns, _source_path),
+    do: handle_in_budget(state)
 
   defp record_dispatch_outcome(state, duration_ns, source_path) do
     if duration_ns > state.latency_budget_ns do

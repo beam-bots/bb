@@ -513,6 +513,34 @@ defmodule BB.EstimatorTest do
       end
     end
 
+    test "recovers from :lost when no latency_budget is configured" do
+      handler_id = "recover-no-budget-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({LostRobot, []})
+
+        assert_receive {:transition, %{to: :lost, reason: :lost}}, 500
+
+        for _ <- 1..2 do
+          {:ok, msg} = build_imu_message()
+          BB.publish(LostRobot, [:sensor, :base_link, :imu], msg)
+        end
+
+        assert_receive {:transition, %{from: :lost, to: :degraded, reason: :recovered}}, 500
+        assert_receive {:transition, %{from: :degraded, to: :healthy, reason: :recovered}}, 500
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
     test "recovers to :healthy after recover_after consecutive in-budget completions" do
       handler_id = "recover-#{:erlang.unique_integer([:positive])}"
       test_pid = self()
