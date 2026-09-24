@@ -177,8 +177,8 @@ Duration from a driver-input message arriving to the estimator emitting its outp
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `duration` | `native_time` | Time spent inside `handle_input/2` |
-| `input_to_output` | `native_time` | Time from driver `monotonic_time` to emission |
+| `duration` | `integer` | Nanoseconds spent inside `handle_input/2` |
+| `input_to_output` | `integer` | Nanoseconds from the driver message's `monotonic_time` to emission |
 
 **Metadata:**
 

@@ -280,6 +280,35 @@ defmodule BB.EstimatorTest do
 
       assert_receive {:bb, ^out_path, %Message{payload: %Imu{}}}, 500
     end
+
+    test "latency telemetry reports nanoseconds on both measurements" do
+      handler_id = "latency-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :latency],
+        fn _event, measurements, _meta, _ -> send(test_pid, {:latency, measurements}) end,
+        nil
+      )
+
+      try do
+        start_supervised!(EchoRobot)
+
+        age_ns = 100_000_000
+        {:ok, msg} = build_imu_message_with_offset(-age_ns)
+        BB.publish(EchoRobot, [:sensor, :base_link, :imu], msg)
+
+        assert_receive {:latency, %{duration: duration, input_to_output: input_to_output}}, 500
+
+        assert duration >= 0
+        assert duration < 1_000_000_000
+        assert input_to_output >= age_ns
+        assert input_to_output < age_ns + 1_000_000_000
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
   end
 
   describe "Runtime - link-nested multi-input fan-in" do

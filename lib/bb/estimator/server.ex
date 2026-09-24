@@ -23,7 +23,9 @@ defmodule BB.Estimator.Server do
     snapshot.
   - Publishes each `{output_name, message}` returned from a callback's
     `{:reply, outputs, state}` reply to that output's configured path.
-  - Emits `:input`, `:output`, `:latency`, and `:dropped` telemetry.
+  - Emits `:input`, `:output`, `:latency`, and `:dropped` telemetry. Every
+    timing measurement is in nanoseconds, the same unit as
+    `%BB.Message{}.monotonic_time`.
 
   Health transitions, lost-detection, and `on_degraded` / `on_lost` /
   `on_recovered` command dispatch are Phase 2 and not handled here yet.
@@ -343,9 +345,9 @@ defmodule BB.Estimator.Server do
   end
 
   defp invoke_handle_input(state, input, driver_message, source_path) do
-    start_time = System.monotonic_time()
+    start_time_ns = System.monotonic_time(:nanosecond)
     result = state.callback_module.handle_input(input, state.user_state)
-    duration_ns = native_to_ns(System.monotonic_time() - start_time)
+    duration_ns = System.monotonic_time(:nanosecond) - start_time_ns
 
     state = record_dispatch_outcome(state, duration_ns, source_path)
     handle_callback_result(result, state, driver_message: driver_message, duration: duration_ns)
@@ -380,8 +382,6 @@ defmodule BB.Estimator.Server do
         transition_to(%{state | consecutive_ok: 1}, :degraded, :recovered, nil)
     end
   end
-
-  defp native_to_ns(native), do: System.convert_time_unit(native, :native, :nanosecond)
 
   # ----------------------------------------------------------------------------
   # Other GenServer callbacks (with output-routing support)
@@ -528,7 +528,7 @@ defmodule BB.Estimator.Server do
         [:bb, :estimator, :latency],
         %{
           duration: duration,
-          input_to_output: System.monotonic_time() - driver_message.monotonic_time
+          input_to_output: System.monotonic_time(:nanosecond) - driver_message.monotonic_time
         },
         %{
           robot: state.bb.robot,
