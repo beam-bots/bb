@@ -27,7 +27,12 @@ defmodule BB.Actuator.Server do
      `c:BB.Actuator.command_payloads/1`. A driver is never handed a command it
      didn't declare, so it can't be crashed by one it has no clause for.
   2. The robot must be armed.
-  3. The payload is translated from joint-space into motor-space using the
+  3. The command must carry the current arm epoch — see `BB.Safety.epoch/1`.
+     `BB.Actuator`'s send functions stamp it; a command built by hand and
+     delivered straight to an actuator carries none and is refused. This is
+     what stops a command outliving the arming session that authorised it,
+     which the armed check alone cannot see.
+  4. The payload is translated from joint-space into motor-space using the
      joint's transmission.
 
   The driver then receives it in `c:BB.Actuator.handle_command/2`, and its
@@ -43,6 +48,7 @@ defmodule BB.Actuator.Server do
   alias BB.Actuator.MotorProfile
   alias BB.Component.OptionsSchema
   alias BB.Error.State.NotArmed
+  alias BB.Error.State.StaleEpoch
   alias BB.Error.State.UnsupportedCommand
   alias BB.Message
   alias BB.Parameter.Changed, as: ParameterChanged
@@ -330,9 +336,23 @@ defmodule BB.Actuator.Server do
     end
   end
 
-  defp authorise(%Message{payload: %payload_module{}} = message, state) do
+  # The arm check runs before the epoch check, and the order matters for what
+  # the caller is told. A disarmed robot has no epoch at all, so every command
+  # aimed at one is also epoch-invalid; reporting that first would answer a
+  # disarmed robot with a stale-epoch error and bury the simpler, actionable
+  # cause. Checking armed first means a stale epoch is only ever reported when
+  # the robot really is armed — which is the interesting case, because it says
+  # the command outlived the session that authorised it.
+  defp authorise(%Message{} = message, state) do
+    with :ok <- authorise_supported(message, state),
+         :ok <- authorise_armed(message, state) do
+      authorise_epoch(message, state)
+    end
+  end
+
+  defp authorise_supported(%Message{payload: %payload_module{}}, state) do
     if payload_module in state.command_payloads do
-      authorise_armed(message, state)
+      :ok
     else
       {:error, :unsupported_command,
        UnsupportedCommand.exception(
@@ -356,6 +376,26 @@ defmodule BB.Actuator.Server do
        )}
     end
   end
+
+  defp authorise_epoch(%Message{payload: %payload_module{}, arm_epoch: epoch}, state) do
+    case Safety.epoch(state.bb.robot) do
+      {:ok, ^epoch} when is_integer(epoch) ->
+        :ok
+
+      current ->
+        {:error, :stale_epoch,
+         StaleEpoch.exception(
+           robot: state.bb.robot,
+           actuator: state.actuator_name,
+           command: payload_module,
+           epoch: epoch,
+           current_epoch: current_epoch(current)
+         )}
+    end
+  end
+
+  defp current_epoch({:ok, epoch}), do: epoch
+  defp current_epoch(:error), do: nil
 
   defp refuse(message, reason, error, transport, state) do
     Logger.warning(

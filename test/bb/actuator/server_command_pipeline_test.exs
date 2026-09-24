@@ -8,9 +8,11 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
   import ExUnit.CaptureLog
 
   alias BB.Error.State.NotArmed
+  alias BB.Error.State.StaleEpoch
   alias BB.Message
   alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Actuator.Command
+  alias BB.Test.Commands
 
   defmodule ArmedRobot do
     use BB
@@ -110,6 +112,8 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
   defp position(value), do: Message.new!(Command.Position, :motor, position: value)
 
+  defp position(robot, value), do: Commands.stamp(robot, position(value))
+
   describe "transports" do
     setup do
       start_robot(ArmedRobot)
@@ -118,7 +122,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
 
     test "a published command reaches the driver, which never subscribed itself" do
-      :ok = BB.publish(ArmedRobot, @actuator_topic, position(0.5))
+      :ok = BB.publish(ArmedRobot, @actuator_topic, position(ArmedRobot, 0.5))
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
                      500
@@ -155,7 +159,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
 
     test "a cast command reaches the driver" do
-      :ok = BB.cast(ArmedRobot, :motor, {:command, position(0.5)})
+      :ok = BB.cast(ArmedRobot, :motor, {:command, position(ArmedRobot, 0.5)})
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
                      500
@@ -163,7 +167,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
     test "a call command reaches the driver and is acknowledged" do
       assert {:ok, :accepted} =
-               BB.call(ArmedRobot, :motor, {:command, position(0.5)}, 500)
+               BB.call(ArmedRobot, :motor, {:command, position(ArmedRobot, 0.5)}, 500)
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
                      500
@@ -261,7 +265,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
     test "commands flow once the robot is armed" do
       :ok = BB.Safety.arm(DisarmedRobot)
-      :ok = BB.publish(DisarmedRobot, @actuator_topic, position(0.5))
+      :ok = BB.publish(DisarmedRobot, @actuator_topic, position(DisarmedRobot, 0.5))
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
                      500
@@ -291,6 +295,110 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
   end
 
+  describe "arm epoch gating" do
+    setup do
+      start_robot(DisarmedRobot)
+      :ok = BB.Safety.arm(DisarmedRobot)
+      :ok
+    end
+
+    test "an unstamped command is refused even though the robot is armed" do
+      assert {:error, %StaleEpoch{actuator: :motor, command: Command.Position, epoch: nil}} =
+               BB.call(DisarmedRobot, :motor, {:command, position(0.5)}, 500)
+
+      refute_receive {:received, :command, _message}, 200
+    end
+
+    test "an unstamped published command is dropped" do
+      :ok = BB.publish(DisarmedRobot, @actuator_topic, position(0.5))
+
+      refute_receive {:received, :command, _message}, 200
+    end
+
+    test "a command stamped in an earlier arming session is refused in a later one" do
+      stale = position(DisarmedRobot, 0.5)
+
+      :ok = BB.Safety.disarm(DisarmedRobot)
+      :ok = BB.Safety.arm(DisarmedRobot)
+
+      assert {:error, %StaleEpoch{epoch: stamped, current_epoch: current}} =
+               BB.call(DisarmedRobot, :motor, {:command, stale}, 500)
+
+      assert is_integer(stamped)
+      assert is_integer(current)
+      refute stamped == current
+
+      refute_receive {:received, :command, _message}, 200
+    end
+
+    test "a command stamped in the current session is applied" do
+      :ok = BB.cast(DisarmedRobot, :motor, {:command, position(DisarmedRobot, 0.5)})
+
+      assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
+                     500
+    end
+
+    test "BB.Actuator stamps its own sends, so they need no help" do
+      :ok = BB.Actuator.set_position(DisarmedRobot, :motor, 0.25)
+
+      assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.25}}},
+                     500
+    end
+
+    test "the command published for observers carries the epoch the actuator honoured" do
+      BB.subscribe(DisarmedRobot, @actuator_topic)
+      {:ok, epoch} = BB.Safety.epoch(DisarmedRobot)
+
+      :ok = BB.Actuator.set_position(DisarmedRobot, [:base, :shoulder, :motor], 0.25)
+
+      assert_receive {:bb, @actuator_topic, %Message{arm_epoch: ^epoch}}, 500
+    end
+
+    test "a stale refusal is logged" do
+      stale = position(DisarmedRobot, 0.5)
+      :ok = BB.Safety.disarm(DisarmedRobot)
+      :ok = BB.Safety.arm(DisarmedRobot)
+
+      log =
+        capture_log(fn ->
+          :ok = BB.cast(DisarmedRobot, :motor, {:command, stale})
+          refute_receive {:received, :command, _message}, 200
+        end)
+
+      assert log =~ "refused"
+      assert log =~ "arm epoch"
+    end
+
+    test "a stale command emits rejection telemetry" do
+      handler = {__MODULE__, :stale_epoch, self()}
+
+      :telemetry.attach(
+        handler,
+        [:bb, :actuator, :rejected],
+        fn event, measurements, metadata, pid ->
+          send(pid, {:telemetry, event, measurements, metadata})
+        end,
+        self()
+      )
+
+      on_exit(fn -> :telemetry.detach(handler) end)
+
+      :ok = BB.cast(DisarmedRobot, :motor, {:command, position(0.5)})
+
+      assert_receive {:telemetry, [:bb, :actuator, :rejected], %{count: 1}, metadata}, 500
+      assert metadata.reason == :stale_epoch
+      assert metadata.transport == :cast
+      assert metadata.payload_module == Command.Position
+    end
+
+    test "being disarmed is reported as such, not as a stale epoch" do
+      :ok = BB.Safety.disarm(DisarmedRobot)
+
+      assert {:error, %NotArmed{}} =
+               BB.call(DisarmedRobot, :motor, {:command, position(0.5)}, 500)
+    end
+  end
+
   describe "the driver's own subscriptions" do
     setup do
       start_robot(SubscribingRobot)
@@ -306,7 +414,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
 
     test "while commands on its own topic still get the transmission" do
-      :ok = BB.publish(SubscribingRobot, @actuator_topic, position(0.5))
+      :ok = BB.publish(SubscribingRobot, @actuator_topic, position(SubscribingRobot, 0.5))
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{} = cmd}}, 500
       assert_in_delta cmd.position, 25.0, 1.0e-9

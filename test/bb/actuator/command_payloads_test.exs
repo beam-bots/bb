@@ -8,6 +8,7 @@ defmodule BB.Actuator.CommandPayloadsTest do
   alias BB.Error.State.UnsupportedCommand
   alias BB.Message
   alias BB.Message.Actuator.Command
+  alias BB.Test.Commands
 
   defmodule Bespoke do
     @moduledoc false
@@ -127,7 +128,7 @@ defmodule BB.Actuator.CommandPayloadsTest do
 
   describe "widening" do
     test "a bespoke payload reaches handle_command/2 through the pipeline" do
-      message = Message.new!(Bespoke, :wide, pattern: :wave)
+      message = Commands.stamp(Robot, Message.new!(Bespoke, :wide, pattern: :wave))
       :ok = BB.publish(Robot, [:actuator, :base, :shoulder, :wide], message)
 
       assert_receive {:commanded, %Bespoke{pattern: :wave}}, 500
