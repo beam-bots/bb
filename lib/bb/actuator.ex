@@ -131,6 +131,20 @@ defmodule BB.Actuator do
   is not something a driver has to know about, and choosing one cannot skip
   the checks `BB.Actuator.Server` applies on the way in.
 
+  ### Arm epochs
+
+  Every function here stamps its outgoing command with the robot's current arm
+  epoch, and an actuator refuses a command whose epoch is missing or belongs to
+  an earlier arming session — so a command cannot outlive the arming session
+  that authorised it. See `BB.Safety.epoch/1`.
+
+  Building a command and delivering it yourself, with `BB.publish/4` or
+  `BB.cast/3`, skips the stamping and the command is refused. Either use the
+  functions here, or stamp it yourself:
+
+      {:ok, epoch} = BB.Safety.epoch(MyRobot)
+      message = %{Message.new!(Command.Position, :servo, position: 1.57) | arm_epoch: epoch}
+
   ### Addressing
 
   Every function accepts either the actuator's unique name or its full path
@@ -488,6 +502,7 @@ defmodule BB.Actuator do
   alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Actuator.Command
   alias BB.Robot
+  alias BB.Safety
   alias BB.Transmission
   alias BB.Transmission.Resolver, as: TransmissionResolver
 
@@ -647,7 +662,7 @@ defmodule BB.Actuator do
   defp deliver_position(:direct, robot, target, position, opts) do
     actuator_name = actuator_name!(robot, target)
     message = build_position_message(actuator_name, position, opts)
-    BB.cast(robot, actuator_name, {:command, message})
+    cast_command(robot, actuator_name, message)
   end
 
   defp build_position_message(frame_id, position, opts) do
@@ -677,7 +692,7 @@ defmodule BB.Actuator do
   def set_velocity(robot, target, velocity, opts \\ []) do
     path = actuator_path!(robot, target)
     message = build_velocity_message(path, velocity, opts)
-    BB.publish(robot, [:actuator | path], message)
+    publish_command(robot, path, message)
   end
 
   @doc """
@@ -687,7 +702,7 @@ defmodule BB.Actuator do
   def set_velocity!(robot, target, velocity, opts \\ []) do
     actuator_name = actuator_name!(robot, target)
     message = build_velocity_message(actuator_name, velocity, opts)
-    BB.cast(robot, actuator_name, {:command, message})
+    cast_command(robot, actuator_name, message)
   end
 
   @doc """
@@ -698,7 +713,7 @@ defmodule BB.Actuator do
   def set_velocity_sync(robot, target, velocity, opts \\ [], timeout \\ 5000) do
     actuator_name = actuator_name!(robot, target)
     message = build_velocity_message(actuator_name, velocity, opts)
-    BB.call(robot, actuator_name, {:command, message}, timeout)
+    call_command(robot, actuator_name, message, timeout)
   end
 
   defp build_velocity_message(frame_id, velocity, opts) do
@@ -727,7 +742,7 @@ defmodule BB.Actuator do
   def set_effort(robot, target, effort, opts \\ []) do
     path = actuator_path!(robot, target)
     message = build_effort_message(path, effort, opts)
-    BB.publish(robot, [:actuator | path], message)
+    publish_command(robot, path, message)
   end
 
   @doc """
@@ -737,7 +752,7 @@ defmodule BB.Actuator do
   def set_effort!(robot, target, effort, opts \\ []) do
     actuator_name = actuator_name!(robot, target)
     message = build_effort_message(actuator_name, effort, opts)
-    BB.cast(robot, actuator_name, {:command, message})
+    cast_command(robot, actuator_name, message)
   end
 
   @doc """
@@ -748,7 +763,7 @@ defmodule BB.Actuator do
   def set_effort_sync(robot, target, effort, opts \\ [], timeout \\ 5000) do
     actuator_name = actuator_name!(robot, target)
     message = build_effort_message(actuator_name, effort, opts)
-    BB.call(robot, actuator_name, {:command, message}, timeout)
+    call_command(robot, actuator_name, message, timeout)
   end
 
   defp build_effort_message(frame_id, effort, opts) do
@@ -785,7 +800,7 @@ defmodule BB.Actuator do
   def follow_trajectory(robot, target, waypoints, opts \\ []) do
     path = actuator_path!(robot, target)
     message = build_trajectory_message(path, waypoints, opts)
-    BB.publish(robot, [:actuator | path], message)
+    publish_command(robot, path, message)
   end
 
   @doc """
@@ -795,7 +810,7 @@ defmodule BB.Actuator do
   def follow_trajectory!(robot, target, waypoints, opts \\ []) do
     actuator_name = actuator_name!(robot, target)
     message = build_trajectory_message(actuator_name, waypoints, opts)
-    BB.cast(robot, actuator_name, {:command, message})
+    cast_command(robot, actuator_name, message)
   end
 
   @doc """
@@ -806,7 +821,7 @@ defmodule BB.Actuator do
   def follow_trajectory_sync(robot, target, waypoints, opts \\ [], timeout \\ 5000) do
     actuator_name = actuator_name!(robot, target)
     message = build_trajectory_message(actuator_name, waypoints, opts)
-    BB.call(robot, actuator_name, {:command, message}, timeout)
+    call_command(robot, actuator_name, message, timeout)
   end
 
   defp as_float(nil), do: nil
@@ -850,7 +865,7 @@ defmodule BB.Actuator do
   def stop(robot, target, opts \\ []) do
     path = actuator_path!(robot, target)
     message = build_stop_message(path, opts)
-    BB.publish(robot, [:actuator | path], message)
+    publish_command(robot, path, message)
   end
 
   @doc """
@@ -860,7 +875,7 @@ defmodule BB.Actuator do
   def stop!(robot, target, opts \\ []) do
     actuator_name = actuator_name!(robot, target)
     message = build_stop_message(actuator_name, opts)
-    BB.cast(robot, actuator_name, {:command, message})
+    cast_command(robot, actuator_name, message)
   end
 
   @doc """
@@ -871,7 +886,7 @@ defmodule BB.Actuator do
   def stop_sync(robot, target, opts \\ [], timeout \\ 5000) do
     actuator_name = actuator_name!(robot, target)
     message = build_stop_message(actuator_name, opts)
-    BB.call(robot, actuator_name, {:command, message}, timeout)
+    call_command(robot, actuator_name, message, timeout)
   end
 
   defp build_stop_message(frame_id, opts) do
@@ -900,7 +915,7 @@ defmodule BB.Actuator do
   def hold(robot, target, opts \\ []) do
     path = actuator_path!(robot, target)
     message = build_hold_message(path, opts)
-    BB.publish(robot, [:actuator | path], message)
+    publish_command(robot, path, message)
   end
 
   @doc """
@@ -910,7 +925,7 @@ defmodule BB.Actuator do
   def hold!(robot, target, opts \\ []) do
     actuator_name = actuator_name!(robot, target)
     message = build_hold_message(actuator_name, opts)
-    BB.cast(robot, actuator_name, {:command, message})
+    cast_command(robot, actuator_name, message)
   end
 
   @doc """
@@ -921,7 +936,7 @@ defmodule BB.Actuator do
   def hold_sync(robot, target, opts \\ [], timeout \\ 5000) do
     actuator_name = actuator_name!(robot, target)
     message = build_hold_message(actuator_name, opts)
-    BB.call(robot, actuator_name, {:command, message}, timeout)
+    call_command(robot, actuator_name, message, timeout)
   end
 
   defp build_hold_message(frame_id, opts) do
@@ -941,6 +956,7 @@ defmodule BB.Actuator do
   @spec send_command(module(), [atom()], Message.t(), keyword()) :: :ok | {:error, term()}
   defp send_command(robot, path, message, opts) do
     actuator_name = List.last(path)
+    message = stamp(robot, message)
 
     BB.publish(robot, [:actuator | path], message,
       except: [BB.Process.whereis(robot, actuator_name)]
@@ -949,6 +965,31 @@ defmodule BB.Actuator do
     robot
     |> BB.call(actuator_name, {:command, message}, Keyword.get(opts, :timeout, @default_timeout))
     |> command_result()
+  end
+
+  @spec publish_command(module(), [atom()], Message.t()) :: :ok
+  defp publish_command(robot, path, message),
+    do: BB.publish(robot, [:actuator | path], stamp(robot, message))
+
+  @spec cast_command(module(), atom(), Message.t()) :: :ok
+  defp cast_command(robot, actuator_name, message),
+    do: BB.cast(robot, actuator_name, {:command, stamp(robot, message)})
+
+  @spec call_command(module(), atom(), Message.t(), timeout()) :: term()
+  defp call_command(robot, actuator_name, message, timeout),
+    do: BB.call(robot, actuator_name, {:command, stamp(robot, message)}, timeout)
+
+  # Stamped here rather than in `BB.Message.new/3` because only a send is an
+  # attempt to drive hardware: a message may be built long before, or while the
+  # robot is disarmed, and what authorises it is the epoch in force as it goes
+  # out. An unarmed robot leaves the stamp empty, and the command is refused on
+  # arrival either way.
+  @spec stamp(module(), Message.t()) :: Message.t()
+  defp stamp(robot, message) do
+    case Safety.epoch(robot) do
+      {:ok, epoch} -> %{message | arm_epoch: epoch}
+      :error -> message
+    end
   end
 
   # A driver may answer `c:handle_command/2` with anything it likes; only a

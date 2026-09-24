@@ -15,6 +15,15 @@ defmodule BB.Message do
   and lets subscribers that listen to more than one robot attribute each
   delivered message to its source.
 
+  The `:arm_epoch` field carries the robot's arm epoch as it stood when the
+  message was sent, and is `nil` on everything else. `BB.Actuator`'s send
+  functions stamp it — deliberately at send time rather than in `new/3`, so a
+  command built while disarmed and sent after arming carries the epoch it was
+  actually sent under. `BB.Actuator.Server` refuses a command whose epoch is
+  missing or belongs to an earlier arming session, which is what stops a
+  command outliving the arming session that authorised it. See
+  `BB.Safety.epoch/1`.
+
   ## Usage
 
   Use the `use BB.Message` macro to define a payload type:
@@ -38,7 +47,7 @@ defmodule BB.Message do
   Note: `defstruct` must be defined before `use BB.Message`.
   """
 
-  defstruct [:monotonic_time, :wall_time, :node, :frame_id, :payload, :robot]
+  defstruct [:monotonic_time, :wall_time, :node, :frame_id, :payload, :robot, :arm_epoch]
 
   @type t :: %__MODULE__{
           monotonic_time: integer(),
@@ -46,7 +55,8 @@ defmodule BB.Message do
           node: node(),
           frame_id: atom(),
           payload: struct(),
-          robot: module() | nil
+          robot: module() | nil,
+          arm_epoch: BB.Safety.Controller.epoch() | nil
         }
 
   @doc "Returns a compiled Spark.Options schema for this payload type"
