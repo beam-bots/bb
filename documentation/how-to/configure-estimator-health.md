@@ -26,6 +26,7 @@ Wire an estimator's `latency_budget` / `lost_after` / `recover_after` timing con
 | Trigger | From → To | Notes |
 |---|---|---|
 | `handle_input/2` exceeds `latency_budget` | `:healthy → :degraded` | Reason `:latency_overrun` |
+| An input envelope older than `max_input_age` | `:healthy → :degraded` | Reason `:stale_input`; the envelope is discarded |
 | `sync_miss` on a multi-input dispatch | `:healthy → :degraded` | Reason `:sync_miss` |
 | An input envelope stamped with another node | `:healthy → :degraded` | Reason `:cross_node`; the envelope is discarded |
 | No input for `lost_after` | any → `:lost` | Reason `:lost`; reset by the driver input only |
@@ -191,6 +192,34 @@ Wiring up just `on_lost` (no `on_degraded` or `on_recovered`) is fine — useful
 
 Omit all three `on_*` slots. Transitions still happen internally and still fire telemetry, but no policy is enforced. Useful during early bring-up when you're observing how an estimator behaves but haven't decided yet what the failure response should be.
 
+## Bound how old an input may be
+
+`max_input_age` is the age budget for the envelopes themselves, measured from each message's `monotonic_time` to the moment it reaches the estimator. Anything older is discarded before `handle_input/2` runs, and the estimator degrades with reason `:stale_input`.
+
+Declare it on the estimator to cover every input:
+
+```elixir
+estimator :pose, MyRobot.PoseFilter do
+  max_input_age ~u(50 millisecond)
+  on_degraded :pose_degraded
+end
+```
+
+Sources with genuinely different rates want genuinely different budgets, so an individual `input` may override the estimator-level value. A 30 Hz camera and a 1 kHz force sensor feeding the same filter are not stale at the same age:
+
+```elixir
+estimator :grasp, MyRobot.GraspEstimator do
+  max_input_age ~u(100 millisecond)
+
+  input :camera, [:sensor, :head, :camera], driver?: true
+  input :force,  [:sensor, :gripper, :force], max_input_age: ~u(5 millisecond)
+end
+```
+
+Inputs with no budget of their own inherit the estimator's; if the estimator declares none either, that input is never rejected on age.
+
+Retained non-driver envelopes are re-checked when the driver arrives, so an auxiliary stream that goes quiet eventually drops the dispatch rather than feeding `handle_input/2` an envelope that has aged out while it waited.
+
 ## Common gotchas
 
 ### `allowed_states` rejection is silent
@@ -199,7 +228,7 @@ If `on_lost: :emergency_stop` fires but the robot is in a state where `:emergenc
 
 ### `latency_budget` measures dispatch duration, not message age
 
-`latency_budget` is the time spent inside `handle_input/2`. If the budget is set to `~u(20 millisecond)` and your algorithm takes 25 ms to complete, the transition fires regardless of whether the input arrived "on time". This is intentional — it's the algorithm's response time that matters for downstream consumers. To detect *stale inputs* arriving late, write a `BB.Controller` that monitors `monotonic_time` on the relevant topic.
+`latency_budget` is the time spent inside `handle_input/2`. If the budget is set to `~u(20 millisecond)` and your algorithm takes 25 ms to complete, the transition fires regardless of whether the input arrived "on time". This is intentional — it's the algorithm's response time that matters for downstream consumers. Use `max_input_age` to bound message age; the two are independent.
 
 ### `lost_after` tracks the driver input only
 

@@ -17,6 +17,11 @@ defmodule BB.Dsl.Estimator.Input do
 
   Single-input link-nested estimators omit `driver?:` (or set it to `true`
   on the sole input).
+
+  `max_input_age` bounds how old an envelope on this path may be. It
+  overrides the estimator-level `max_input_age`, so a 30 Hz camera and a
+  1 kHz force sensor feeding the same estimator can carry different
+  staleness budgets.
   """
 
   alias Spark.Dsl.Entity
@@ -25,13 +30,15 @@ defmodule BB.Dsl.Estimator.Input do
             __spark_metadata__: nil,
             name: nil,
             path: nil,
-            driver?: false
+            driver?: false,
+            max_input_age: nil
 
   @type t :: %__MODULE__{
           __identifier__: any,
           __spark_metadata__: Entity.spark_meta(),
           name: atom,
           path: [atom],
-          driver?: boolean
+          driver?: boolean,
+          max_input_age: nil | Localize.Unit.t()
         }
 end

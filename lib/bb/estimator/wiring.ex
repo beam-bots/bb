@@ -14,7 +14,9 @@ defmodule BB.Estimator.Wiring do
   - Input-spec resolution (sensor-nested: synthesised single implicit
     input pointing at the parent sensor's path; link-nested: passed
     through from the entity's declared `input` blocks).
-  - `sync_tolerance` unit conversion to nanoseconds.
+  - `sync_tolerance` and `max_input_age` unit conversion to nanoseconds,
+    resolving each input's `max_input_age` against the estimator-level
+    default.
   - Construction of the `BB.Estimator.Context` delivered to the user
     module's `init/1`.
   - Construction of the `BB.Process.via/2` registration tuple so each
@@ -79,7 +81,14 @@ defmodule BB.Estimator.Wiring do
 
     inputs = %{
       mode: :single,
-      inputs: [%{name: :parent, path: parent_sensor_path, driver?: true}],
+      inputs: [
+        %{
+          name: :parent,
+          path: parent_sensor_path,
+          driver?: true,
+          max_input_age_ns: duration_to_ns(est.max_input_age)
+        }
+      ],
       sync_tolerance_ns: nil
     }
 
@@ -101,9 +110,16 @@ defmodule BB.Estimator.Wiring do
   # ----------------------------------------------------------------------------
 
   defp link_nested_inputs(%Estimator{inputs: declared} = est) do
+    default_max_age_ns = duration_to_ns(est.max_input_age)
+
     specs =
       Enum.map(declared, fn input ->
-        %{name: input.name, path: input.path, driver?: input.driver?}
+        %{
+          name: input.name,
+          path: input.path,
+          driver?: input.driver?,
+          max_input_age_ns: duration_to_ns(input.max_input_age) || default_max_age_ns
+        }
       end)
 
     %{

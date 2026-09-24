@@ -22,6 +22,12 @@ defmodule BB.Estimator.Server do
     bare `%BB.Message{}`; multi-input estimators receive a
     `%{input_name => %BB.Message{}}` map gathered when the driver input
     arrives.
+  - Enforces `max_input_age`: an envelope older than its input's budget is
+    discarded before `handle_input/2` is called, and the estimator
+    transitions to `:degraded` with reason `:stale_input`. Retained
+    non-driver envelopes are re-checked when the driver arrives, since they
+    can age past their budget while they wait. This is independent of
+    `latency_budget`, which measures callback execution time.
   - For multi-input estimators, enforces `sync_tolerance`: if any
     non-driver input is stale relative to the driver by more than the
     configured tolerance, the dispatch is dropped (with
@@ -48,7 +54,9 @@ defmodule BB.Estimator.Server do
 
   - `:__callback_module__` - the user's estimator module.
   - `:__estimator_inputs__` - `%{mode: :single | :multi, inputs: [...],
-    sync_tolerance_ns: integer() | nil}` describing the input wiring.
+    sync_tolerance_ns: integer() | nil}` describing the input wiring. Each
+    input spec carries `:name`, `:path`, `:driver?` and a resolved
+    `:max_input_age_ns`.
   - `:__estimator_outputs__` - `%{output_name => [atom()]}` mapping output
     names to their full pubsub paths.
   - `:bb` - `%{robot: module, path: [atom]}`, the per-process context.
@@ -80,6 +88,7 @@ defmodule BB.Estimator.Server do
     :inputs,
     :driver_input,
     :input_name_by_path,
+    :max_input_age_ns,
     :sync_tolerance_ns,
     :outputs,
     :last_messages,
@@ -98,7 +107,8 @@ defmodule BB.Estimator.Server do
   @type input_spec :: %{
           required(:name) => atom(),
           required(:path) => [atom()],
-          required(:driver?) => boolean()
+          required(:driver?) => boolean(),
+          optional(:max_input_age_ns) => integer() | nil
         }
 
   @type health_state :: :healthy | :degraded | :lost
@@ -114,6 +124,7 @@ defmodule BB.Estimator.Server do
           inputs: [input_spec()],
           driver_input: atom() | nil,
           input_name_by_path: %{[atom()] => atom()},
+          max_input_age_ns: %{atom() => integer() | nil},
           sync_tolerance_ns: integer() | nil,
           outputs: %{atom() => [atom()]},
           last_messages: %{atom() => Message.t()},
@@ -169,6 +180,11 @@ defmodule BB.Estimator.Server do
       |> Enum.map(fn input -> {input.path, input.name} end)
       |> Map.new()
 
+    max_input_age_ns =
+      Map.new(input_config.inputs, fn input ->
+        {input.name, Map.get(input, :max_input_age_ns)}
+      end)
+
     driver_input =
       Enum.find_value(input_config.inputs, fn
         %{driver?: true, name: name} -> name
@@ -195,6 +211,7 @@ defmodule BB.Estimator.Server do
           inputs: input_config.inputs,
           driver_input: driver_input,
           input_name_by_path: input_name_by_path,
+          max_input_age_ns: max_input_age_ns,
           sync_tolerance_ns: Map.get(input_config, :sync_tolerance_ns),
           outputs: outputs,
           last_messages: %{},
@@ -301,7 +318,16 @@ defmodule BB.Estimator.Server do
        when message_node != node(),
        do: {:reject, :cross_node}
 
-  defp check_intake(_state, _input_name, _message), do: :ok
+  defp check_intake(state, input_name, message) do
+    if stale?(state, input_name, message), do: {:reject, :stale_input}, else: :ok
+  end
+
+  defp stale?(state, input_name, message) do
+    case Map.get(state.max_input_age_ns, input_name) do
+      nil -> false
+      max_age_ns -> System.monotonic_time(:nanosecond) - message.monotonic_time > max_age_ns
+    end
+  end
 
   defp dispatch_input(%{mode: :single} = state, _input_name, message, source_path) do
     invoke_handle_input(state, message, message, source_path)
@@ -324,10 +350,9 @@ defmodule BB.Estimator.Server do
       :ok ->
         invoke_handle_input(state, snapshot, driver_message, source_path)
 
-      {:sync_miss, late_input} ->
-        emit_dropped_telemetry(state, late_input, :sync_miss)
-        state = transition_to(state, :degraded, :sync_miss, source_path)
-        {:noreply, state}
+      {reason, rejected_input} ->
+        emit_dropped_telemetry(state, rejected_input, reason)
+        {:noreply, transition_to(state, :degraded, reason, source_path)}
     end
   end
 
@@ -342,16 +367,25 @@ defmodule BB.Estimator.Server do
   end
 
   defp check_sync(state, driver_message, snapshot) do
-    cond do
-      map_size(snapshot) < length(state.inputs) ->
-        {:sync_miss, first_missing_input(state.inputs, snapshot)}
-
-      is_nil(state.sync_tolerance_ns) ->
-        :ok
-
-      true ->
-        check_tolerance(snapshot, driver_message, state.sync_tolerance_ns, state.driver_input)
+    with :ok <- check_complete(state, snapshot),
+         :ok <- check_freshness(state, snapshot) do
+      check_tolerance(snapshot, driver_message, state.sync_tolerance_ns, state.driver_input)
     end
+  end
+
+  defp check_complete(state, snapshot) when map_size(snapshot) < length(state.inputs),
+    do: {:sync_miss, first_missing_input(state.inputs, snapshot)}
+
+  defp check_complete(_state, _snapshot), do: :ok
+
+  # A retained non-driver envelope can age past its budget while it waits for
+  # the next driver arrival, so the snapshot is re-checked at dispatch.
+  defp check_freshness(state, snapshot) do
+    Enum.reduce_while(snapshot, :ok, fn {name, message}, :ok ->
+      if stale?(state, name, message),
+        do: {:halt, {:stale_input, name}},
+        else: {:cont, :ok}
+    end)
   end
 
   defp first_missing_input(inputs, snapshot) do
@@ -359,6 +393,8 @@ defmodule BB.Estimator.Server do
       if Map.has_key?(snapshot, name), do: nil, else: name
     end)
   end
+
+  defp check_tolerance(_snapshot, _driver_message, nil, _driver_name), do: :ok
 
   defp check_tolerance(snapshot, driver_message, tolerance_ns, driver_name) do
     Enum.reduce_while(snapshot, :ok, fn
