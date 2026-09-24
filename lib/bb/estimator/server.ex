@@ -23,12 +23,14 @@ defmodule BB.Estimator.Server do
     snapshot.
   - Publishes each `{output_name, message}` returned from a callback's
     `{:reply, outputs, state}` reply to that output's configured path.
-  - Emits `:input`, `:output`, `:latency`, and `:dropped` telemetry. Every
-    timing measurement is in nanoseconds, the same unit as
+  - Runs the `:healthy` / `:degraded` / `:lost` health state machine and
+    dispatches the configured `on_degraded` / `on_lost` / `on_recovered`
+    commands on each transition. For multi-input estimators only driver
+    arrivals reset the `lost_after` timer, so a live auxiliary stream
+    cannot mask a driver that has stopped publishing.
+  - Emits `:input`, `:output`, `:latency`, `:dropped`, and `:transition`
+    telemetry. Every timing measurement is in nanoseconds, the same unit as
     `%BB.Message{}.monotonic_time`.
-
-  Health transitions, lost-detection, and `on_degraded` / `on_lost` /
-  `on_recovered` command dispatch are Phase 2 and not handled here yet.
 
   ## Init args
 
@@ -264,7 +266,7 @@ defmodule BB.Estimator.Server do
     case Map.fetch(state.input_name_by_path, source_path) do
       {:ok, input_name} ->
         emit_input_telemetry(state, source_path)
-        state = reset_lost_timer(state)
+        state = maybe_reset_lost_timer(state, input_name)
         dispatch_input(state, input_name, message, source_path)
 
       :error ->
@@ -607,6 +609,13 @@ defmodule BB.Estimator.Server do
   # ----------------------------------------------------------------------------
   # Lost-detection timer
   # ----------------------------------------------------------------------------
+
+  defp maybe_reset_lost_timer(%{mode: :single} = state, _input_name), do: reset_lost_timer(state)
+
+  defp maybe_reset_lost_timer(%{driver_input: input_name} = state, input_name),
+    do: reset_lost_timer(state)
+
+  defp maybe_reset_lost_timer(state, _input_name), do: state
 
   defp reset_lost_timer(%{lost_after_ns: nil} = state), do: state
 

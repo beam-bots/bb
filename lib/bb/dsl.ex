@@ -327,7 +327,7 @@ defmodule BB.Dsl do
       type: unit_type(compatible: :second),
       required: false,
       doc:
-        "If no input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires."
+        "If no driver input arrives within this duration, the estimator transitions to `:lost` and (if configured) the `on_lost` command fires. Non-driver inputs do not reset the timer."
     ],
     recover_after: [
       type: :pos_integer,

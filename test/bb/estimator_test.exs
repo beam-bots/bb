@@ -491,10 +491,82 @@ defmodule BB.EstimatorTest do
       end
     end
 
+    defmodule DriverLivenessRobot do
+      @moduledoc false
+      use BB
+
+      sensors do
+        sensor :imu, MySensor
+        sensor :odom, MySensor
+      end
+
+      topology do
+        link :base_link do
+          estimator :pose, MultiInputEstimator do
+            input :imu, [:sensor, :imu], driver?: true
+            input :odom, [:sensor, :odom]
+            lost_after(~u(150 millisecond))
+          end
+        end
+      end
+    end
+
     setup do
       :persistent_term.put(:slow_estimator_sleep_ms, 0)
       on_exit(fn -> :persistent_term.erase(:slow_estimator_sleep_ms) end)
       :ok
+    end
+
+    test "a live non-driver input does not keep a dead driver alive" do
+      handler_id = "aux-lost-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({DriverLivenessRobot, []})
+
+        for _ <- 1..15 do
+          {:ok, msg} = build_imu_message()
+          BB.publish(DriverLivenessRobot, [:sensor, :odom], msg)
+          Process.sleep(20)
+        end
+
+        assert_receive {:transition, %{to: :lost, reason: :lost}}, 500
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "driver arrivals keep the lost timer alive" do
+      handler_id = "driver-alive-#{:erlang.unique_integer([:positive])}"
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:bb, :estimator, :transition],
+        fn _event, _meas, metadata, _ -> send(test_pid, {:transition, metadata}) end,
+        nil
+      )
+
+      try do
+        start_supervised!({DriverLivenessRobot, []})
+
+        for _ <- 1..15 do
+          {:ok, msg} = build_imu_message()
+          BB.publish(DriverLivenessRobot, [:sensor, :imu], msg)
+          Process.sleep(20)
+        end
+
+        refute_received {:transition, %{to: :lost}}
+      after
+        :telemetry.detach(handler_id)
+      end
     end
 
     test "transitions to :degraded when handle_input exceeds latency_budget" do

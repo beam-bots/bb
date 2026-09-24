@@ -27,7 +27,7 @@ Wire an estimator's `latency_budget` / `lost_after` / `recover_after` timing con
 |---|---|---|
 | `handle_input/2` exceeds `latency_budget` | `:healthy → :degraded` | Reason `:latency_overrun` |
 | `sync_miss` on a multi-input dispatch | `:healthy → :degraded` | Reason `:sync_miss` |
-| No input for `lost_after` | any → `:lost` | Reason `:lost`; reset on every input |
+| No input for `lost_after` | any → `:lost` | Reason `:lost`; reset by the driver input only |
 | First input after `:lost` | `:lost → :degraded` | Reason `:recovered`; counter resets to 1 |
 | `recover_after` consecutive in-budget dispatches | `:degraded → :healthy` | Reason `:recovered`; hysteresis prevents flapping |
 
@@ -200,9 +200,9 @@ If `on_lost: :emergency_stop` fires but the robot is in a state where `:emergenc
 
 `latency_budget` is the time spent inside `handle_input/2`. If the budget is set to `~u(20 millisecond)` and your algorithm takes 25 ms to complete, the transition fires regardless of whether the input arrived "on time". This is intentional — it's the algorithm's response time that matters for downstream consumers. To detect *stale inputs* arriving late, write a `BB.Controller` that monitors `monotonic_time` on the relevant topic.
 
-### `lost_after` is reset on every input, even non-driver
+### `lost_after` tracks the driver input only
 
-For multi-input estimators the lost timer resets whenever *any* declared input arrives — even ones that aren't the driver. If you want lost detection to depend only on the driver, set `lost_after` only after considering whether a non-driver-only stream should count as "alive enough".
+For multi-input estimators the lost timer resets on driver arrivals, not on every declared input. A non-driver stream that keeps publishing cannot hide a driver that has stopped, which is the failure the timer exists to catch. Single-input estimators are unaffected — their sole input *is* the driver.
 
 ## See also
 
