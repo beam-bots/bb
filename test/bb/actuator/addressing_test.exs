@@ -7,6 +7,7 @@ defmodule BB.Actuator.AddressingTest do
 
   alias BB.Message
   alias BB.Message.Actuator.Command
+  alias BB.Test.Commands
 
   defmodule Robot do
     use BB
@@ -139,5 +140,6 @@ defmodule BB.Actuator.AddressingTest do
     end
   end
 
-  defp position(value), do: Message.new!(Command.Position, :motor, position: value)
+  defp position(value),
+    do: Commands.stamp(Robot, Message.new!(Command.Position, :motor, position: value))
 end

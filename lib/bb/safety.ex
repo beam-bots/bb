@@ -86,6 +86,30 @@ defmodule BB.Safety do
   defdelegate state(robot_module), to: BB.Safety.Controller
 
   @doc """
+  Get the current arm epoch for a robot.
+
+  Every successful arm allocates a new epoch, and it is discarded as soon as a
+  disarm begins, so an epoch identifies one arming session rather than the
+  robot. Outbound actuator commands are stamped with the epoch current at the
+  moment they are sent, and refused if they arrive under a different one — see
+  `BB.Actuator`.
+
+  Returns `{:ok, epoch}` while armed and `:error` otherwise. A long-lived
+  process holding state gathered under one arming session can compare the
+  epoch it last acted under against this one to find out whether a
+  disarm/re-arm cycle has happened underneath it:
+
+      case BB.Safety.epoch(MyRobot) do
+        {:ok, ^last_epoch} -> :same_session
+        {:ok, _epoch} -> :rearmed_since
+        :error -> :not_armed
+      end
+
+  Fast ETS read - does not go through GenServer.
+  """
+  defdelegate epoch(robot_module), to: BB.Safety.Controller
+
+  @doc """
   Check if a robot is in error state.
 
   Returns `true` if a disarm operation failed and the robot requires

@@ -48,6 +48,47 @@ Every robot has a safety state managed by `BB.Safety.Controller`:
 
 Commands are rejected while in `:disarming` state. The `:error` state prevents re-arming until an operator acknowledges the failure with `BB.Safety.force_disarm/1`.
 
+## Arm Epochs
+
+`BB.Safety.armed?/1` answers "is the robot armed right now?". That is not the
+same question as "has the robot been armed continuously since this command was
+created?", and the difference matters: without the second answer, a command
+created during one arming session can still be applied during a later one,
+after an intervening disarm that was supposed to make the robot safe.
+
+So each successful arm allocates an **arm epoch** — a fencing token for that
+arming session, readable with `BB.Safety.epoch/1`:
+
+```elixir
+{:ok, epoch} = BB.Safety.epoch(MyRobot)   # while armed
+:error = BB.Safety.epoch(MyRobot)         # any other state
+```
+
+The epoch is discarded on the transition to `:disarming`, *before* any disarm
+callback runs, so nothing authorised against the session being torn down can
+still be applied once a disarm has begun. `:disarmed` and `:error` have no
+epoch at all, and a later arm allocates a fresh one rather than reinstating the
+old.
+
+`BB.Actuator`'s send functions stamp each outgoing command with the epoch
+current at the moment it is sent — not when the message was built — and
+`BB.Actuator.Server` refuses any command whose epoch is missing or belongs to
+an earlier session, with a `BB.Error.State.StaleEpoch`.
+
+A command built by hand and delivered straight to an actuator carries no epoch
+and is refused. Use the `BB.Actuator` send functions, which stamp for you, or
+stamp it yourself:
+
+```elixir
+{:ok, epoch} = BB.Safety.epoch(MyRobot)
+message = %{BB.Message.new!(Command.Position, :motor, position: 1.57) | arm_epoch: epoch}
+```
+
+Epochs also give a long-lived process a way to notice that the ground moved
+under it. A controller holding state gathered under one arming session can
+compare the epoch it last acted under against the current one, and discard that
+state if a disarm/re-arm cycle happened while it was idle.
+
 ## Why Stateless Disarm Callbacks?
 
 The `disarm/1` callback receives only options, not GenServer state. This design choice exists because:
@@ -266,6 +307,8 @@ Always design physical systems assuming software may not execute cleanup.
 | Can I arm a robot in `:error` state? | No, use `force_disarm/1` first |
 | Do disarm callbacks run concurrently? | Yes, with 5 second timeout |
 | Can commands execute while disarming? | No, rejected with `:disarming` error |
+| Can a command outlive the arming session that authorised it? | No, it is refused as a stale arm epoch |
+| How do I tell whether the robot re-armed while I wasn't looking? | Compare `BB.Safety.epoch/1` against the one you last acted under |
 | Are robots disarmed on shutdown? | Yes, best-effort during controller terminate |
 | What happens when a hardware error is reported? | Event is published to `[:safety, :error]`; no state change. Components escalate by crashing. |
 | How is the robot force-disarmed on persistent failure? | When the topology supervisor exhausts its restart budget and stops, the safety controller force-disarms and transitions to `:error`. |

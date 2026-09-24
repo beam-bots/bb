@@ -7,6 +7,7 @@ defmodule BB.Actuator.ServerTransmissionTest do
 
   alias BB.Message
   alias BB.Message.Actuator.Command
+  alias BB.Test.Commands
 
   defmodule WithTransmission do
     use BB
@@ -79,7 +80,10 @@ defmodule BB.Actuator.ServerTransmissionTest do
         BB.publish(
           WithTransmission,
           [:actuator, :base, :shoulder, :motor],
-          Message.new!(Command.Position, :motor, position: :math.pi() / 4 + 0.01)
+          Commands.stamp(
+            WithTransmission,
+            Message.new!(Command.Position, :motor, position: :math.pi() / 4 + 0.01)
+          )
         )
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{} = cmd}}, 500
@@ -90,7 +94,9 @@ defmodule BB.Actuator.ServerTransmissionTest do
 
     test "transforms a Position command via cast" do
       message = Message.new!(Command.Position, :motor, position: :math.pi() / 4 + 0.01)
-      :ok = BB.cast(WithTransmission, :motor, {:command, message})
+
+      :ok =
+        BB.cast(WithTransmission, :motor, {:command, Commands.stamp(WithTransmission, message)})
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{} = cmd}}, 500
       expected = BB.Transmission.apply_position(:math.pi() / 4 + 0.01, @transmission)
@@ -99,7 +105,14 @@ defmodule BB.Actuator.ServerTransmissionTest do
 
     test "transforms a Position command via call" do
       message = Message.new!(Command.Position, :motor, position: :math.pi() / 4 + 0.01)
-      {:ok, :accepted} = BB.call(WithTransmission, :motor, {:command, message}, 500)
+
+      {:ok, :accepted} =
+        BB.call(
+          WithTransmission,
+          :motor,
+          {:command, Commands.stamp(WithTransmission, message)},
+          500
+        )
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{} = cmd}}, 500
       expected = BB.Transmission.apply_position(:math.pi() / 4 + 0.01, @transmission)
@@ -110,7 +123,8 @@ defmodule BB.Actuator.ServerTransmissionTest do
       message =
         Message.new!(Command.Position, :motor, position: :math.pi() / 4, velocity: 0.1)
 
-      :ok = BB.cast(WithTransmission, :motor, {:command, message})
+      :ok =
+        BB.cast(WithTransmission, :motor, {:command, Commands.stamp(WithTransmission, message)})
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{} = cmd}}, 500
       assert_in_delta cmd.velocity, -50.0 * 0.1, 1.0e-9
@@ -118,7 +132,7 @@ defmodule BB.Actuator.ServerTransmissionTest do
 
     test "passes Hold commands through unchanged" do
       hold = Message.new!(Command.Hold, :motor, [])
-      :ok = BB.cast(WithTransmission, :motor, {:command, hold})
+      :ok = BB.cast(WithTransmission, :motor, {:command, Commands.stamp(WithTransmission, hold)})
 
       assert_receive {:received, :command, %Message{payload: %Command.Hold{}}}, 500
     end
@@ -132,7 +146,13 @@ defmodule BB.Actuator.ServerTransmissionTest do
 
     test "position commands flow through unchanged" do
       message = Message.new!(Command.Position, :motor, position: 1.23)
-      :ok = BB.cast(WithoutTransmission, :motor, {:command, message})
+
+      :ok =
+        BB.cast(
+          WithoutTransmission,
+          :motor,
+          {:command, Commands.stamp(WithoutTransmission, message)}
+        )
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: p}}}, 500
       assert p == 1.23

@@ -29,6 +29,19 @@ defmodule BB.Safety.Controller do
   Disarm callbacks run concurrently with a timeout. If any callback fails or times out,
   the robot transitions to `:error` state.
 
+  ## Arm Epochs
+
+  Each successful arm allocates an *arm epoch* — a fencing token identifying
+  that arming session. It is valid only while the robot stays `:armed`, and is
+  discarded on the transition to `:disarming`, before any disarm callback runs,
+  so that nothing authorised against the old session can still be applied once
+  a disarm has begun. `:disarmed` and `:error` therefore have no epoch at all,
+  and a later arm allocates a fresh one rather than resurrecting the old.
+
+  Epochs come from `System.unique_integer/1` rather than a per-robot counter,
+  so a robot that deregisters and registers again cannot be handed an epoch it
+  has used before.
+
   Note: The executing/idle distinction is handled by Runtime as it's not safety-critical.
   """
   use GenServer
@@ -43,6 +56,7 @@ defmodule BB.Safety.Controller do
   @default_disarm_timeout_ms 5_000
 
   @type safety_state :: :disarmed | :armed | :disarming | :error
+  @type epoch :: pos_integer()
 
   @doc false
   def start_link(opts) do
@@ -57,8 +71,29 @@ defmodule BB.Safety.Controller do
   @spec armed?(module()) :: boolean()
   def armed?(robot_module) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, :armed, _ref}] -> true
+      [{^robot_module, :armed, _ref, _epoch}] -> true
       _ -> false
+    end
+  end
+
+  @doc """
+  Get the current arm epoch for a robot.
+
+  The epoch identifies the robot's current arming session. It changes on every
+  arm and is discarded the moment a disarm begins, so a caller holding one can
+  tell whether the robot has been armed continuously since it was taken.
+
+  Returns `:error` whenever the robot is not armed — including while it is
+  disarming, in `:error` state, or not registered at all. Those cases have no
+  epoch rather than a stale one, so there is nothing to compare against.
+
+  Fast ETS read - does not go through GenServer.
+  """
+  @spec epoch(module()) :: {:ok, epoch()} | :error
+  def epoch(robot_module) do
+    case :ets.lookup(@robots_table, robot_module) do
+      [{^robot_module, :armed, _ref, epoch}] -> {:ok, epoch}
+      _ -> :error
     end
   end
 
@@ -71,7 +106,7 @@ defmodule BB.Safety.Controller do
   @spec state(module()) :: safety_state()
   def state(robot_module) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, state, _ref}] -> state
+      [{^robot_module, state, _ref, _epoch}] -> state
       [] -> :disarmed
     end
   end
@@ -87,7 +122,7 @@ defmodule BB.Safety.Controller do
   @spec in_error?(module()) :: boolean()
   def in_error?(robot_module) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, :error, _ref}] -> true
+      [{^robot_module, :error, _ref, _epoch}] -> true
       _ -> false
     end
   end
@@ -102,7 +137,7 @@ defmodule BB.Safety.Controller do
   @spec disarming?(module()) :: boolean()
   def disarming?(robot_module) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, :disarming, _ref}] -> true
+      [{^robot_module, :disarming, _ref, _epoch}] -> true
       _ -> false
     end
   end
@@ -255,7 +290,7 @@ defmodule BB.Safety.Controller do
     Process.flag(:priority, :high)
 
     # Robots table (protected): safety state, writes only via GenServer
-    # {robot_module, :armed | :disarmed, supervisor_monitor_ref}
+    # {robot_module, :armed | :disarmed, supervisor_monitor_ref, arm_epoch | nil}
     :ets.new(@robots_table, [:named_table, :protected, :set, read_concurrency: true])
 
     # Handlers table (public bag): direct writes for registration
@@ -271,7 +306,7 @@ defmodule BB.Safety.Controller do
     case Process.whereis(robot_module) do
       pid when is_pid(pid) ->
         ref = Process.monitor(pid)
-        :ets.insert(@robots_table, {robot_module, :disarmed, ref})
+        :ets.insert(@robots_table, {robot_module, :disarmed, ref, nil})
         {:reply, :ok, state}
 
       nil ->
@@ -281,7 +316,7 @@ defmodule BB.Safety.Controller do
 
   def handle_call({:register_topology_supervisor, robot_module, pid}, _from, state) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, _safety_state, _ref}] ->
+      [{^robot_module, _safety_state, _ref, _epoch}] ->
         topology_ref = Process.monitor(pid)
 
         new_state =
@@ -296,18 +331,18 @@ defmodule BB.Safety.Controller do
 
   def handle_call({:arm, robot_module}, _from, state) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, :disarmed, ref}] ->
-        :ets.insert(@robots_table, {robot_module, :armed, ref})
+      [{^robot_module, :disarmed, ref, _}] ->
+        :ets.insert(@robots_table, {robot_module, :armed, ref, allocate_epoch()})
         publish_transition(robot_module, :disarmed, :armed)
         {:reply, :ok, state}
 
-      [{^robot_module, :armed, _}] ->
+      [{^robot_module, :armed, _, _}] ->
         {:reply, {:error, :already_armed}, state}
 
-      [{^robot_module, :disarming, _}] ->
+      [{^robot_module, :disarming, _, _}] ->
         {:reply, {:error, :disarming}, state}
 
-      [{^robot_module, :error, _}] ->
+      [{^robot_module, :error, _, _}] ->
         {:reply, {:error, :in_error}, state}
 
       [] ->
@@ -317,29 +352,31 @@ defmodule BB.Safety.Controller do
 
   def handle_call({:disarm, robot_module, timeout}, _from, state) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, :disarmed, _}] ->
+      [{^robot_module, :disarmed, _, _}] ->
         {:reply, {:error, :already_disarmed}, state}
 
-      [{^robot_module, :disarming, _}] ->
+      [{^robot_module, :disarming, _, _}] ->
         {:reply, {:error, :already_disarming}, state}
 
-      [{^robot_module, :error, _}] ->
+      [{^robot_module, :error, _, _}] ->
         {:reply, {:error, :already_in_error}, state}
 
-      [{^robot_module, :armed, ref}] ->
-        # Immediately transition to :disarming to prevent new commands
-        :ets.insert(@robots_table, {robot_module, :disarming, ref})
+      [{^robot_module, :armed, ref, _}] ->
+        # Immediately transition to :disarming to prevent new commands. Dropping
+        # the epoch in the same write shuts out commands already stamped against
+        # the session being torn down, not just ones issued from here on.
+        :ets.insert(@robots_table, {robot_module, :disarming, ref, nil})
         publish_transition(robot_module, :armed, :disarming)
 
         # Run callbacks concurrently with timeout
         case disarm_all_handlers(robot_module, timeout) do
           :ok ->
-            :ets.insert(@robots_table, {robot_module, :disarmed, ref})
+            :ets.insert(@robots_table, {robot_module, :disarmed, ref, nil})
             publish_transition(robot_module, :disarming, :disarmed)
             {:reply, :ok, state}
 
           {:error, failures} ->
-            :ets.insert(@robots_table, {robot_module, :error, ref})
+            :ets.insert(@robots_table, {robot_module, :error, ref, nil})
             publish_transition(robot_module, :disarming, :error)
             {:reply, {:error, {:disarm_failed, failures}}, state}
         end
@@ -351,20 +388,20 @@ defmodule BB.Safety.Controller do
 
   def handle_call({:transition_to_error, robot_module}, _from, state) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, :disarmed, _}] ->
+      [{^robot_module, :disarmed, _, _}] ->
         {:reply, {:error, :already_disarmed}, state}
 
-      [{^robot_module, :error, _}] ->
+      [{^robot_module, :error, _, _}] ->
         # Idempotent — already in error
         {:reply, :ok, state}
 
-      [{^robot_module, current, ref}] ->
+      [{^robot_module, current, ref, _}] ->
         Logger.critical(
           "Transitioning #{inspect(robot_module)} to :error - " <>
             "disarm command failed to complete safely from #{current}"
         )
 
-        :ets.insert(@robots_table, {robot_module, :error, ref})
+        :ets.insert(@robots_table, {robot_module, :error, ref, nil})
         publish_transition(robot_module, current, :error)
         {:reply, :ok, state}
 
@@ -375,17 +412,17 @@ defmodule BB.Safety.Controller do
 
   def handle_call({:force_disarm, robot_module}, _from, state) do
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, :error, ref}] ->
+      [{^robot_module, :error, ref, _}] ->
         Logger.warning(
           "Force disarm called for #{inspect(robot_module)} - " <>
             "operator has acknowledged hardware may not be in safe state"
         )
 
-        :ets.insert(@robots_table, {robot_module, :disarmed, ref})
+        :ets.insert(@robots_table, {robot_module, :disarmed, ref, nil})
         publish_transition(robot_module, :error, :disarmed)
         {:reply, :ok, state}
 
-      [{^robot_module, _, _}] ->
+      [{^robot_module, _, _, _}] ->
         {:reply, {:error, :not_in_error}, state}
 
       [] ->
@@ -417,7 +454,7 @@ defmodule BB.Safety.Controller do
       Map.has_key?(state.topology_monitors, ref) ->
         handle_topology_down(ref, state)
 
-      match?([[_]], :ets.match(@robots_table, {:"$1", :_, ref})) ->
+      match?([[_]], :ets.match(@robots_table, {:"$1", :_, ref, :_})) ->
         handle_root_down(ref, state)
 
       Map.has_key?(state.handler_monitors, ref) ->
@@ -463,8 +500,8 @@ defmodule BB.Safety.Controller do
     end
 
     case :ets.lookup(@robots_table, robot_module) do
-      [{^robot_module, _state, sup_ref}] ->
-        :ets.insert(@robots_table, {robot_module, :error, sup_ref})
+      [{^robot_module, _state, sup_ref, _epoch}] ->
+        :ets.insert(@robots_table, {robot_module, :error, sup_ref, nil})
         publish_transition(robot_module, previous_state, :error)
 
       [] ->
@@ -480,7 +517,7 @@ defmodule BB.Safety.Controller do
   end
 
   defp handle_root_down(ref, state) do
-    [[robot_module]] = :ets.match(@robots_table, {:"$1", :_, ref})
+    [[robot_module]] = :ets.match(@robots_table, {:"$1", :_, ref, :_})
 
     Logger.warning("Robot #{inspect(robot_module)} supervisor crashed, disarming all handlers")
 
@@ -513,6 +550,11 @@ defmodule BB.Safety.Controller do
   end
 
   # --- Private Functions ---
+
+  # Unique rather than counted, so an epoch is never reissued to a robot that
+  # deregistered and came back, nor reused across a controller restart.
+  @spec allocate_epoch() :: epoch()
+  defp allocate_epoch, do: System.unique_integer([:monotonic, :positive])
 
   defp disarm_all_handlers(robot_module, timeout) do
     # Bag table: each row is {robot_module, module, path, opts, pid}
@@ -566,7 +608,7 @@ defmodule BB.Safety.Controller do
     armed_robots =
       @robots_table
       |> :ets.tab2list()
-      |> Enum.filter(fn {_robot_module, safety_state, _ref} ->
+      |> Enum.filter(fn {_robot_module, safety_state, _ref, _epoch} ->
         safety_state in [:armed, :disarming]
       end)
 
@@ -578,7 +620,7 @@ defmodule BB.Safety.Controller do
     :ok
   end
 
-  defp emergency_disarm_robot({robot_module, _safety_state, _ref}) do
+  defp emergency_disarm_robot({robot_module, _safety_state, _ref, _epoch}) do
     Logger.info("Attempting emergency disarm for #{inspect(robot_module)}")
 
     case disarm_all_handlers(robot_module, @default_disarm_timeout_ms) do
