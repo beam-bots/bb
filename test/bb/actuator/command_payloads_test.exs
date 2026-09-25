@@ -179,9 +179,9 @@ defmodule BB.Actuator.CommandPayloadsTest do
       refute_receive {:commanded, _}, 200
     end
 
-    test "and is refused on the direct transport with a structured error" do
+    test "and is refused with a structured error when the caller waits" do
       assert {:error, %UnsupportedCommand{command: Command.Stop}} =
-               BB.Actuator.stop_sync(Robot, :narrow, [], 500)
+               BB.Actuator.stop(Robot, :narrow, delivery: :pubsub, timeout: 500)
     end
 
     test "refusal is observable" do

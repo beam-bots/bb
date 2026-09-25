@@ -81,7 +81,7 @@ defmodule BB.Motion do
   @type meta :: Solver.meta()
   @type kinematics_error :: Solver.kinematics_error()
   @type robot_or_context :: module() | Context.t()
-  @type delivery :: :pubsub | :direct
+  @type delivery :: Actuator.delivery()
   @type targets :: %{atom() => target()}
   @type multi_results ::
           %{atom() => {:ok, positions(), meta()} | {:error, kinematics_error()}}
@@ -119,15 +119,20 @@ defmodule BB.Motion do
   Optional:
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
     each command and waits for the actuator to accept it, reporting the first
-    refusal; `:direct` casts to each actuator and waits for nothing, so a
-    refusal is never reported
+    refusal; `:broadcast` publishes each command and waits for nothing;
+    `:direct` casts to each actuator and waits for nothing. Under the latter
+    two a refusal is never reported, so both always return `:ok`
+  - `:reply_on_reject?` - Under `:direct`, have each actuator send
+    `{:bb, :command_rejected, actuator_name, command_id, error}` to the calling
+    process when it refuses. Raises under any other delivery
   - `:velocity` - Velocity hint (passed to actuators)
   - `:duration` - Duration hint in milliseconds (passed to actuators)
   - `:command_id` - Correlation ID for feedback tracking (passed to actuators)
   - `:timeout` - How long to wait for each actuator to accept its command, in
-    milliseconds (default 5000). Unused under `:direct`, which waits for
-    nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
-    that would rather skip a late step than die wants `:direct`
+    milliseconds (default 5000). Used only under `:pubsub`; neither of the
+    others waits. A timeout exits the caller, as `GenServer.call/3` does — a
+    loop that would rather skip a late step than die wants `:broadcast` or
+    `:direct`
   - `:max_iterations` - Maximum solver iterations (passed to solver)
   - `:tolerance` - Convergence tolerance in metres (passed to solver)
   - `:respect_limits` - Whether to clamp to joint limits (passed to solver)
@@ -269,15 +274,20 @@ defmodule BB.Motion do
   Optional:
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
     each command and waits for the actuator to accept it, reporting the first
-    refusal; `:direct` casts to each actuator and waits for nothing, so a
-    refusal is never reported
+    refusal; `:broadcast` publishes each command and waits for nothing;
+    `:direct` casts to each actuator and waits for nothing. Under the latter
+    two a refusal is never reported, so both always return `:ok`
+  - `:reply_on_reject?` - Under `:direct`, have each actuator send
+    `{:bb, :command_rejected, actuator_name, command_id, error}` to the calling
+    process when it refuses. Raises under any other delivery
   - `:velocity` - Velocity hint (passed to actuators)
   - `:duration` - Duration hint in milliseconds (passed to actuators)
   - `:command_id` - Correlation ID for feedback tracking (passed to actuators)
   - `:timeout` - How long to wait for each actuator to accept its command, in
-    milliseconds (default 5000). Unused under `:direct`, which waits for
-    nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
-    that would rather skip a late step than die wants `:direct`
+    milliseconds (default 5000). Used only under `:pubsub`; neither of the
+    others waits. A timeout exits the caller, as `GenServer.call/3` does — a
+    loop that would rather skip a late step than die wants `:broadcast` or
+    `:direct`
   - `:max_iterations` - Maximum solver iterations (passed to solver)
   - `:tolerance` - Convergence tolerance in metres (passed to solver)
   - `:respect_limits` - Whether to clamp to joint limits (passed to solver)
@@ -417,15 +427,20 @@ defmodule BB.Motion do
 
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
     each command and waits for the actuator to accept it, reporting the first
-    refusal; `:direct` casts to each actuator and waits for nothing, so a
-    refusal is never reported
+    refusal; `:broadcast` publishes each command and waits for nothing;
+    `:direct` casts to each actuator and waits for nothing. Under the latter
+    two a refusal is never reported, so both always return `:ok`
+  - `:reply_on_reject?` - Under `:direct`, have each actuator send
+    `{:bb, :command_rejected, actuator_name, command_id, error}` to the calling
+    process when it refuses. Raises under any other delivery
   - `:velocity` - Velocity hint for actuators (rad/s or m/s)
   - `:duration` - Duration hint for actuators (milliseconds)
   - `:command_id` - Correlation ID for feedback tracking
   - `:timeout` - How long to wait for each actuator to accept its command, in
-    milliseconds (default 5000). Unused under `:direct`, which waits for
-    nothing. A timeout exits the caller, as `GenServer.call/3` does — a loop
-    that would rather skip a late step than die wants `:direct`
+    milliseconds (default 5000). Used only under `:pubsub`; neither of the
+    others waits. A timeout exits the caller, as `GenServer.call/3` does — a
+    loop that would rather skip a late step than die wants `:broadcast` or
+    `:direct`
 
   ## Returns
 
@@ -470,7 +485,7 @@ defmodule BB.Motion do
     {robot_module, robot, robot_state}
   end
 
-  @actuator_opts [:delivery, :velocity, :duration, :command_id, :timeout]
+  @actuator_opts [:delivery, :reply_on_reject?, :velocity, :duration, :command_id, :timeout]
 
   defp extract_solver_opts(opts) do
     opts
@@ -511,7 +526,10 @@ defmodule BB.Motion do
     |> first_refusal()
   end
 
-  defp send_to_actuators(commands, robot_module, _robot, :direct, opts) do
+  # Neither of these waits for an actuator, so there is no result to collect and
+  # no reason to spend a task per joint on gathering one.
+  defp send_to_actuators(commands, robot_module, _robot, delivery, opts)
+       when delivery in [:broadcast, :direct] do
     Enum.each(commands, fn {actuator_name, position} ->
       Actuator.set_position(robot_module, actuator_name, position, opts)
     end)

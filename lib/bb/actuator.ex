@@ -111,25 +111,74 @@ defmodule BB.Actuator do
 
   ### Delivery Methods
 
-  `set_position/4` takes a `:delivery` option, the same one `BB.Motion` takes:
+  Every command function - `set_position/4`, `set_velocity/4`, `set_effort/4`,
+  `follow_trajectory/4`, `stop/3` and `hold/3` - takes the same `:delivery`
+  option, as does `BB.Motion`:
 
-  - **`:pubsub`** (default) - The command is published to `[:actuator | path]`
-    so orchestration and logging can observe it, and delivered to the actuator
+  - **`:pubsub`** - The command is published to `[:actuator | path]` so
+    orchestration and logging can observe it, *and* delivered to the actuator
     by a call. Returns `:ok` or `{:error, reason}`, so a caller finds out that
     a joint isn't moving rather than assuming it is.
 
-  - **`:direct`** - Sent via `BB.Process.cast`, publishing nothing. Lower
-    latency for time-critical control, at the price of a refusal that only the
-    log and telemetry ever see. It always returns `:ok`.
+  - **`:broadcast`** - Published to `[:actuator | path]` and nothing more. The
+    actuator picks the command up through its own subscription, alongside every
+    other observer. The caller doesn't wait, and always gets `:ok`.
 
-  The other payloads still offer the older trio - a pubsub function, a `!` cast
-  and a `_sync` call (`set_velocity/4`, `set_velocity!/4`,
-  `set_velocity_sync/5`) - in which the pubsub form cannot report a refusal at
-  all.
+  - **`:direct`** - Sent via `BB.Process.cast`, publishing nothing. The lowest
+    latency of the three, for time-critical control, at the price of a refusal
+    nobody sees. Always returns `:ok`.
 
-  All of them converge on `c:handle_command/2`. Which transport a caller chose
-  is not something a driver has to know about, and choosing one cannot skip
-  the checks `BB.Actuator.Server` applies on the way in.
+  The default differs per command, and each function states its own:
+  `set_position/4` defaults to `:pubsub`; the other five default to
+  `:broadcast`, because they sit on control paths where blocking the caller
+  would be the more surprising behaviour.
+
+  All three converge on `c:handle_command/2`. Which transport a caller chose is
+  not something a driver has to know about, and choosing one cannot skip the
+  checks `BB.Actuator.Server` applies on the way in.
+
+  ### Hearing about refusals without waiting
+
+  `:broadcast` and `:direct` both return `:ok` whether the actuator took the
+  command or threw it out, so neither can be matched on for failure. Under
+  `:direct`, `reply_on_reject?: true` closes that gap: the actuator sends the
+  calling process
+
+      {:bb, :command_rejected, actuator_name, command_id, error}
+
+  when it refuses, and nothing at all when it accepts. `error` is the same
+  `BB.Error` struct `:pubsub` would have returned. `command_id` is whatever the
+  caller passed as `:command_id`, and is `nil` if it passed none - correlating
+  a reply with the command that caused it means setting one.
+
+      ref = make_ref()
+
+      :ok =
+        BB.Actuator.set_position(MyRobot, :servo, 1.57,
+          delivery: :direct,
+          command_id: ref,
+          reply_on_reject?: true
+        )
+
+      receive do
+        {:bb, :command_rejected, :servo, ^ref, error} -> Logger.error(Exception.message(error))
+      after
+        0 -> :ok
+      end
+
+  The reply goes to whichever process made the call, so a command sent from
+  inside a `Task` is answered to the task and not to whoever started it.
+
+  The option is `:direct` only, and raises `Spark.Options.ValidationError`
+  anywhere else: `:pubsub` returns the refusal already, and a `:broadcast`
+  command has no one caller to name.
+
+  ### Option validation
+
+  Each command validates its options against a `Spark.Options` schema before
+  sending anything, so a misspelled `velocty:` is a raised
+  `Spark.Options.ValidationError` rather than a hint that quietly does nothing.
+  The accepted keys are listed under each function.
 
   ### Arm epochs
 
@@ -162,8 +211,11 @@ defmodule BB.Actuator do
       # Published for observers, acknowledged by the actuator
       :ok = BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57)
 
+      # Published for observers, but not waited on
+      :ok = BB.Actuator.set_velocity(MyRobot, :shoulder_servo, 0.25)
+
       # Fire-and-forget (for time-critical control)
-      BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57, delivery: :direct)
+      :ok = BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57, delivery: :direct)
   """
 
   # ----------------------------------------------------------------------------
@@ -193,11 +245,11 @@ defmodule BB.Actuator do
   the robot is armed and translated the payload from joint-space into
   motor-space, so the values are ready to write to hardware.
 
-  The reply is used only by callers that wait for one (`set_position/4`,
-  `set_velocity_sync/5` and friends); it is discarded for cast delivery.
-  Returning `{:noreply, state}` replies `{:ok, :accepted}` to such a caller,
-  which `set_position/4` reports as `:ok`. Only an `{:error, reason}` reply
-  tells a caller its command was refused.
+  The reply is used only by callers that wait for one - those that chose
+  `delivery: :pubsub`. Returning `{:noreply, state}` replies `{:ok, :accepted}`
+  to such a caller, which the send functions report as `:ok`. Only an
+  `{:error, reason}` reply tells a caller its command was refused, and under
+  `:broadcast` or `:direct` it is discarded along with the rest.
 
       @impl BB.Actuator
       def handle_command(%BB.Message{payload: %Command.Position{} = cmd}, state) do
@@ -505,12 +557,21 @@ defmodule BB.Actuator do
   alias BB.Safety
   alias BB.Transmission
   alias BB.Transmission.Resolver, as: TransmissionResolver
+  alias Spark.Options.ValidationError
 
   @typedoc """
   How to address an actuator: its unique name, or its full path through the
   topology. Every function below accepts either.
   """
   @type target :: atom() | [atom()]
+
+  @typedoc """
+  How to get a command to an actuator.
+
+  `:pubsub` publishes and then calls, `:broadcast` only publishes, and
+  `:direct` only casts. See the "Delivery Methods" section above.
+  """
+  @type delivery :: :pubsub | :broadcast | :direct
 
   # ----------------------------------------------------------------------------
   # Outbound publishing
@@ -570,6 +631,134 @@ defmodule BB.Actuator do
   end
 
   # ----------------------------------------------------------------------------
+  # Command options
+  # ----------------------------------------------------------------------------
+
+  @default_timeout 5000
+
+  @delivery_values [:pubsub, :broadcast, :direct]
+
+  @delivery_doc """
+  How to get the command to the actuator. `:pubsub` publishes it and waits for \
+  the actuator to accept or refuse it; `:broadcast` only publishes it; \
+  `:direct` only casts it. See the "Delivery Methods" section of `BB.Actuator`.\
+  """
+
+  @reply_on_reject_doc """
+  Have the actuator send `{:bb, :command_rejected, actuator_name, command_id, \
+  error}` to the calling process when it refuses the command, rather than \
+  refusing in silence. Valid only with `delivery: :direct`.\
+  """
+
+  # Spelled out per command rather than shared, because the default is the one
+  # thing about delivery that differs between them.
+  @delivery_opt [
+    type: {:in, @delivery_values},
+    doc: @delivery_doc
+  ]
+
+  @duration_opt [
+    type: {:or, [nil, :pos_integer]},
+    doc: "Duration hint (milliseconds), `nil` meaning until countermanded."
+  ]
+
+  @common_section "Common to every actuator command"
+
+  # Shared by every command, so that a caller who learns one learns all six.
+  @common_command_opts [
+    reply_on_reject?: [
+      type: :boolean,
+      default: false,
+      doc: @reply_on_reject_doc
+    ],
+    command_id: [
+      type: {:or, [nil, :reference]},
+      doc: "Correlation ID for feedback tracking, and for the `:reply_on_reject?` reply."
+    ],
+    timeout: [
+      type: :timeout,
+      default: @default_timeout,
+      doc:
+        "How long to wait for the actuator, in milliseconds. Used only under `delivery: :pubsub`."
+    ]
+  ]
+
+  @position_schema Spark.Options.new!(
+                     Spark.Options.merge(
+                       [
+                         delivery: Keyword.put(@delivery_opt, :default, :pubsub),
+                         velocity: [
+                           type: {:or, [nil, :float]},
+                           doc: "Velocity hint (rad/s or m/s)."
+                         ],
+                         duration: @duration_opt
+                       ],
+                       @common_command_opts,
+                       @common_section
+                     )
+                   )
+
+  @velocity_schema Spark.Options.new!(
+                     Spark.Options.merge(
+                       [
+                         delivery: Keyword.put(@delivery_opt, :default, :broadcast),
+                         duration: @duration_opt
+                       ],
+                       @common_command_opts,
+                       @common_section
+                     )
+                   )
+
+  @effort_schema Spark.Options.new!(
+                   Spark.Options.merge(
+                     [
+                       delivery: Keyword.put(@delivery_opt, :default, :broadcast),
+                       duration: @duration_opt
+                     ],
+                     @common_command_opts,
+                     @common_section
+                   )
+                 )
+
+  @trajectory_schema Spark.Options.new!(
+                       Spark.Options.merge(
+                         [
+                           delivery: Keyword.put(@delivery_opt, :default, :broadcast),
+                           repeat: [
+                             type: {:or, [:pos_integer, {:in, [:forever]}]},
+                             default: 1,
+                             doc: "Number of repetitions: a positive integer, or `:forever`."
+                           ]
+                         ],
+                         @common_command_opts,
+                         @common_section
+                       )
+                     )
+
+  @stop_schema Spark.Options.new!(
+                 Spark.Options.merge(
+                   [
+                     delivery: Keyword.put(@delivery_opt, :default, :broadcast),
+                     mode: [
+                       type: {:in, [:immediate, :decelerate]},
+                       default: :immediate,
+                       doc: "How to come to a stop."
+                     ]
+                   ],
+                   @common_command_opts,
+                   @common_section
+                 )
+               )
+
+  @hold_schema Spark.Options.new!(
+                 Spark.Options.merge(
+                   [delivery: Keyword.put(@delivery_opt, :default, :broadcast)],
+                   @common_command_opts,
+                   @common_section
+                 )
+               )
+
+  # ----------------------------------------------------------------------------
   # Position Commands
   # ----------------------------------------------------------------------------
 
@@ -590,30 +779,29 @@ defmodule BB.Actuator do
 
   ## Options
 
-  - `:delivery` - `:pubsub` (default) publishes the command and waits for the
-    actuator to accept it; `:direct` casts to the actuator and returns at once,
-    publishing nothing. Use `:direct` for control paths where the round trip
-    costs more than knowing the outcome is worth
-  - `:velocity` - Velocity hint (rad/s or m/s)
-  - `:duration` - Duration hint (milliseconds)
-  - `:command_id` - Correlation ID for feedback tracking
-  - `:timeout` - How long to wait for the actuator, in milliseconds (default
-    5000). Unused under `:direct`, which waits for nothing
+  #{Spark.Options.docs(@position_schema)}
 
   ## Returns
 
-  - `:ok` - Command accepted
-  - `{:error, reason}` - Command refused, `reason` being a `BB.Error` struct
+  - `:ok` - Under `:pubsub`, that the actuator accepted the command. Under
+    `:broadcast` and `:direct`, only that it was sent
+  - `{:error, reason}` - `:pubsub` only. The actuator refused, `reason` being a
+    `BB.Error` struct
 
   Under `delivery: :pubsub`, exits if the actuator isn't running or doesn't
   answer within `:timeout`, like any other `GenServer.call/3`.
 
-  > #### `delivery: :direct` always returns `:ok` {: .warning}
+  > #### `:broadcast` and `:direct` cannot report a refusal {: .warning}
   >
-  > A cast has nowhere to put an answer, so `:direct` returns `:ok` whether the
-  > actuator accepted the command or refused it. The refusal reaches the log
-  > and a `[:bb, :actuator, :rejected]` telemetry event, and nowhere else —
-  > matching on `{:error, reason}` there is a branch that can never run.
+  > Neither waits for the actuator, so both return `:ok` whether the command
+  > was accepted or thrown out. The refusal reaches the log and a
+  > `[:bb, :actuator, :rejected]` telemetry event, and nowhere else — matching
+  > on `{:error, reason}` there is a branch that can never run.
+  >
+  > This is how a disarmed robot, an unsupported payload or a stale arm epoch
+  > goes unnoticed. Under `:direct`, `reply_on_reject?: true` has the actuator
+  > message the caller instead of staying silent; `:broadcast` has no such
+  > remedy, because a published command has no one caller to answer.
   >
 
   ## Commanding several joints
@@ -650,30 +838,16 @@ defmodule BB.Actuator do
   """
   @spec set_position(module(), target(), number(), keyword()) :: :ok | {:error, term()}
   def set_position(robot, target, position, opts \\ []) do
-    deliver_position(Keyword.get(opts, :delivery, :pubsub), robot, target, position, opts)
-  end
+    opts = validate_opts!(opts, @position_schema)
 
-  defp deliver_position(:pubsub, robot, target, position, opts) do
-    path = actuator_path!(robot, target)
-    message = build_position_message(path, position, opts)
-    send_command(robot, path, message, opts)
-  end
-
-  defp deliver_position(:direct, robot, target, position, opts) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_position_message(actuator_name, position, opts)
-    cast_command(robot, actuator_name, message)
-  end
-
-  defp build_position_message(frame_id, position, opts) do
-    frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
-
-    Message.new!(Command.Position, frame_id,
-      position: position * 1.0,
-      velocity: opts[:velocity],
-      duration: opts[:duration],
-      command_id: opts[:command_id]
-    )
+    deliver(robot, target, opts, fn actuator_name ->
+      Message.new!(Command.Position, actuator_name,
+        position: position * 1.0,
+        velocity: opts[:velocity],
+        duration: opts[:duration],
+        command_id: opts[:command_id]
+      )
+    end)
   end
 
   # ----------------------------------------------------------------------------
@@ -681,49 +855,50 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
-  Send a velocity command via pubsub.
+  Send a velocity command.
+
+  Defaults to `delivery: :broadcast`: the command is published to
+  `[:actuator | path]`, where the actuator and every other subscriber picks it
+  up, and the caller doesn't wait. Velocity commands sit on control loops, so
+  the default keeps them non-blocking; pass `delivery: :pubsub` to be told
+  whether the actuator took it.
 
   ## Options
 
-  - `:duration` - Duration (milliseconds), nil = until stopped
-  - `:command_id` - Correlation ID for feedback tracking
+  #{Spark.Options.docs(@velocity_schema)}
+
+  ## Returns
+
+  - `:ok` - Under `:pubsub`, that the actuator accepted the command. Under the
+    default `:broadcast`, and under `:direct`, only that it was sent
+  - `{:error, reason}` - `:pubsub` only. The actuator refused, `reason` being a
+    `BB.Error` struct
+
+  See `set_position/4` for what `:broadcast` and `:direct` cannot tell you, and
+  what `:reply_on_reject?` does about it.
+
+  ## Examples
+
+      # Doesn't wait, and cannot report a refusal
+      :ok = BB.Actuator.set_velocity(MyRobot, :wheel, 2.5)
+
+      # Waits for the actuator
+      case BB.Actuator.set_velocity(MyRobot, :wheel, 2.5, delivery: :pubsub) do
+        :ok -> :turning
+        {:error, error} -> Logger.error(Exception.message(error))
+      end
   """
-  @spec set_velocity(module(), target(), number(), keyword()) :: :ok
+  @spec set_velocity(module(), target(), number(), keyword()) :: :ok | {:error, term()}
   def set_velocity(robot, target, velocity, opts \\ []) do
-    path = actuator_path!(robot, target)
-    message = build_velocity_message(path, velocity, opts)
-    publish_command(robot, path, message)
-  end
+    opts = validate_opts!(opts, @velocity_schema)
 
-  @doc """
-  Send a velocity command directly to an actuator (bypasses pubsub).
-  """
-  @spec set_velocity!(module(), target(), number(), keyword()) :: :ok
-  def set_velocity!(robot, target, velocity, opts \\ []) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_velocity_message(actuator_name, velocity, opts)
-    cast_command(robot, actuator_name, message)
-  end
-
-  @doc """
-  Send a velocity command and wait for acknowledgement.
-  """
-  @spec set_velocity_sync(module(), target(), number(), keyword(), timeout()) ::
-          {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def set_velocity_sync(robot, target, velocity, opts \\ [], timeout \\ 5000) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_velocity_message(actuator_name, velocity, opts)
-    call_command(robot, actuator_name, message, timeout)
-  end
-
-  defp build_velocity_message(frame_id, velocity, opts) do
-    frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
-
-    Message.new!(Command.Velocity, frame_id,
-      velocity: velocity * 1.0,
-      duration: opts[:duration],
-      command_id: opts[:command_id]
-    )
+    deliver(robot, target, opts, fn actuator_name ->
+      Message.new!(Command.Velocity, actuator_name,
+        velocity: velocity * 1.0,
+        duration: opts[:duration],
+        command_id: opts[:command_id]
+      )
+    end)
   end
 
   # ----------------------------------------------------------------------------
@@ -731,49 +906,39 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
-  Send an effort (torque/force) command via pubsub.
+  Send an effort (torque/force) command.
+
+  Defaults to `delivery: :broadcast`: the command is published to
+  `[:actuator | path]`, where the actuator and every other subscriber picks it
+  up, and the caller doesn't wait. Effort commands sit on control loops, so the
+  default keeps them non-blocking; pass `delivery: :pubsub` to be told whether
+  the actuator took it.
 
   ## Options
 
-  - `:duration` - Duration (milliseconds), nil = until stopped
-  - `:command_id` - Correlation ID for feedback tracking
+  #{Spark.Options.docs(@effort_schema)}
+
+  ## Returns
+
+  - `:ok` - Under `:pubsub`, that the actuator accepted the command. Under the
+    default `:broadcast`, and under `:direct`, only that it was sent
+  - `{:error, reason}` - `:pubsub` only. The actuator refused, `reason` being a
+    `BB.Error` struct
+
+  See `set_position/4` for what `:broadcast` and `:direct` cannot tell you, and
+  what `:reply_on_reject?` does about it.
   """
-  @spec set_effort(module(), target(), number(), keyword()) :: :ok
+  @spec set_effort(module(), target(), number(), keyword()) :: :ok | {:error, term()}
   def set_effort(robot, target, effort, opts \\ []) do
-    path = actuator_path!(robot, target)
-    message = build_effort_message(path, effort, opts)
-    publish_command(robot, path, message)
-  end
+    opts = validate_opts!(opts, @effort_schema)
 
-  @doc """
-  Send an effort command directly to an actuator (bypasses pubsub).
-  """
-  @spec set_effort!(module(), target(), number(), keyword()) :: :ok
-  def set_effort!(robot, target, effort, opts \\ []) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_effort_message(actuator_name, effort, opts)
-    cast_command(robot, actuator_name, message)
-  end
-
-  @doc """
-  Send an effort command and wait for acknowledgement.
-  """
-  @spec set_effort_sync(module(), target(), number(), keyword(), timeout()) ::
-          {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def set_effort_sync(robot, target, effort, opts \\ [], timeout \\ 5000) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_effort_message(actuator_name, effort, opts)
-    call_command(robot, actuator_name, message, timeout)
-  end
-
-  defp build_effort_message(frame_id, effort, opts) do
-    frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
-
-    Message.new!(Command.Effort, frame_id,
-      effort: effort * 1.0,
-      duration: opts[:duration],
-      command_id: opts[:command_id]
-    )
+    deliver(robot, target, opts, fn actuator_name ->
+      Message.new!(Command.Effort, actuator_name,
+        effort: effort * 1.0,
+        duration: opts[:duration],
+        command_id: opts[:command_id]
+      )
+    end)
   end
 
   # ----------------------------------------------------------------------------
@@ -781,7 +946,12 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
-  Send a trajectory command via pubsub.
+  Send a trajectory command.
+
+  Defaults to `delivery: :broadcast`: the command is published to
+  `[:actuator | path]`, where the actuator and every other subscriber picks it
+  up, and the caller doesn't wait. Pass `delivery: :pubsub` to be told whether
+  the actuator took it.
 
   ## Waypoint Structure
 
@@ -793,60 +963,48 @@ defmodule BB.Actuator do
 
   ## Options
 
-  - `:repeat` - Number of repetitions: positive integer or `:forever` (default 1)
-  - `:command_id` - Correlation ID for feedback tracking
+  #{Spark.Options.docs(@trajectory_schema)}
+
+  ## Returns
+
+  - `:ok` - Under `:pubsub`, that the actuator accepted the trajectory. Under
+    the default `:broadcast`, and under `:direct`, only that it was sent
+  - `{:error, reason}` - `:pubsub` only. The actuator refused, `reason` being a
+    `BB.Error` struct
+
+  A driver that doesn't declare `BB.Message.Actuator.Command.Trajectory` in
+  `c:command_payloads/1` refuses this, which is precisely the refusal the
+  default delivery cannot report. See `set_position/4` for what
+  `:reply_on_reject?` does about it.
   """
-  @spec follow_trajectory(module(), target(), [keyword() | map()], keyword()) :: :ok
+  @spec follow_trajectory(module(), target(), [keyword() | map()], keyword()) ::
+          :ok | {:error, term()}
   def follow_trajectory(robot, target, waypoints, opts \\ []) do
-    path = actuator_path!(robot, target)
-    message = build_trajectory_message(path, waypoints, opts)
-    publish_command(robot, path, message)
-  end
+    opts = validate_opts!(opts, @trajectory_schema)
+    normalised_waypoints = Enum.map(waypoints, &normalise_waypoint/1)
 
-  @doc """
-  Send a trajectory command directly to an actuator (bypasses pubsub).
-  """
-  @spec follow_trajectory!(module(), target(), [keyword() | map()], keyword()) :: :ok
-  def follow_trajectory!(robot, target, waypoints, opts \\ []) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_trajectory_message(actuator_name, waypoints, opts)
-    cast_command(robot, actuator_name, message)
-  end
-
-  @doc """
-  Send a trajectory command and wait for acknowledgement.
-  """
-  @spec follow_trajectory_sync(module(), target(), [keyword() | map()], keyword(), timeout()) ::
-          {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def follow_trajectory_sync(robot, target, waypoints, opts \\ [], timeout \\ 5000) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_trajectory_message(actuator_name, waypoints, opts)
-    call_command(robot, actuator_name, message, timeout)
+    deliver(robot, target, opts, fn actuator_name ->
+      Message.new!(Command.Trajectory, actuator_name,
+        waypoints: normalised_waypoints,
+        repeat: opts[:repeat],
+        command_id: opts[:command_id]
+      )
+    end)
   end
 
   defp as_float(nil), do: nil
   defp as_float(value), do: value * 1.0
 
-  defp build_trajectory_message(frame_id, waypoints, opts) do
-    frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
+  defp normalise_waypoint(waypoint) when is_map(waypoint),
+    do: waypoint |> Keyword.new() |> normalise_waypoint()
 
-    normalised_waypoints =
-      Enum.map(waypoints, fn wp ->
-        wp = if is_map(wp), do: Keyword.new(wp), else: wp
-
-        [
-          position: wp[:position] * 1.0,
-          velocity: as_float(wp[:velocity]),
-          acceleration: as_float(wp[:acceleration]),
-          time_from_start: wp[:time_from_start]
-        ]
-      end)
-
-    Message.new!(Command.Trajectory, frame_id,
-      waypoints: normalised_waypoints,
-      repeat: opts[:repeat] || 1,
-      command_id: opts[:command_id]
-    )
+  defp normalise_waypoint(waypoint) when is_list(waypoint) do
+    [
+      position: waypoint[:position] * 1.0,
+      velocity: as_float(waypoint[:velocity]),
+      acceleration: as_float(waypoint[:acceleration]),
+      time_from_start: waypoint[:time_from_start]
+    ]
   end
 
   # ----------------------------------------------------------------------------
@@ -854,48 +1012,47 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
-  Send a stop command via pubsub.
+  Send a stop command.
+
+  Tells the actuator to cease travelling and become passive. This is a motion
+  command, not a safety one - making hardware safe is `BB.Safety.disarm/1`.
+
+  Defaults to `delivery: :broadcast`: the command is published to
+  `[:actuator | path]`, where the actuator and every other subscriber picks it
+  up, and the caller doesn't wait. Pass `delivery: :pubsub` to be told whether
+  the actuator took it.
 
   ## Options
 
-  - `:mode` - `:immediate` (default) or `:decelerate`
-  - `:command_id` - Correlation ID for feedback tracking
+  #{Spark.Options.docs(@stop_schema)}
+
+  ## Returns
+
+  - `:ok` - Under `:pubsub`, that the actuator accepted the command. Under the
+    default `:broadcast`, and under `:direct`, only that it was sent
+  - `{:error, reason}` - `:pubsub` only. The actuator refused, `reason` being a
+    `BB.Error` struct
+
+  > #### A stop you didn't wait for is a stop you can't confirm {: .warning}
+  >
+  > Under the default `:broadcast` this returns `:ok` even when the robot is
+  > disarmed, the arm epoch is stale, or the driver never declared
+  > `Command.Stop` - none of which stop the joint. Use `delivery: :pubsub` when
+  > the stop has to be confirmed, or `delivery: :direct` with
+  > `reply_on_reject?: true` when it has to be prompt and you still want to
+  > hear about a refusal.
+  >
   """
-  @spec stop(module(), target(), keyword()) :: :ok
+  @spec stop(module(), target(), keyword()) :: :ok | {:error, term()}
   def stop(robot, target, opts \\ []) do
-    path = actuator_path!(robot, target)
-    message = build_stop_message(path, opts)
-    publish_command(robot, path, message)
-  end
+    opts = validate_opts!(opts, @stop_schema)
 
-  @doc """
-  Send a stop command directly to an actuator (bypasses pubsub).
-  """
-  @spec stop!(module(), target(), keyword()) :: :ok
-  def stop!(robot, target, opts \\ []) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_stop_message(actuator_name, opts)
-    cast_command(robot, actuator_name, message)
-  end
-
-  @doc """
-  Send a stop command and wait for acknowledgement.
-  """
-  @spec stop_sync(module(), target(), keyword(), timeout()) ::
-          {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def stop_sync(robot, target, opts \\ [], timeout \\ 5000) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_stop_message(actuator_name, opts)
-    call_command(robot, actuator_name, message, timeout)
-  end
-
-  defp build_stop_message(frame_id, opts) do
-    frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
-
-    Message.new!(Command.Stop, frame_id,
-      mode: opts[:mode] || :immediate,
-      command_id: opts[:command_id]
-    )
+    deliver(robot, target, opts, fn actuator_name ->
+      Message.new!(Command.Stop, actuator_name,
+        mode: opts[:mode],
+        command_id: opts[:command_id]
+      )
+    end)
   end
 
   # ----------------------------------------------------------------------------
@@ -903,81 +1060,129 @@ defmodule BB.Actuator do
   # ----------------------------------------------------------------------------
 
   @doc """
-  Send a hold command via pubsub.
+  Send a hold command.
 
-  Instructs the actuator to actively maintain its current position.
+  Tells the actuator to actively maintain its current position, resisting
+  external force - the counterpart to `stop/3`, which goes passive.
+
+  Defaults to `delivery: :broadcast`: the command is published to
+  `[:actuator | path]`, where the actuator and every other subscriber picks it
+  up, and the caller doesn't wait. Pass `delivery: :pubsub` to be told whether
+  the actuator took it.
 
   ## Options
 
-  - `:command_id` - Correlation ID for feedback tracking
+  #{Spark.Options.docs(@hold_schema)}
+
+  ## Returns
+
+  - `:ok` - Under `:pubsub`, that the actuator accepted the command. Under the
+    default `:broadcast`, and under `:direct`, only that it was sent
+  - `{:error, reason}` - `:pubsub` only. The actuator refused, `reason` being a
+    `BB.Error` struct
+
+  See `set_position/4` for what `:broadcast` and `:direct` cannot tell you, and
+  what `:reply_on_reject?` does about it.
   """
-  @spec hold(module(), target(), keyword()) :: :ok
+  @spec hold(module(), target(), keyword()) :: :ok | {:error, term()}
   def hold(robot, target, opts \\ []) do
-    path = actuator_path!(robot, target)
-    message = build_hold_message(path, opts)
-    publish_command(robot, path, message)
-  end
+    opts = validate_opts!(opts, @hold_schema)
 
-  @doc """
-  Send a hold command directly to an actuator (bypasses pubsub).
-  """
-  @spec hold!(module(), target(), keyword()) :: :ok
-  def hold!(robot, target, opts \\ []) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_hold_message(actuator_name, opts)
-    cast_command(robot, actuator_name, message)
-  end
-
-  @doc """
-  Send a hold command and wait for acknowledgement.
-  """
-  @spec hold_sync(module(), target(), keyword(), timeout()) ::
-          {:ok, :accepted | {:accepted, map()}} | {:error, term()}
-  def hold_sync(robot, target, opts \\ [], timeout \\ 5000) do
-    actuator_name = actuator_name!(robot, target)
-    message = build_hold_message(actuator_name, opts)
-    call_command(robot, actuator_name, message, timeout)
-  end
-
-  defp build_hold_message(frame_id, opts) do
-    frame_id = if is_list(frame_id), do: List.last(frame_id), else: frame_id
-    Message.new!(Command.Hold, frame_id, command_id: opts[:command_id])
+    deliver(robot, target, opts, fn actuator_name ->
+      Message.new!(Command.Hold, actuator_name, command_id: opts[:command_id])
+    end)
   end
 
   # ----------------------------------------------------------------------------
   # Delivery
   # ----------------------------------------------------------------------------
 
-  @default_timeout 5000
+  # `build` is handed the actuator's name to use as the message's frame id, and
+  # is called only once the target has resolved, so a bad target raises before
+  # a message is built.
+  @spec deliver(module(), target(), keyword(), (atom() -> Message.t())) ::
+          :ok | {:error, term()}
+  defp deliver(robot, target, opts, build),
+    do: deliver(Keyword.fetch!(opts, :delivery), robot, target, opts, build)
 
   # The actuator is excluded from the publication because it is about to be
   # handed the same command directly: it subscribes to its own command topic,
   # and would otherwise drive the hardware twice for one call.
-  @spec send_command(module(), [atom()], Message.t(), keyword()) :: :ok | {:error, term()}
-  defp send_command(robot, path, message, opts) do
+  defp deliver(:pubsub, robot, target, opts, build) do
+    path = actuator_path!(robot, target)
     actuator_name = List.last(path)
-    message = stamp(robot, message)
+    message = stamp(robot, build.(actuator_name))
 
     BB.publish(robot, [:actuator | path], message,
       except: [BB.Process.whereis(robot, actuator_name)]
     )
 
     robot
-    |> BB.call(actuator_name, {:command, message}, Keyword.get(opts, :timeout, @default_timeout))
+    |> BB.call(actuator_name, {:command, message}, Keyword.fetch!(opts, :timeout))
     |> command_result()
   end
 
-  @spec publish_command(module(), [atom()], Message.t()) :: :ok
-  defp publish_command(robot, path, message),
-    do: BB.publish(robot, [:actuator | path], stamp(robot, message))
+  defp deliver(:broadcast, robot, target, _opts, build) do
+    path = actuator_path!(robot, target)
+    message = stamp(robot, build.(List.last(path)))
+    BB.publish(robot, [:actuator | path], message)
+  end
 
-  @spec cast_command(module(), atom(), Message.t()) :: :ok
-  defp cast_command(robot, actuator_name, message),
-    do: BB.cast(robot, actuator_name, {:command, stamp(robot, message)})
+  defp deliver(:direct, robot, target, opts, build) do
+    actuator_name = actuator_name!(robot, target)
+    message = stamp(robot, build.(actuator_name))
+    BB.cast(robot, actuator_name, {:command, message, reply_target(opts)})
+  end
 
-  @spec call_command(module(), atom(), Message.t(), timeout()) :: term()
-  defp call_command(robot, actuator_name, message, timeout),
-    do: BB.call(robot, actuator_name, {:command, stamp(robot, message)}, timeout)
+  defp reply_target(opts) do
+    if Keyword.fetch!(opts, :reply_on_reject?), do: self()
+  end
+
+  @spec validate_opts!(keyword(), Spark.Options.t()) :: keyword()
+  defp validate_opts!(opts, schema) do
+    opts
+    |> Spark.Options.validate!(schema)
+    |> validate_reply_delivery!()
+  end
+
+  # `reply_on_reject?` needs one caller to answer and a tuple to carry its pid,
+  # and only `:direct` has both. Spark validates each key on its own, so this
+  # cross-key rule is checked here — as a `Spark.Options.ValidationError`, so a
+  # caller sees one kind of option failure rather than two.
+  defp validate_reply_delivery!(opts),
+    do:
+      validate_reply_delivery!(
+        opts,
+        Keyword.fetch!(opts, :delivery),
+        Keyword.fetch!(opts, :reply_on_reject?)
+      )
+
+  defp validate_reply_delivery!(opts, :direct, _reply_on_reject?), do: opts
+  defp validate_reply_delivery!(opts, _delivery, false), do: opts
+
+  defp validate_reply_delivery!(_opts, :pubsub, true) do
+    raise ValidationError.exception(
+            key: :reply_on_reject?,
+            value: true,
+            message:
+              "invalid value for :reply_on_reject? option: cannot be combined with " <>
+                "`delivery: :pubsub`, which waits for the actuator and returns " <>
+                "`{:error, reason}` on a refusal already. Drop `:reply_on_reject?`, or pass " <>
+                "`delivery: :direct` to hear about refusals without waiting."
+          )
+  end
+
+  defp validate_reply_delivery!(_opts, :broadcast, true) do
+    raise ValidationError.exception(
+            key: :reply_on_reject?,
+            value: true,
+            message:
+              "invalid value for :reply_on_reject? option: cannot be combined with " <>
+                "`delivery: :broadcast`, which publishes to every subscriber and so has no " <>
+                "one caller to reply to. Pass `delivery: :direct` to hear about refusals " <>
+                "without waiting."
+          )
+  end
 
   # Stamped here rather than in `BB.Message.new/3` because only a send is an
   # attempt to drive hardware: a message may be built long before, or while the
