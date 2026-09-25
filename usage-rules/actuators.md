@@ -18,7 +18,14 @@ refused.
 :ok = BB.Actuator.set_position(MyRobot.Robot, [:base_link, :pan_joint, :servo], 0.785)
 
 # Without waiting for an answer, for time-critical control:
-BB.Actuator.set_position(MyRobot.Robot, :servo, 0.785, delivery: :direct)
+:ok = BB.Actuator.set_position(MyRobot.Robot, :servo, 0.785, delivery: :direct)
+
+# Not waiting, but still hearing about a refusal:
+:ok =
+  BB.Actuator.set_position(MyRobot.Robot, :servo, 0.785,
+    delivery: :direct,
+    reply_on_reject?: true
+  )
 ```
 
 The DSL takes `~u` sigil values; the runtime command functions take plain
@@ -29,16 +36,26 @@ numbers in SI base units (radians here).
   actuator the robot doesn't have raises rather than publishing to a topic
   nothing listens on. A full path must be complete: every link and joint from
   the root, not just the joint.
-- `set_position/4` publishes the command for observers and waits for the
-  actuator to accept it, returning `:ok` or `{:error, reason}`. Match on it:
-  a refusal means the joint is not moving.
-- `delivery: :direct` casts instead, for control paths that can't afford the
-  round trip. It **always returns `:ok`** — a refusal then reaches the log and
-  telemetry only, so don't write an error branch that can never run.
-- `set_velocity`, `set_effort`, `follow_trajectory`, `stop` and `hold` still
-  use the older trio — a pubsub function, a `!` cast and a `_sync` call — in
-  which the pubsub form can't report a refusal. Use their `_sync` variants
-  where the outcome matters.
+- Every command — `set_position`, `set_velocity`, `set_effort`,
+  `follow_trajectory`, `stop` and `hold` — takes the same `:delivery` option:
+  - `:pubsub` publishes the command for observers **and** waits for the
+    actuator, returning `:ok` or `{:error, reason}`. Match on it: a refusal
+    means the joint is not moving.
+  - `:broadcast` publishes and doesn't wait.
+  - `:direct` casts, publishing nothing, for control paths that can't afford
+    the round trip.
+- The defaults differ, and are the behaviour each command already had:
+  `set_position/4` defaults to `:pubsub`, the other five to `:broadcast`.
+- `:broadcast` and `:direct` **always return `:ok`** — a refusal then reaches
+  the log and telemetry only, so don't write an error branch that can never
+  run. Pass `delivery: :pubsub` where the outcome matters.
+- Under `:direct`, `reply_on_reject?: true` has the actuator send
+  `{:bb, :command_rejected, actuator_name, command_id, error}` to the calling
+  process on a refusal — the way to hear about one without waiting. Set
+  `:command_id` if you need to tell replies apart. It is `:direct`-only and
+  raises anywhere else.
+- Options are validated against a `Spark.Options` schema, so a misspelled key
+  raises rather than being quietly ignored.
 - Positions are in **radians**, velocities in rad/s — SI base units, the same
   units the compiled robot struct uses.
 
