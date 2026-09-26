@@ -95,8 +95,7 @@ defmodule BB.Actuator.ServerTransmissionTest do
     test "transforms a Position command via cast" do
       message = Message.new!(Command.Position, :motor, position: :math.pi() / 4 + 0.01)
 
-      :ok =
-        BB.cast(WithTransmission, :motor, {:command, Commands.stamp(WithTransmission, message)})
+      :ok = Commands.cast(WithTransmission, :motor, Commands.stamp(WithTransmission, message))
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{} = cmd}}, 500
       expected = BB.Transmission.apply_position(:math.pi() / 4 + 0.01, @transmission)
@@ -123,8 +122,7 @@ defmodule BB.Actuator.ServerTransmissionTest do
       message =
         Message.new!(Command.Position, :motor, position: :math.pi() / 4, velocity: 0.1)
 
-      :ok =
-        BB.cast(WithTransmission, :motor, {:command, Commands.stamp(WithTransmission, message)})
+      :ok = Commands.cast(WithTransmission, :motor, Commands.stamp(WithTransmission, message))
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{} = cmd}}, 500
       assert_in_delta cmd.velocity, -50.0 * 0.1, 1.0e-9
@@ -132,7 +130,7 @@ defmodule BB.Actuator.ServerTransmissionTest do
 
     test "passes Hold commands through unchanged" do
       hold = Message.new!(Command.Hold, :motor, [])
-      :ok = BB.cast(WithTransmission, :motor, {:command, Commands.stamp(WithTransmission, hold)})
+      :ok = Commands.cast(WithTransmission, :motor, Commands.stamp(WithTransmission, hold))
 
       assert_receive {:received, :command, %Message{payload: %Command.Hold{}}}, 500
     end
@@ -148,10 +146,10 @@ defmodule BB.Actuator.ServerTransmissionTest do
       message = Message.new!(Command.Position, :motor, position: 1.23)
 
       :ok =
-        BB.cast(
+        Commands.cast(
           WithoutTransmission,
           :motor,
-          {:command, Commands.stamp(WithoutTransmission, message)}
+          Commands.stamp(WithoutTransmission, message)
         )
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: p}}}, 500

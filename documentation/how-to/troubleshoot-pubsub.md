@@ -337,8 +337,21 @@ knowing the outcome is worth:
 :ok = BB.Actuator.set_position(MyRobot.Robot, :servo, position)
 
 # Cast and move on — a refusal then only reaches the log and telemetry
-BB.Actuator.set_position(MyRobot.Robot, :servo, position, delivery: :direct)
+:ok = BB.Actuator.set_position(MyRobot.Robot, :servo, position, delivery: :direct)
+
+# Cast and move on, but still hear about a refusal
+:ok =
+  BB.Actuator.set_position(MyRobot.Robot, :servo, position,
+    delivery: :direct,
+    reply_on_reject?: true
+  )
 ```
+
+`delivery: :broadcast` sits between the two: it publishes the command for
+observers but doesn't wait for the actuator, and is the default for
+`set_velocity/4`, `set_effort/4`, `follow_trajectory/4`, `stop/3` and `hold/3`.
+Like `:direct` it always returns `:ok`, so a refusal under either is invisible
+unless you ask for `reply_on_reject?`.
 
 ## Quick Reference
 

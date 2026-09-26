@@ -34,11 +34,13 @@ defmodule BB.Command.MoveTo do
   - `tolerance` - Convergence tolerance in metres (default: 1.0e-4)
   - `respect_limits` - Whether to clamp to joint limits (default: true)
   - `delivery` - Actuator command delivery: `:pubsub` (default) waits for each
-    actuator to accept its command, `:direct` doesn't wait
+    actuator to accept its command; `:broadcast` publishes without waiting;
+    `:direct` casts without waiting. Neither of the latter two can report a
+    refusal, so under both the command succeeds whether the joints moved or not
   - `velocity` - Velocity hint for actuators (rad/s or m/s)
   - `duration` - Duration hint for actuators (milliseconds)
   - `timeout` - How long to wait for each actuator to accept its command, in
-    milliseconds (default: 5000). Unused under `delivery: :direct`
+    milliseconds (default: 5000). Used only under `delivery: :pubsub`
 
   ## Usage
 

@@ -39,6 +39,18 @@ defmodule BB.Actuator.Server do
   reply is routed back to whichever transport delivered the command. Messages
   from topics the driver subscribed to itself are not part of this pipeline -
   they reach `c:BB.Actuator.handle_info/2` untouched.
+
+  ## Reporting a refusal
+
+  Only the call transport can answer its caller directly. A cast may name a
+  process to be told about a refusal, which `BB.Actuator`'s
+  `reply_on_reject?: true` uses: the command arrives as
+  `{:command, message, reply_to}`, and a refusal sends
+
+      {:bb, :command_rejected, actuator_name, command_id, error}
+
+  to `reply_to`. `nil` there means nobody is listening, which is the case for
+  every published command - the topic has no one caller to answer.
   """
 
   use GenServer
@@ -243,7 +255,7 @@ defmodule BB.Actuator.Server do
         %__MODULE__{command_topic: topic} = state
       ) do
     if command?(message, state) do
-      dispatch_command(message, :pubsub, state)
+      dispatch_command(message, :pubsub, nil, state)
     else
       delegate_handle_info(msg, state)
     end
@@ -266,7 +278,7 @@ defmodule BB.Actuator.Server do
 
   @impl GenServer
   def handle_call({:command, %Message{} = message}, _from, state) do
-    dispatch_command(message, :call, state)
+    dispatch_command(message, :call, nil, state)
   end
 
   def handle_call({:command, _other}, _from, state) do
@@ -297,9 +309,14 @@ defmodule BB.Actuator.Server do
     end
   end
 
+  # The reply target rides in the tuple rather than in the message, because a
+  # published command arrives as a bare `%Message{}` with no tuple to put it in
+  # — and a caller's pid in the envelope would go to every subscriber, not just
+  # to the caller.
   @impl GenServer
-  def handle_cast({:command, %Message{} = message}, state) do
-    dispatch_command(message, :cast, state)
+  def handle_cast({:command, %Message{} = message, reply_to}, state)
+      when is_pid(reply_to) or is_nil(reply_to) do
+    dispatch_command(message, :cast, reply_to, state)
   end
 
   def handle_cast(request, state), do: delegate_handle_cast(request, state)
@@ -323,8 +340,8 @@ defmodule BB.Actuator.Server do
   defp command?(%Message{payload: %payload_module{}}, state),
     do: payload_module in state.command_payloads
 
-  @spec dispatch_command(Message.t(), transport(), t()) :: term()
-  defp dispatch_command(message, transport, state) do
+  @spec dispatch_command(Message.t(), transport(), pid() | nil, t()) :: term()
+  defp dispatch_command(message, transport, reply_to, state) do
     case authorise(message, state) do
       :ok ->
         message
@@ -332,7 +349,7 @@ defmodule BB.Actuator.Server do
         |> delegate_handle_command(transport, state)
 
       {:error, reason, error} ->
-        refuse(message, reason, error, transport, state)
+        refuse(message, reason, error, transport, reply_to, state)
     end
   end
 
@@ -397,7 +414,7 @@ defmodule BB.Actuator.Server do
   defp current_epoch({:ok, epoch}), do: epoch
   defp current_epoch(:error), do: nil
 
-  defp refuse(message, reason, error, transport, state) do
+  defp refuse(message, reason, error, transport, reply_to, state) do
     Logger.warning(
       "Actuator #{inspect(state.actuator_name)} on #{inspect(state.bb.robot)} refused " <>
         "#{inspect(message.payload.__struct__)} delivered by #{transport}: " <>
@@ -416,7 +433,22 @@ defmodule BB.Actuator.Server do
       }
     )
 
+    notify_rejection(reply_to, message, error, state)
+
     command_reply(transport, {:error, error}, state)
+  end
+
+  # Every refusal `authorise/2` can produce comes through here, so an
+  # unsupported payload, a disarmed robot and a stale arm epoch are all
+  # reported alike — the last of these being the one the cast transport could
+  # never see before.
+  @spec notify_rejection(pid() | nil, Message.t(), Exception.t(), t()) :: :ok
+  defp notify_rejection(nil, _message, _error, _state), do: :ok
+
+  defp notify_rejection(reply_to, message, error, state) when is_pid(reply_to) do
+    command_id = Map.get(message.payload, :command_id)
+    send(reply_to, {:bb, :command_rejected, state.actuator_name, command_id, error})
+    :ok
   end
 
   defp delegate_handle_command(message, transport, state) do

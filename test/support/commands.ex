@@ -9,6 +9,21 @@ defmodule BB.Test.Commands do
   alias BB.Safety
 
   @doc """
+  Deliver a hand-built command to an actuator by cast.
+
+  Keeps the shape of the private `{:command, message, reply_to}` tuple in one
+  place, rather than in every test that exercises the cast transport.
+
+  `reply_to` is the process `BB.Actuator.Server` messages when it refuses the
+  command, and `nil` - the default - means nobody, which is what
+  `BB.Actuator`'s send functions pass unless asked for `reply_on_reject?`.
+  """
+  @spec cast(module(), atom(), Message.t(), pid() | nil) :: :ok
+  def cast(robot, actuator_name, %Message{} = message, reply_to \\ nil) do
+    BB.cast(robot, actuator_name, {:command, message, reply_to})
+  end
+
+  @doc """
   Stamp a hand-built command with the robot's current arm epoch.
 
   `BB.Actuator`'s send functions do this themselves; a test that builds a

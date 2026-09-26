@@ -159,7 +159,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
 
     test "a cast command reaches the driver" do
-      :ok = BB.cast(ArmedRobot, :motor, {:command, position(ArmedRobot, 0.5)})
+      :ok = Commands.cast(ArmedRobot, :motor, position(ArmedRobot, 0.5))
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
                      500
@@ -236,7 +236,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
 
     test "a cast command is dropped while disarmed" do
-      :ok = BB.cast(DisarmedRobot, :motor, {:command, position(0.5)})
+      :ok = Commands.cast(DisarmedRobot, :motor, position(0.5))
 
       refute_receive {:received, :command, _message}, 200
     end
@@ -252,13 +252,13 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       # Stop means "cease travelling and go passive", not "make the hardware
       # safe" — that's `disarm`. A disarmed actuator isn't being driven, so
       # there's nothing for it to do, and no reason to exempt it from the gate.
-      :ok = BB.cast(DisarmedRobot, :motor, {:command, Message.new!(Command.Stop, :motor, [])})
+      :ok = Commands.cast(DisarmedRobot, :motor, Message.new!(Command.Stop, :motor, []))
 
       refute_receive {:received, :command, _message}, 200
     end
 
     test "Hold is refused while disarmed too" do
-      :ok = BB.cast(DisarmedRobot, :motor, {:command, Message.new!(Command.Hold, :motor, [])})
+      :ok = Commands.cast(DisarmedRobot, :motor, Message.new!(Command.Hold, :motor, []))
 
       refute_receive {:received, :command, _message}, 200
     end
@@ -285,7 +285,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
       on_exit(fn -> :telemetry.detach(handler) end)
 
-      :ok = BB.cast(DisarmedRobot, :motor, {:command, position(0.5)})
+      :ok = Commands.cast(DisarmedRobot, :motor, position(0.5))
 
       assert_receive {:telemetry, [:bb, :actuator, :rejected], %{count: 1}, metadata}, 500
       assert metadata.actuator == :motor
@@ -332,7 +332,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
 
     test "a command stamped in the current session is applied" do
-      :ok = BB.cast(DisarmedRobot, :motor, {:command, position(DisarmedRobot, 0.5)})
+      :ok = Commands.cast(DisarmedRobot, :motor, position(DisarmedRobot, 0.5))
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
                      500
@@ -361,7 +361,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
       log =
         capture_log(fn ->
-          :ok = BB.cast(DisarmedRobot, :motor, {:command, stale})
+          :ok = Commands.cast(DisarmedRobot, :motor, stale)
           refute_receive {:received, :command, _message}, 200
         end)
 
@@ -383,7 +383,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
       on_exit(fn -> :telemetry.detach(handler) end)
 
-      :ok = BB.cast(DisarmedRobot, :motor, {:command, position(0.5)})
+      :ok = Commands.cast(DisarmedRobot, :motor, position(0.5))
 
       assert_receive {:telemetry, [:bb, :actuator, :rejected], %{count: 1}, metadata}, 500
       assert metadata.reason == :stale_epoch
