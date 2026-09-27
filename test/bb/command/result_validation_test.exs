@@ -9,8 +9,6 @@ defmodule BB.Command.ResultValidationTest do
   """
   use ExUnit.Case, async: true
 
-  import ExUnit.CaptureLog
-
   alias BB.Error.Invalid.CommandResult
   alias BB.Error.State.CommandCrashed
   alias BB.Robot.Runtime
@@ -50,6 +48,7 @@ defmodule BB.Command.ResultValidationTest do
   setup do
     start_supervised!(Robot)
     :ok = BB.Safety.arm(Robot)
+    BB.PubSub.subscribe(Robot, [:command])
     %{runtime: GenServer.whereis(Runtime.via(Robot))}
   end
 
@@ -91,10 +90,20 @@ defmodule BB.Command.ResultValidationTest do
     end
 
     test "accepts :disarmed, which is built in rather than declared" do
-      log = capture_log(fn -> assert {:ok, :disarmed, _} = run(:disarm, %{}) end)
+      assert {:ok, :disarmed, _} = run(:disarm, %{})
 
-      refute log =~ "Invalid state"
       assert Runtime.operational_state(Robot) == :disarmed
+    end
+
+    test "refuses the safety states the safety system owns", %{runtime: runtime} do
+      for state <- [:disarming, :error] do
+        assert {:ok, :done, next_state: ^state} =
+                 run(%{result: {:ok, :done, next_state: state}})
+
+        assert Runtime.operational_state(Robot) == :idle
+      end
+
+      assert GenServer.whereis(Runtime.via(Robot)) == runtime
     end
 
     test "is ignored when it names a state the robot doesn't have", %{runtime: runtime} do
@@ -108,8 +117,13 @@ defmodule BB.Command.ResultValidationTest do
 
   defp run(goal), do: run(:bad, goal)
 
+  # The command replies to its awaiters before casting its completion to the
+  # runtime, so `await/2` returning says nothing about the runtime having
+  # handled it. Wait for the completion event before reading state or logs.
   defp run(command_name, goal) do
     {:ok, command} = Runtime.execute(Robot, command_name, goal)
-    BB.Command.await(command)
+    result = BB.Command.await(command)
+    assert_receive {:bb, [:command, ^command_name, _], _}, 1_000
+    result
   end
 end
