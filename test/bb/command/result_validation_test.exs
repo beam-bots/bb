@@ -90,7 +90,7 @@ defmodule BB.Command.ResultValidationTest do
       assert Runtime.operational_state(Robot) == :parked
     end
 
-    test "accepts the safety states, which aren't declared in the DSL" do
+    test "accepts :disarmed, which is built in rather than declared" do
       log = capture_log(fn -> assert {:ok, :disarmed, _} = run(:disarm, %{}) end)
 
       refute log =~ "Invalid state"

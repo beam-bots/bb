@@ -6,6 +6,7 @@ defmodule BB.Robot.StateSystemTest do
   use ExUnit.Case, async: true
 
   alias BB.Dsl.Info
+  alias BB.Dsl.State
   alias BB.Robot.Runtime
 
   describe "states DSL" do
@@ -57,6 +58,33 @@ defmodule BB.Robot.StateSystemTest do
       assert :idle in names
       assert :recording in names
       assert :processing in names
+    end
+
+    test "state_names/1 includes every built-in state" do
+      names = Info.state_names(RobotWithCustomStates)
+
+      for built_in <- State.built_in_names() do
+        assert built_in in names
+      end
+    end
+
+    test "a robot that declares a built-in state keeps its own definition" do
+      defmodule RobotRedefiningIdle do
+        use BB
+
+        states do
+          state :idle, doc: "Waiting for something to do"
+        end
+
+        topology do
+          link :base_link
+        end
+      end
+
+      idle = Enum.find(Info.states(RobotRedefiningIdle), &(&1.name == :idle))
+
+      assert idle.doc == "Waiting for something to do"
+      assert Enum.count(Info.state_names(RobotRedefiningIdle), &(&1 == :idle)) == 1
     end
 
     test "initial_state/1 returns configured initial state" do

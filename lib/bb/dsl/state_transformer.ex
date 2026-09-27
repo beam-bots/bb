@@ -8,7 +8,7 @@ defmodule BB.Dsl.StateTransformer do
 
   This transformer:
   - Collects all states defined in the `states` section
-  - Adds the built-in `:idle` state if not explicitly defined
+  - Adds any of `BB.Dsl.State.built_in/0` the robot didn't define itself
   - Injects `__bb_states__/0` and `__bb_initial_state__/0` functions
   """
   use Spark.Dsl.Transformer
@@ -57,18 +57,9 @@ defmodule BB.Dsl.StateTransformer do
       |> Transformer.get_entities([:states])
       |> Enum.filter(&is_struct(&1, State))
 
-    idle_defined? = Enum.any?(user_states, &(&1.name == :idle))
+    declared = Enum.map(user_states, & &1.name)
 
-    if idle_defined? do
-      user_states
-    else
-      idle_state = %State{
-        name: :idle,
-        doc: "Default idle state - robot is armed and ready for commands"
-      }
-
-      [idle_state | user_states]
-    end
+    Enum.reject(State.built_in(), &(&1.name in declared)) ++ user_states
   end
 
   defp get_initial_state(dsl) do

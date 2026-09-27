@@ -7,7 +7,8 @@ defmodule BB.Dsl.WildcardExpansionTransformer do
   Expands `:*` wildcards in command `allowed_states` and `cancel` options.
 
   This transformer:
-  - Expands `:*` in `allowed_states` to all defined states (including `:idle`, `:disarmed`)
+  - Expands `:*` in `allowed_states` to all defined states, including
+    `BB.Dsl.State.built_in/0`
   - Expands `:*` in `cancel` to all defined categories (including `:default`)
   - Runs after `StateTransformer` and `CategoryTransformer` so state/category lists are available
   """
@@ -88,8 +89,7 @@ defmodule BB.Dsl.WildcardExpansionTransformer do
       |> Enum.filter(&is_struct(&1, State))
       |> Enum.map(& &1.name)
 
-    # Include built-in states
-    [:idle, :disarmed | user_states] |> Enum.uniq()
+    Enum.uniq(State.built_in_names() ++ user_states)
   end
 
   defp collect_category_names(dsl) do

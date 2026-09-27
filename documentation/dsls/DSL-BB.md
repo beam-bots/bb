@@ -1890,9 +1890,10 @@ Target: `BB.Dsl.Bridge`
 ## states
 Custom operational states for the robot.
 
-The built-in `:idle` state is always available. Define additional states
-here and use commands to transition between them. Commands can specify
-which states they're allowed to run in via `allowed_states`.
+The built-in states (`:idle` and `:disarmed`) are always available.
+Define additional states here and use commands to transition between
+them. Commands can specify which states they're allowed to run in via
+`allowed_states`.
 
 
 ### Nested DSLs

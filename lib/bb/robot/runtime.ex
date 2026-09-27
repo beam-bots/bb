@@ -59,10 +59,6 @@ defmodule BB.Robot.Runtime do
 
   alias BB.Robot.CommandInfo
 
-  # Owned by BB.Safety rather than declared in the `states` section, but a
-  # command may still name one as its next state — `Disarm` does exactly that.
-  @safety_states [:disarmed, :disarming, :error]
-
   defstruct [
     :robot_module,
     :robot,
@@ -713,7 +709,7 @@ defmodule BB.Robot.Runtime do
         current_state
 
       {:ok, next_state} ->
-        if next_state in valid_states or next_state in @safety_states do
+        if next_state in valid_states do
           next_state
         else
           error = StateInvalidError.exception(state: next_state, valid_states: valid_states)
