@@ -62,4 +62,19 @@ defmodule BB.Dsl.State do
   """
   @spec built_in_names() :: [atom]
   def built_in_names, do: Enum.map(built_in(), & &1.name)
+
+  @doc """
+  State names a robot may not declare.
+
+  `BB.Safety` owns these, and `BB.Robot.Runtime.state/1` returns them ahead of
+  whatever the operational state machine holds. A robot state sharing one of
+  their names could therefore never be observed, and a command allowed in it
+  could never run — `check_state_allowed/2` refuses every command while the
+  robot is disarming or in error.
+
+  `:disarmed` is not reserved: it is a built-in, and redeclaring it only
+  changes its documentation. See `built_in/0`.
+  """
+  @spec reserved_names() :: [atom]
+  def reserved_names, do: [:disarming, :error]
 end

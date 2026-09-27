@@ -1165,6 +1165,9 @@ defmodule BB.Dsl do
     Define additional states here and use commands to transition between
     them. Commands can specify which states they're allowed to run in via
     `allowed_states`.
+
+    `:disarming` and `:error` are reserved — they belong to `BB.Safety`, and
+    defining a state with either name is a compile error.
     """,
     entities: [@state],
     schema: [
