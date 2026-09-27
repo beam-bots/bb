@@ -21,6 +21,7 @@ defmodule BB.Command.Server do
   alias BB.Command.Context
   alias BB.Command.ResultCache
   alias BB.Component.OptionsSchema
+  alias BB.Error.Invalid.CommandResult
   alias BB.Error.State.CommandCrashed
   alias BB.Parameter.Changed, as: ParameterChanged
   alias BB.PubSub
@@ -269,18 +270,7 @@ defmodule BB.Command.Server do
     # Cancel timeout timer
     if state.timeout_ref, do: Process.cancel_timer(state.timeout_ref)
 
-    # Extract result from user state
-    result =
-      try do
-        state.callback_module.result(state.user_state)
-      rescue
-        e ->
-          Logger.error(
-            "Command #{inspect(state.callback_module)} result/1 raised: #{Exception.message(e)}"
-          )
-
-          {:error, {:result_failed, e}}
-      end
+    result = extract_result(state)
 
     # Store result in cache for callers who haven't awaited yet
     ResultCache.store(self(), result)
@@ -304,6 +294,32 @@ defmodule BB.Command.Server do
     end
 
     :ok
+  end
+
+  defp extract_result(state) do
+    validate_result(state.callback_module.result(state.user_state), state.callback_module)
+  rescue
+    e ->
+      Logger.error(
+        "Command #{inspect(state.callback_module)} result/1 raised: #{Exception.message(e)}"
+      )
+
+      {:error, CommandCrashed.exception(command: state.callback_module, exception: e)}
+  end
+
+  defp validate_result({:ok, _} = result, _module), do: result
+  defp validate_result({:error, _} = result, _module), do: result
+
+  defp validate_result({:ok, _, opts} = result, module) do
+    if Keyword.keyword?(opts), do: result, else: invalid_result(result, module)
+  end
+
+  defp validate_result(value, module), do: invalid_result(value, module)
+
+  defp invalid_result(value, module) do
+    error = CommandResult.exception(command: module, value: value)
+    Logger.error(Exception.message(error))
+    {:error, error}
   end
 
   # Wraps user callbacks in try/rescue to ensure awaiters are notified on crash

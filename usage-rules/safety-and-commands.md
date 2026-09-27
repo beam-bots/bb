@@ -47,8 +47,10 @@ short-lived processes; call the generated function to start one, then
 ## Writing a command
 
 `use BB.Command`, implement `handle_command/3` and `result/1`. Return
-`{:ok, result}`, or `{:ok, result, next_state: state}` to drive the state
-machine (this is how `Arm`/`Disarm` transition it):
+`{:ok, result}`, `{:error, reason}`, or `{:ok, result, next_state: state}` to
+drive the state machine (this is how `Arm`/`Disarm` transition it). Those are
+the only shapes `result/1` may return — anything else becomes
+`{:error, %BB.Error.Invalid.CommandResult{}}`:
 
 ```elixir
 defmodule MyRobot.Command.Home do

@@ -31,7 +31,7 @@ defmodule BB.Command.ResultCache do
 
   Called by Command.Server in terminate/2 before the process exits.
   """
-  @spec store(pid(), term()) :: :ok
+  @spec store(pid(), BB.Command.outcome()) :: :ok
   def store(pid, result) do
     expiry = System.monotonic_time(:millisecond) + @default_ttl_ms
     :ets.insert(@table_name, {pid, result, expiry})
@@ -43,7 +43,7 @@ defmodule BB.Command.ResultCache do
 
   Returns `{:ok, result}` if found, `:error` if not cached.
   """
-  @spec fetch_and_delete(pid()) :: {:ok, term()} | :error
+  @spec fetch_and_delete(pid()) :: {:ok, BB.Command.outcome()} | :error
   def fetch_and_delete(pid) do
     case :ets.take(@table_name, pid) do
       [{^pid, result, _expiry}] -> {:ok, result}

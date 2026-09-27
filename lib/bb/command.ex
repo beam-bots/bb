@@ -92,6 +92,14 @@ defmodule BB.Command do
   @type state :: term()
   @type options :: [next_state: BB.Robot.Runtime.robot_state()]
 
+  @typedoc """
+  What a finished command hands back to its awaiting callers.
+
+  `BB.Command.Server` validates `c:result/1` against this before anything
+  downstream sees it, so no other shape reaches a caller or the runtime.
+  """
+  @type outcome :: {:ok, result()} | {:ok, result(), options()} | {:error, term()}
+
   @doc """
   Initialise the command state.
 
@@ -133,11 +141,12 @@ defmodule BB.Command do
   - `{:ok, result, options}` - Command succeeded with options:
     - `next_state: state` - Robot transitions to specified state instead of `:idle`
   - `{:error, reason}` - Command failed, robot transitions to `:idle`
+
+  Returning anything else breaks the contract. The value is discarded and
+  callers receive `{:error, %BB.Error.Invalid.CommandResult{}}` naming the
+  handler, rather than the malformed value reaching the runtime.
   """
-  @callback result(state()) ::
-              {:ok, result()}
-              | {:ok, result(), options()}
-              | {:error, term()}
+  @callback result(state()) :: outcome()
 
   @doc """
   Handle safety state changes.
@@ -244,7 +253,7 @@ defmodule BB.Command do
       # With custom timeout
       {:ok, result} = BB.Command.await(cmd, 30_000)
   """
-  @spec await(pid(), timeout()) :: {:ok, term()} | {:ok, term(), options()} | {:error, term()}
+  @spec await(pid(), timeout()) :: outcome()
   def await(pid, timeout \\ 5000) do
     GenServer.call(pid, :await, timeout)
   catch
@@ -282,8 +291,7 @@ defmodule BB.Command do
         {:error, reason} -> IO.puts("Failed: \#{inspect(reason)}")
       end
   """
-  @spec yield(pid(), timeout()) ::
-          {:ok, term()} | {:ok, term(), options()} | {:error, term()} | nil
+  @spec yield(pid(), timeout()) :: outcome() | nil
   def yield(pid, timeout \\ 0) do
     GenServer.call(pid, :await, timeout)
   catch
