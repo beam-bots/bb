@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="110 58 180 184">
+  <!--
+    Continuous: the same mounting as joint-revolute.svg, but with no stops, so it
+    keeps going round. A wheel rather than a lever, because a lever swinging
+    through its own post reads as a bug.
+
+    The curved arrow is what makes the still frame legible — without it, a
+    stopped wheel is just a wheel.
+  -->
+  <style>
+    svg { --ink: #1a1a1a; --paper: #f4f1ea; }
+    @media (prefers-color-scheme: dark) {
+      svg { --ink: #e3e0da; --paper: #1d1d1d; }
+    }
+  </style>
+  <defs>
+    <pattern id="hatch-c" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="8" stroke="var(--ink)" stroke-opacity="0.35" stroke-width="2"/>
+    </pattern>
+    <marker id="arrow-c" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--ink)" fill-opacity="0.55"/>
+    </marker>
+  </defs>
+
+  <rect x="150" y="210" width="100" height="26" fill="url(#hatch-c)" stroke="var(--ink)" stroke-width="3"/>
+  <rect x="193" y="150" width="14" height="62" fill="var(--ink)"/>
+
+  <path d="M 130 132 A 78 78 0 0 1 243 84" fill="none" stroke="var(--ink)" stroke-opacity="0.4"
+        stroke-width="3" stroke-dasharray="6 8" marker-end="url(#arrow-c)"/>
+
+  <g>
+    <circle cx="200" cy="150" r="52" fill="none" stroke="var(--ink)" stroke-width="7"/>
+    <line x1="200" y1="102" x2="200" y2="198" stroke="var(--ink)" stroke-width="6"/>
+    <line x1="152" y1="150" x2="248" y2="150" stroke="var(--ink)" stroke-width="6"/>
+    <animateTransform attributeName="transform" type="rotate"
+                      from="0 200 150" to="360 200 150"
+                      dur="2.6s" repeatCount="indefinite"/>
+  </g>
+
+  <circle cx="200" cy="150" r="9" fill="var(--paper)" stroke="var(--ink)" stroke-width="4"/>
+</svg>
