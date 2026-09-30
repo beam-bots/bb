@@ -59,6 +59,7 @@ defmodule BB.MixProject do
     [
       main: "readme",
       logo: "assets/logo.png",
+      assets: %{"documentation/assets" => "assets"},
       extras:
         ["README.md", "CHANGELOG.md"]
         |> Enum.concat(Path.wildcard("documentation/**/*.{md,livemd,cheatmd}")),

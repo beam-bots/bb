@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="110 58 180 184">
+  <!--
+    Fixed: two links bolted solidly together. No animation, which is the whole
+    point — so the drawing has to do all the work.
+
+    The seam, the bolts straddling it and the corner gussets are what say "these
+    are two separate parts held rigidly", rather than "this is one lump".
+  -->
+  <style>
+    svg { --ink: #1a1a1a; --paper: #f4f1ea; }
+    @media (prefers-color-scheme: dark) {
+      svg { --ink: #e3e0da; --paper: #1d1d1d; }
+    }
+  </style>
+  <defs>
+    <pattern id="hatch-f" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="8" stroke="var(--ink)" stroke-opacity="0.35" stroke-width="2"/>
+    </pattern>
+  </defs>
+
+  <rect x="150" y="210" width="100" height="26" fill="url(#hatch-f)" stroke="var(--ink)" stroke-width="3"/>
+
+  <!-- gussets, so the join reads as deliberate rather than as a butt joint -->
+  <path d="M 168 210 L 168 192 L 150 210 z" fill="var(--ink)" fill-opacity="0.45"/>
+  <path d="M 232 210 L 232 192 L 250 210 z" fill="var(--ink)" fill-opacity="0.45"/>
+
+  <rect x="168" y="110" width="64" height="100" fill="var(--ink)"/>
+
+  <!-- bolts straddling the seam -->
+  <circle cx="182" cy="210" r="8" fill="var(--paper)" stroke="var(--ink)" stroke-width="3"/>
+  <circle cx="218" cy="210" r="8" fill="var(--paper)" stroke="var(--ink)" stroke-width="3"/>
+</svg>

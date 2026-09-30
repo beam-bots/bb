@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="110 58 180 184">
+  <!--
+    Planar: three freedoms — slide in two directions, and turn. Drawn from above
+    rather than side-on like the other joint diagrams, because a plan view is the
+    only honest way to show two translations at once.
+
+    Still frame: the two ghosted poses do the work the animation would, showing
+    the block somewhere else and turned a different way.
+  -->
+  <style>
+    svg { --ink: #1a1a1a; --paper: #f4f1ea; }
+    @media (prefers-color-scheme: dark) {
+      svg { --ink: #e3e0da; --paper: #1d1d1d; }
+    }
+  </style>
+  <rect x="122" y="76" width="156" height="148" fill="none" stroke="var(--ink)"
+        stroke-opacity="0.28" stroke-width="3" stroke-dasharray="7 8"/>
+
+  <!-- where it has been, so a stopped diagram still says "this moves" -->
+  <g fill="none" stroke="var(--ink)" stroke-opacity="0.25" stroke-width="3">
+    <rect x="176" y="132" width="48" height="36" rx="4" transform="translate(34 -22) rotate(25 200 150)"/>
+    <rect x="176" y="132" width="48" height="36" rx="4" transform="translate(-30 18) rotate(-20 200 150)"/>
+  </g>
+
+  <g>
+    <rect x="176" y="132" width="48" height="36" rx="4" fill="var(--ink)"/>
+    <animateTransform attributeName="transform" type="translate"
+                      values="0 0; 34 -22; -30 18; 0 0"
+                      dur="5.4s" calcMode="spline"
+                      keyTimes="0; 0.34; 0.67; 1"
+                      keySplines="0.45 0 0.55 1; 0.45 0 0.55 1; 0.45 0 0.55 1"
+                      repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="rotate" additive="sum"
+                      values="0 200 150; 25 200 150; -20 200 150; 0 200 150"
+                      dur="5.4s" calcMode="spline"
+                      keyTimes="0; 0.34; 0.67; 1"
+                      keySplines="0.45 0 0.55 1; 0.45 0 0.55 1; 0.45 0 0.55 1"
+                      repeatCount="indefinite"/>
+  </g>
+</svg>

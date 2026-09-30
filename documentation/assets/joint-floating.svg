@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="110 58 180 184">
+  <!--
+    Floating: no constraint at all. Drawn as an isometric block with the three
+    axes through it, drifting and turning, because the point isn't any particular
+    motion — it's that nothing is held.
+
+    No ground, no mounting, no stops. The absence of all the furniture the other
+    diagrams have is doing most of the work here.
+  -->
+  <style>
+    svg { --ink: #1a1a1a; --paper: #f4f1ea; }
+    @media (prefers-color-scheme: dark) {
+      svg { --ink: #e3e0da; --paper: #1d1d1d; }
+    }
+  </style>
+  <defs>
+    <marker id="tip-fl" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--ink)" fill-opacity="0.45"/>
+    </marker>
+  </defs>
+
+  <g>
+    <!-- the three axes, so it reads as free in space rather than free on a page -->
+    <g stroke="var(--ink)" stroke-opacity="0.45" stroke-width="3"
+       marker-start="url(#tip-fl)" marker-end="url(#tip-fl)">
+      <line x1="200" y1="74" x2="200" y2="226"/>
+      <line x1="134" y1="112" x2="266" y2="188"/>
+      <line x1="266" y1="112" x2="134" y2="188"/>
+    </g>
+
+    <!-- isometric block: top, left, right -->
+    <g stroke="var(--ink)" stroke-width="3" stroke-linejoin="round">
+      <path d="M 200 118 L 236 139 L 200 160 L 164 139 z" fill="var(--ink)" fill-opacity="0.14"/>
+      <path d="M 164 139 L 200 160 L 200 196 L 164 175 z" fill="var(--ink)" fill-opacity="0.55"/>
+      <path d="M 236 139 L 200 160 L 200 196 L 236 175 z" fill="var(--ink)" fill-opacity="0.34"/>
+    </g>
+
+    <animateTransform attributeName="transform" type="translate"
+                      values="0 0; 10 -8; -8 7; 0 0"
+                      dur="6s" calcMode="spline"
+                      keyTimes="0; 0.34; 0.67; 1"
+                      keySplines="0.45 0 0.55 1; 0.45 0 0.55 1; 0.45 0 0.55 1"
+                      repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="rotate" additive="sum"
+                      values="0 200 157; 9 200 157; -7 200 157; 0 200 157"
+                      dur="6s" calcMode="spline"
+                      keyTimes="0; 0.34; 0.67; 1"
+                      keySplines="0.45 0 0.55 1; 0.45 0 0.55 1; 0.45 0 0.55 1"
+                      repeatCount="indefinite"/>
+  </g>
+</svg>

@@ -13,6 +13,8 @@ This tutorial guides you through defining your first robot with Beam Bots. By th
 - Elixir 1.19 or later
 - Beam Bots installed in your project
 
+New to robotics? [Robotics Vocabulary](../topics/robotics-vocabulary.md) introduces links, joints, sensors, actuators and the rest of the terms used here, written for Elixir developers.
+
 ### Quick Start with Igniter
 
 The fastest way to get started is with [Igniter](https://hex.pm/packages/igniter). First, install the `igniter_new` archive if you haven't already:
@@ -126,7 +128,7 @@ Key concepts:
 
 > **For Roboticists:** The DSL compiles to an Elixir struct at compile-time. There's no runtime parsing - the robot definition is baked into your module.
 
-> **For Elixirists:** Links are rigid bodies (solid pieces). Joints are the connections between them that allow movement. A revolute joint is like a door hinge - it rotates around one axis.
+> **For Elixirists:** Links are rigid bodies and joints are the connections between them that allow movement. [Robotics Vocabulary](../topics/robotics-vocabulary.md#the-shape-links-and-joints) walks through all six joint types with diagrams.
 
 ## Step 3: Add Joint Limits
 

@@ -12,6 +12,8 @@ In this tutorial, you'll learn how to compute link positions from joint angles u
 
 Complete [Your First Robot](01-first-robot.md). You should have a `MyRobot.Robot` module with at least two joints.
 
+For what links, joints and frames are in the first place, see [Robotics Vocabulary](../topics/robotics-vocabulary.md).
+
 ## What is Forward Kinematics?
 
 > **For Elixirists:** Forward kinematics answers the question "if my joints are at these angles, where is my end effector?" It's the mathematical relationship between joint angles and Cartesian positions.

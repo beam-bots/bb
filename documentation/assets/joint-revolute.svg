@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="110 58 180 184">
+  <!--
+    Revolute: a lever on a post, swinging between two stops. Shares its base,
+    post and pivot with joint-continuous.svg so that the only visible difference
+    between the two is the thing that actually differs — the limits.
+
+    Drawn so the still frame reads on its own: the dotted arc and the two stop
+    ticks say "between stops" whether or not the animation runs.
+  -->
+  <style>
+    svg { --ink: #1a1a1a; --paper: #f4f1ea; }
+    @media (prefers-color-scheme: dark) {
+      svg { --ink: #e3e0da; --paper: #1d1d1d; }
+    }
+  </style>
+  <defs>
+    <pattern id="hatch-r" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="8" stroke="var(--ink)" stroke-opacity="0.35" stroke-width="2"/>
+    </pattern>
+  </defs>
+
+  <rect x="150" y="210" width="100" height="26" fill="url(#hatch-r)" stroke="var(--ink)" stroke-width="3"/>
+  <rect x="193" y="150" width="14" height="62" fill="var(--ink)"/>
+
+  <path d="M 126 108 A 85 85 0 0 1 274 108" fill="none" stroke="var(--ink)" stroke-opacity="0.3"
+        stroke-width="3" stroke-dasharray="6 8"/>
+  <line x1="120" y1="118" x2="134" y2="126" stroke="var(--ink)" stroke-opacity="0.55" stroke-width="5"/>
+  <line x1="280" y1="118" x2="266" y2="126" stroke="var(--ink)" stroke-opacity="0.55" stroke-width="5"/>
+
+  <g>
+    <rect x="191" y="72" width="18" height="82" rx="4" fill="var(--ink)"/>
+    <animateTransform attributeName="transform" type="rotate"
+                      values="-60 200 150; 60 200 150; -60 200 150"
+                      keyTimes="0; 0.5; 1"
+                      calcMode="spline"
+                      keySplines="0.45 0 0.55 1; 0.45 0 0.55 1"
+                      dur="3.2s" repeatCount="indefinite"/>
+  </g>
+
+  <circle cx="200" cy="150" r="9" fill="var(--paper)" stroke="var(--ink)" stroke-width="4"/>
+</svg>
