@@ -10,6 +10,8 @@ Most of Beam Bots' documentation assumes you know what a link, a joint or an est
 
 You don't need any maths for this. The aim is that by the end, every word in the DSL reference means something to you.
 
+Coming the other way — a roboticist who's new to Elixir and the BEAM — is [Elixir for Roboticists](elixir-for-roboticists.md).
+
 ## A robot is a supervision tree
 
 Start here, because it makes the rest of the page much easier to read.
