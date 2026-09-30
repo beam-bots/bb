@@ -218,7 +218,6 @@ defmodule BB.MixProject do
       {:git_ops, "~> 2.9", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.6", optional: true},
       {:mimic, "~> 2.2", only: :test},
-      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:usage_rules, "~> 1.2", only: [:dev], runtime: false}
     ]
   end
