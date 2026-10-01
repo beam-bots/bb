@@ -44,6 +44,7 @@ defmodule BB.Robot.Runtime do
   alias BB.Command.{Context, Event}
   alias BB.Dsl.{Info, Joint, Link}
   alias BB.Error.Category.Full, as: CategoryFullError
+  alias BB.Error.Invalid.CommandResult
   alias BB.Error.State.Invalid, as: StateInvalidError
   alias BB.Error.State.NotAllowed, as: StateError
   alias BB.{Message, PubSub}
@@ -615,7 +616,7 @@ defmodule BB.Robot.Runtime do
 
     demonitor_command(command_info)
 
-    next_state = extract_next_state(result, old_state)
+    next_state = extract_next_state(result, old_state, state.valid_states)
     publish_command_result(state.robot_module, command_info, execution_id, result)
 
     state = remove_command_from_tracking(state, execution_id, command_info.category)
@@ -644,6 +645,14 @@ defmodule BB.Robot.Runtime do
 
       {:error, reason} ->
         publish_command_event(robot_module, path, :failed, %{reason: reason})
+
+      # BB.Command.Server validates result/1 before casting, so this should be
+      # unreachable. Taking the runtime down over a malformed completion would
+      # force-disarm the robot, which is out of all proportion to the mistake.
+      other ->
+        error = CommandResult.exception(command: command_info.name, value: other)
+        Logger.error(Exception.message(error))
+        publish_command_event(robot_module, path, :failed, %{reason: error})
     end
   end
 
@@ -694,11 +703,23 @@ defmodule BB.Robot.Runtime do
     end
   end
 
-  defp extract_next_state({:ok, _value, opts}, current_state) when is_list(opts) do
-    Keyword.get(opts, :next_state, current_state)
+  defp extract_next_state({:ok, _value, opts}, current_state, valid_states) when is_list(opts) do
+    case Keyword.fetch(opts, :next_state) do
+      :error ->
+        current_state
+
+      {:ok, next_state} ->
+        if next_state in valid_states do
+          next_state
+        else
+          error = StateInvalidError.exception(state: next_state, valid_states: valid_states)
+          Logger.error(Exception.message(error))
+          current_state
+        end
+    end
   end
 
-  defp extract_next_state(_, current_state), do: current_state
+  defp extract_next_state(_, current_state, _valid_states), do: current_state
 
   defp find_command_by_ref(executing_commands, ref) do
     Enum.find_value(executing_commands, fn {execution_id, command_info} ->

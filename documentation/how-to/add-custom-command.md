@@ -370,7 +370,7 @@ Ensure you:
 
 ### State transition not working
 
-The `result/1` callback must return `{:ok, value, next_state: state}` - the third element must be a keyword list with `:next_state`.
+The `result/1` callback must return `{:ok, value, next_state: state}` - the third element must be a keyword list with `:next_state`, and the state must be one declared in the `states` section. An undeclared state is logged and ignored, leaving the robot where it was.
 
 ## Next Steps
 

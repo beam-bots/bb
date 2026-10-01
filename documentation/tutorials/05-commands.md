@@ -353,6 +353,10 @@ The `result/1` callback returns:
 {:error, reason}
 ```
 
+Those three are the whole contract. Return anything else and the value is
+dropped: callers get `{:error, %BB.Error.Invalid.CommandResult{}}` naming your
+handler, and the robot carries on.
+
 The `next_state` option is how `Arm` and `Disarm` control the state machine:
 
 ```elixir

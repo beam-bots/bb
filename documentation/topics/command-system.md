@@ -193,7 +193,10 @@ On termination, `result/1` is called:
 def result(%{result: result}), do: result
 ```
 
-The result goes to awaiting callers.
+The result goes to awaiting callers. It must be `{:ok, result}`,
+`{:ok, result, options}` or `{:error, reason}` — anything else is dropped and
+callers get `{:error, %BB.Error.Invalid.CommandResult{}}` naming the handler,
+so a mistake in `result/1` fails the command rather than the robot.
 
 ## Awaiting Results
 
@@ -275,7 +278,7 @@ command :emergency_stop do
 end
 ```
 
-When cancelled, the command process terminates and `result/1` is called with the current state. Awaiting callers receive whatever `result/1` returns. Commands should handle cancellation with a fallback clause:
+When cancelled, the command process terminates and `result/1` is called with the current state, so awaiting callers get the cancelled command's result. Commands should handle cancellation with a fallback clause:
 
 ```elixir
 @impl BB.Command

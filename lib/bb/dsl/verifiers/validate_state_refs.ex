@@ -7,7 +7,8 @@ defmodule BB.Dsl.Verifiers.ValidateStateRefs do
   Validates that state references in commands are valid.
 
   This verifier checks:
-  - All states in `allowed_states` are defined in the `states` section (or `:idle`)
+  - All states in `allowed_states` are defined in the `states` section, or are
+    one of `BB.Dsl.State.built_in/0`
   - The `initial_state` setting references a defined state
   - Commands using `{BB.Command.SetState, to: state}` reference valid states
   """
@@ -36,9 +37,7 @@ defmodule BB.Dsl.Verifiers.ValidateStateRefs do
       |> Enum.filter(&is_struct(&1, State))
       |> Enum.map(& &1.name)
 
-    # Include built-in states: :idle is always available as operational state,
-    # :disarmed is a safety state that can be in allowed_states
-    [:idle, :disarmed | user_states] |> Enum.uniq()
+    Enum.uniq(State.built_in_names() ++ user_states)
   end
 
   defp verify_initial_state(dsl_state, valid_states, module) do
