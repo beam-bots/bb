@@ -11,6 +11,25 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.32.0](https://github.com/beam-bots/bb/compare/v0.31.2...v0.32.0) (2026-10-12)
+### Breaking Changes:
+
+* unify the actuator command delivery API (#272) by James Harton
+
+* arm epochs — fence actuator commands to their arming session (#271) by James Harton
+
+
+
+### Improvements:
+
+* generic estimator intake freshness, liveness and timing fixes (#270) by James Harton
+
+### Bug Fixes:
+
+* validate a command's `result/1` return before it reaches the runtime (#277) by James Harton
+
+* ci: install the OS packages subprojects declare before building them (#269) by James Harton
+
 ## [v0.31.2](https://github.com/beam-bots/bb/compare/v0.31.1...v0.31.2) (2026-09-18)
 
 
