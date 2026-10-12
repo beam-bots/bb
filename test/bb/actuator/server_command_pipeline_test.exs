@@ -7,6 +7,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
   import ExUnit.CaptureLog
 
+  alias BB.Error.State.CommandPending
   alias BB.Error.State.NotArmed
   alias BB.Error.State.StaleEpoch
   alias BB.Message
@@ -195,8 +196,19 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
 
     test ":timeout bounds how long the caller waits for a slow driver" do
-      assert {:timeout, _} =
-               catch_exit(BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50))
+      assert {:error,
+              %CommandPending{actuator: :motor, command: Command.Position, timeout_ms: 50}} =
+               BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50)
+    end
+
+    test "a command the caller stopped waiting for is still applied" do
+      {:error, %CommandPending{} = error} =
+        BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50)
+
+      assert BB.Error.severity(error) == :warning
+
+      assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
+                     1000
     end
 
     test "and the default is long enough for one that merely takes its time" do
