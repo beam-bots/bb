@@ -7,6 +7,7 @@
     {:credo, "mix credo --strict"},
     {:hex_audit, "mix hex.audit"},
     {:mix_audit, false},
+    {:usage_rules, false},
     {:spark_formatter, "mix spark.formatter --check"},
     {:spark_cheat_sheets, "mix spark.cheat_sheets --check"},
     {:reuse, command: ["pipx", "run", "--spec", "reuse[charset-normalizer]", "reuse", "lint", "-q"]}
