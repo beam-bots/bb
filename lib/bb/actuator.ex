@@ -203,8 +203,9 @@ defmodule BB.Actuator do
       BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57)
       BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :shoulder_servo], 1.57)
 
-  Naming an actuator the robot doesn't have raises `ArgumentError` rather than
-  publishing to a topic nothing is listening on.
+  Naming an actuator the robot doesn't have raises `ArgumentError`, whichever
+  delivery is used, rather than sending the command where nothing is listening.
+  So does a path that isn't the actuator's full path from the root.
 
   ### Examples
 
@@ -1150,7 +1151,7 @@ defmodule BB.Actuator do
   end
 
   defp deliver(:direct, robot, target, opts, build) do
-    actuator_name = actuator_name!(robot, target)
+    actuator_name = robot |> actuator_path!(target) |> List.last()
     message = stamp(robot, build.(actuator_name))
     BB.cast(robot, actuator_name, {:command, message, reply_target(opts)})
   end
@@ -1261,9 +1262,21 @@ defmodule BB.Actuator do
   # Pubsub delivery needs the actuator's full path, because that is the topic its
   # server subscribes to. A bare name is resolved against the robot rather than
   # passed through: `[:actuator | :servo]` is an improper list, which slips past
-  # `BB.publish/3`'s `is_list` guard and then dies inside `Enum.scan/3`.
+  # `BB.publish/3`'s `is_list` guard and then dies inside `Enum.scan/3`. A path is
+  # checked against the one its last element resolves to, since a wrong or partial
+  # one names a topic the actuator doesn't subscribe to.
   @spec actuator_path!(module(), target()) :: [atom()]
-  defp actuator_path!(_robot, path) when is_list(path), do: path
+  defp actuator_path!(robot, path) when is_list(path) do
+    case actuator_path!(robot, List.last(path)) do
+      ^path ->
+        path
+
+      full_path ->
+        raise ArgumentError,
+              "#{inspect(path)} is not the path to #{inspect(List.last(path))} on " <>
+                "#{inspect(robot)}. Its full path is #{inspect(full_path)}"
+    end
+  end
 
   defp actuator_path!(robot, name) when is_atom(name) do
     case Robot.actuator_path(robot.robot(), name) do
@@ -1276,10 +1289,4 @@ defmodule BB.Actuator do
                 "Known actuators: #{inspect(Map.keys(robot.robot().actuators))}"
     end
   end
-
-  # Direct and synchronous delivery go through the registry, which is keyed by
-  # the actuator's unique name.
-  @spec actuator_name!(module(), target()) :: atom()
-  defp actuator_name!(_robot, name) when is_atom(name), do: name
-  defp actuator_name!(_robot, path) when is_list(path), do: List.last(path)
 end

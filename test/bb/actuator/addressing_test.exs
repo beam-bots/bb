@@ -138,6 +138,51 @@ defmodule BB.Actuator.AddressingTest do
       assert Exception.message(error) =~ ":motor"
       assert Exception.message(error) =~ ":forearm_motor"
     end
+
+    for delivery <- [:pubsub, :broadcast, :direct] do
+      test "raise under :#{delivery} when named" do
+        assert_raise ArgumentError, ~r/has no actuator named :nonexistent/, fn ->
+          BB.Actuator.set_position(Robot, :nonexistent, 0.5, delivery: unquote(delivery))
+        end
+      end
+
+      test "raise under :#{delivery} when given as a path" do
+        assert_raise ArgumentError, ~r/has no actuator named :nonexistent/, fn ->
+          BB.Actuator.set_position(Robot, [:base, :shoulder, :nonexistent], 0.5,
+            delivery: unquote(delivery)
+          )
+        end
+      end
+    end
+
+    test "a path to one is not published to" do
+      BB.subscribe(Robot, [:actuator])
+
+      assert_raise ArgumentError, fn ->
+        BB.Actuator.set_position(Robot, [:nonexistent], 0.5, delivery: :broadcast)
+      end
+
+      refute_receive {:bb, _path, _message}, 200
+    end
+  end
+
+  describe "incomplete paths" do
+    for delivery <- [:pubsub, :broadcast, :direct] do
+      test "raise under :#{delivery}, naming the full path" do
+        error =
+          assert_raise ArgumentError, fn ->
+            BB.Actuator.set_position(Robot, [:shoulder, :motor], 0.5, delivery: unquote(delivery))
+          end
+
+        assert Exception.message(error) =~ "[:base, :shoulder, :motor]"
+      end
+    end
+
+    test "a path through the wrong joint raises too" do
+      assert_raise ArgumentError, ~r/is not the path to :forearm_motor/, fn ->
+        BB.Actuator.set_position(Robot, [:base, :shoulder, :forearm_motor], 0.5)
+      end
+    end
   end
 
   defp position(value),

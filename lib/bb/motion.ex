@@ -511,7 +511,7 @@ defmodule BB.Motion do
   defp send_positions_to_actuators(robot_module, robot, positions, delivery, opts) do
     positions
     |> Enum.flat_map(&actuators_for_joint(robot, &1))
-    |> send_to_actuators(robot_module, robot, delivery, opts)
+    |> send_to_actuators(robot_module, delivery, opts)
   end
 
   defp actuators_for_joint(robot, {joint_name, position}) do
@@ -529,16 +529,13 @@ defmodule BB.Motion do
   # outside any `try`. Every joint is waited for before a crash is passed on, so
   # it reaches the caller as it would from a single `Actuator.set_position/4`,
   # and no late reply is left behind in the caller's mailbox.
-  defp send_to_actuators(commands, robot_module, robot, :pubsub, opts) do
+  defp send_to_actuators(commands, robot_module, :pubsub, opts) do
     task_supervisor = BB.Process.via(robot_module, BB.TaskSupervisor)
 
     commands
     |> Enum.map(fn {actuator_name, position} ->
-      # The name came from the joint's own actuator list, so the lookup cannot miss.
-      {:ok, path} = BB.Robot.actuator_path(robot, actuator_name)
-
       Task.Supervisor.async_nolink(task_supervisor, fn ->
-        Actuator.set_position(robot_module, path, position, opts)
+        Actuator.set_position(robot_module, actuator_name, position, opts)
       end)
     end)
     |> Task.yield_many(timeout: :infinity)
@@ -548,7 +545,7 @@ defmodule BB.Motion do
 
   # Neither of these waits for an actuator, so there is no result to collect and
   # no reason to spend a task per joint on gathering one.
-  defp send_to_actuators(commands, robot_module, _robot, delivery, opts)
+  defp send_to_actuators(commands, robot_module, delivery, opts)
        when delivery in [:broadcast, :direct] do
     Enum.each(commands, fn {actuator_name, position} ->
       Actuator.set_position(robot_module, actuator_name, position, opts)
