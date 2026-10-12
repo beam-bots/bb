@@ -5,13 +5,99 @@
 defmodule BB.MotionTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias BB.Command.Context
   alias BB.Error.Kinematics.MultiFailed
   alias BB.Error.Kinematics.Unreachable
+  alias BB.Error.State.CommandPending
   alias BB.Error.State.NotArmed
   alias BB.Motion
   alias BB.Robot.State, as: RobotState
   alias BB.Test.MockSolver
+
+  defmodule CrashingActuator do
+    @moduledoc false
+    use BB.Actuator, options_schema: []
+
+    @impl BB.Actuator
+    def disarm(_opts), do: :ok
+
+    @impl BB.Actuator
+    def capabilities(_opts), do: [:position_feedback]
+
+    @impl BB.Actuator
+    def init(_opts), do: {:ok, %{}}
+
+    @impl BB.Actuator
+    def handle_command(_message, _state), do: raise("servo bus fault")
+  end
+
+  defmodule SlowMotionRobot do
+    @moduledoc false
+    use BB
+
+    topology do
+      link :base_link do
+        joint :slow_joint do
+          type(:revolute)
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(90 degree_per_second))
+          end
+
+          actuator :slow_servo, {BB.Test.RecordingActuator, delay_ms: 300}
+          link(:slow_arm)
+        end
+
+        joint :steady_joint do
+          type(:revolute)
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(90 degree_per_second))
+          end
+
+          actuator :steady_servo, BB.Test.MockActuator
+          link(:steady_arm)
+        end
+      end
+    end
+  end
+
+  defmodule CrashingMotionRobot do
+    @moduledoc false
+    use BB
+
+    topology do
+      link :base_link do
+        joint :crashing_joint do
+          type(:revolute)
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(90 degree_per_second))
+          end
+
+          actuator :crashing_servo, BB.MotionTest.CrashingActuator
+          link(:crashing_arm)
+        end
+
+        joint :steady_joint do
+          type(:revolute)
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(90 degree_per_second))
+          end
+
+          actuator :steady_servo, BB.Test.MockActuator
+          link(:steady_arm)
+        end
+      end
+    end
+  end
 
   defmodule MotionTestRobot do
     @moduledoc false
@@ -404,6 +490,33 @@ defmodule BB.MotionTest do
 
       assert {:error, %NotArmed{}} =
                Motion.send_positions(context, %{shoulder_joint: 0.7, elbow_joint: 0.4})
+    end
+
+    test "returns a late actuator as a value rather than exiting the caller" do
+      start_supervised!(SlowMotionRobot)
+      :ok = BB.Safety.arm(SlowMotionRobot)
+
+      assert {:error, %CommandPending{actuator: :slow_servo}} =
+               Motion.send_positions(SlowMotionRobot, %{slow_joint: 0.7, steady_joint: 0.4},
+                 timeout: 50
+               )
+    end
+
+    test "an actuator crashing mid-command exits the caller in a way it can catch" do
+      start_supervised!(CrashingMotionRobot)
+      :ok = BB.Safety.arm(CrashingMotionRobot)
+
+      capture_log(fn ->
+        assert {{%RuntimeError{}, _stacktrace}, {GenServer, :call, _}} =
+                 catch_exit(
+                   Motion.send_positions(CrashingMotionRobot, %{
+                     crashing_joint: 0.7,
+                     steady_joint: 0.4
+                   })
+                 )
+      end)
+
+      assert {:messages, []} = Process.info(self(), :messages)
     end
   end
 
