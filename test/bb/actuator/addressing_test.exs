@@ -162,7 +162,7 @@ defmodule BB.Actuator.AddressingTest do
         BB.Actuator.set_position(Robot, [:nonexistent], 0.5, delivery: :broadcast)
       end
 
-      refute_receive {:bb, _path, _message}, 200
+      refute_received {:bb, _path, _message}
     end
   end
 
