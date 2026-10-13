@@ -48,7 +48,7 @@ defmodule BB.MotionTest do
             velocity(~u(90 degree_per_second))
           end
 
-          actuator :slow_servo, {BB.Test.RecordingActuator, delay_ms: 300}
+          actuator :slow_servo, {BB.Test.RecordingActuator, gated: true}
           link(:slow_arm)
         end
 
@@ -131,7 +131,7 @@ defmodule BB.MotionTest do
             velocity(~u(90 degree_per_second))
           end
 
-          actuator :late_servo, {BB.Test.RecordingActuator, delay_ms: 300}
+          actuator :late_servo, {BB.Test.RecordingActuator, gated: true}
           link(:late_arm)
         end
 
@@ -551,6 +551,8 @@ defmodule BB.MotionTest do
                Motion.send_positions(SlowMotionRobot, %{slow_joint: 0.7, steady_joint: 0.4},
                  timeout: 50
                )
+
+      release(SlowMotionRobot, :slow_servo)
     end
 
     test "reports a missing actuator ahead of a late one, whichever was commanded first" do
@@ -563,6 +565,8 @@ defmodule BB.MotionTest do
                  %{late_joint: 0.7, missing_joint: 0.4},
                  timeout: 50
                )
+
+      release(LateAndMissingMotionRobot, :late_servo)
     end
 
     test "an actuator crashing mid-command exits the caller in a way it can catch" do
@@ -737,4 +741,7 @@ defmodule BB.MotionTest do
                )
     end
   end
+
+  defp release(robot_module, actuator),
+    do: send(BB.Process.whereis(robot_module, actuator), :release)
 end

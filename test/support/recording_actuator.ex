@@ -22,8 +22,11 @@ defmodule BB.Test.RecordingActuator do
   arriving there are forwarded as `{:received, :info, message}`, which is how
   the tests check that the server leaves a driver's own subscriptions alone.
 
-  Pass `delay_ms:` to have it block for that long before answering a command,
-  standing in for a driver that waits on slow hardware.
+  Pass `gated: true` to have it hold each command until the test sends the
+  actuator's process `:release`, standing in for a driver that waits on slow
+  hardware. It sends `{:received, :holding, message}` as it starts waiting, so a
+  test can tell the command has arrived without guessing how long that takes.
+  Every held command must be released, or the robot can't shut down.
   """
   use BB.Actuator,
     options_schema: [
@@ -32,11 +35,11 @@ defmodule BB.Test.RecordingActuator do
         required: false,
         doc: "An additional pubsub topic for the actuator to subscribe to itself"
       ],
-      delay_ms: [
-        type: :non_neg_integer,
+      gated: [
+        type: :boolean,
         required: false,
-        default: 0,
-        doc: "How long to block before answering a command"
+        default: false,
+        doc: "Hold each command until the actuator is sent `:release`"
       ]
     ]
 
@@ -56,12 +59,12 @@ defmodule BB.Test.RecordingActuator do
       topic -> BB.subscribe(bb.robot, topic)
     end
 
-    {:ok, %{recipient: recipient, delay_ms: Keyword.fetch!(opts, :delay_ms)}}
+    {:ok, %{recipient: recipient, gated: Keyword.fetch!(opts, :gated)}}
   end
 
   @impl BB.Actuator
   def handle_command(%BB.Message{} = message, state) do
-    Process.sleep(state.delay_ms)
+    if state.gated, do: hold(state.recipient, message)
     forward(state.recipient, :command, message)
     {:noreply, state}
   end
@@ -73,6 +76,14 @@ defmodule BB.Test.RecordingActuator do
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
+
+  defp hold(recipient, message) do
+    forward(recipient, :holding, message)
+
+    receive do
+      :release -> :ok
+    end
+  end
 
   defp forward(nil, _kind, _message), do: :ok
   defp forward(pid, kind, message), do: send(pid, {:received, kind, message})

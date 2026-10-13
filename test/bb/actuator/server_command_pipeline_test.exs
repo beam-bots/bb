@@ -70,7 +70,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
             velocity(~u(180 degree_per_second))
           end
 
-          actuator :motor, {BB.Test.RecordingActuator, delay_ms: 300}
+          actuator :motor, {BB.Test.RecordingActuator, gated: true}
 
           link :arm
         end
@@ -199,6 +199,8 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       assert {:error,
               %CommandPending{actuator: :motor, command: Command.Position, timeout_ms: 50}} =
                BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50)
+
+      release(SlowRobot, :motor)
     end
 
     test "a command the caller stopped waiting for is still applied" do
@@ -206,15 +208,26 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
         BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50)
 
       assert BB.Error.severity(error) == :warning
+      refute_received {:received, :command, _message}
+
+      release(SlowRobot, :motor)
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
                      1000
     end
 
     test "and the default is long enough for one that merely takes its time" do
-      assert :ok = BB.Actuator.set_position(SlowRobot, :motor, 0.5)
+      caller = Task.async(fn -> BB.Actuator.set_position(SlowRobot, :motor, 0.5) end)
+
+      assert_receive {:received, :holding, %Message{}}, 1000
+      release(SlowRobot, :motor)
+
+      assert :ok = Task.await(caller)
     end
   end
+
+  defp release(robot_module, actuator),
+    do: send(BB.Process.whereis(robot_module, actuator), :release)
 
   describe "arm gating" do
     setup do
