@@ -73,6 +73,7 @@ defmodule BB.Motion do
   alias BB.Actuator
   alias BB.Command.Context
   alias BB.Error.Kinematics.MultiFailed
+  alias BB.Error.Severity
   alias BB.IK.Solver
   alias BB.Robot.Runtime
 
@@ -450,7 +451,9 @@ defmodule BB.Motion do
 
   - `:ok` - Every actuator accepted its command
   - `{:error, error}` - One refused, didn't answer within `:timeout`, or isn't
-    running; the rest were still sent. See `BB.Actuator.set_position/4`
+    running; the rest were still sent. See `BB.Actuator.set_position/4`. When
+    several did, a refusal or a missing actuator is reported ahead of a late one,
+    since a late command will most likely still be applied
 
   An actuator that crashes while handling its command exits the caller, as it
   would from `BB.Actuator.set_position/4` itself. The exit can be caught, and
@@ -540,7 +543,7 @@ defmodule BB.Motion do
     end)
     |> Task.yield_many(timeout: :infinity)
     |> Enum.map(&task_result/1)
-    |> first_error()
+    |> most_serious_error()
   end
 
   # Neither of these waits for an actuator, so there is no result to collect and
@@ -559,10 +562,18 @@ defmodule BB.Motion do
 
   defp task_result({_task, {:exit, reason}}), do: exit(reason)
 
-  defp first_error(results) do
-    case Enum.find(results, &match?({:error, _}, &1)) do
-      nil -> :ok
-      {:error, error} -> {:error, error}
+  defp most_serious_error(results) do
+    errors = for {:error, error} <- results, do: error
+
+    case Enum.split_with(errors, &warning?/1) do
+      {[], []} -> :ok
+      {_warnings, [error | _]} -> {:error, error}
+      {[warning | _], []} -> {:error, warning}
     end
   end
+
+  # A driver may refuse with an error of its own that doesn't implement the
+  # severity protocol, and that is a refusal, not a warning.
+  defp warning?(error),
+    do: Severity.impl_for(error) != nil and Severity.severity(error) == :warning
 end

@@ -10,6 +10,7 @@ defmodule BB.MotionTest do
   alias BB.Command.Context
   alias BB.Error.Kinematics.MultiFailed
   alias BB.Error.Kinematics.Unreachable
+  alias BB.Error.State.ActuatorNotRunning
   alias BB.Error.State.CommandPending
   alias BB.Error.State.NotArmed
   alias BB.Motion
@@ -94,6 +95,56 @@ defmodule BB.MotionTest do
 
           actuator :steady_servo, BB.Test.MockActuator
           link(:steady_arm)
+        end
+      end
+    end
+  end
+
+  defmodule IgnoredActuator do
+    @moduledoc false
+    use BB.Actuator, options_schema: []
+
+    @impl BB.Actuator
+    def disarm(_opts), do: :ok
+
+    @impl BB.Actuator
+    def capabilities(_opts), do: [:position_feedback]
+
+    @impl BB.Actuator
+    def init(_opts), do: :ignore
+
+    @impl BB.Actuator
+    def handle_command(_message, state), do: {:noreply, state}
+  end
+
+  defmodule LateAndMissingMotionRobot do
+    @moduledoc false
+    use BB
+
+    topology do
+      link :base_link do
+        joint :late_joint do
+          type(:revolute)
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(90 degree_per_second))
+          end
+
+          actuator :late_servo, {BB.Test.RecordingActuator, delay_ms: 300}
+          link(:late_arm)
+        end
+
+        joint :missing_joint do
+          type(:revolute)
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(90 degree_per_second))
+          end
+
+          actuator :missing_servo, BB.MotionTest.IgnoredActuator
+          link(:missing_arm)
         end
       end
     end
@@ -498,6 +549,18 @@ defmodule BB.MotionTest do
 
       assert {:error, %CommandPending{actuator: :slow_servo}} =
                Motion.send_positions(SlowMotionRobot, %{slow_joint: 0.7, steady_joint: 0.4},
+                 timeout: 50
+               )
+    end
+
+    test "reports a missing actuator ahead of a late one, whichever was commanded first" do
+      start_supervised!(LateAndMissingMotionRobot)
+      :ok = BB.Safety.arm(LateAndMissingMotionRobot)
+
+      assert {:error, %ActuatorNotRunning{actuator: :missing_servo}} =
+               Motion.send_positions(
+                 LateAndMissingMotionRobot,
+                 %{late_joint: 0.7, missing_joint: 0.4},
                  timeout: 50
                )
     end
