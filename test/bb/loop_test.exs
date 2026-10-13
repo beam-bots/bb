@@ -79,9 +79,10 @@ defmodule BB.LoopTest do
     end
 
     test "does not schedule anything" do
-      _loop = rate_loop()
+      loop = rate_loop()
 
-      refute_receive :tick, 50
+      assert loop.tick_ref == nil
+      refute_received :tick
     end
   end
 
@@ -96,7 +97,8 @@ defmodule BB.LoopTest do
       loop = external_loop()
 
       assert Loop.arm(loop) == loop
-      refute_receive :tick, 50
+      assert loop.tick_ref == nil
+      refute_received :tick
     end
   end
 
@@ -159,8 +161,7 @@ defmodule BB.LoopTest do
       assert_receive :tick, @receive_timeout
       {nil, _skipped, loop} = Loop.tick(loop)
 
-      # Twenty periods' worth of work in one handler.
-      Process.sleep(20 * @period_ms)
+      loop = overrun(loop, 20)
 
       assert_receive :tick, @receive_timeout
       {dt, skipped, _loop} = Loop.tick(loop)
@@ -176,7 +177,7 @@ defmodule BB.LoopTest do
       assert_receive :tick, @receive_timeout
       {nil, _skipped, loop} = Loop.tick(loop)
 
-      Process.sleep(20 * @period_ms)
+      loop = overrun(loop, 20)
 
       assert_receive :tick, @receive_timeout
       {_dt, _skipped, loop} = Loop.tick(loop)
@@ -261,9 +262,10 @@ defmodule BB.LoopTest do
 
     test "does not schedule anything" do
       {nil, 0, loop} = Loop.observe(external_loop(), 1_000_000)
-      {_dt, 0, _loop} = Loop.observe(loop, 2_000_000)
+      {_dt, 0, loop} = Loop.observe(loop, 2_000_000)
 
-      refute_receive :tick, 50
+      assert loop.tick_ref == nil
+      refute_received :tick
     end
   end
 
@@ -272,7 +274,8 @@ defmodule BB.LoopTest do
       loop = Loop.arm(rate_loop())
 
       assert %{tick_ref: nil} = Loop.cancel(loop)
-      refute_receive :tick, 50
+      assert Process.read_timer(loop.tick_ref) == false
+      refute_received :tick
     end
 
     test "is a no-op on an unarmed loop" do
@@ -283,26 +286,30 @@ defmodule BB.LoopTest do
 
     test "discards a tick that had already been delivered" do
       loop = Loop.arm(rate_loop())
-      Process.sleep(3 * @period_ms)
+      assert_receive :tick, @receive_timeout
+      send(self(), :tick)
 
       # The timer has fired and :tick is sitting in the mailbox. Left there, the
       # next arm/1 would give the loop two independent tick chains.
       Loop.cancel(loop)
 
-      refute_receive :tick, 50
+      refute_received :tick
     end
 
     test "a re-armed loop does not tick immediately" do
-      armed = Loop.arm(rate_loop())
-      Process.sleep(3 * @period_ms)
+      # A one-second period keeps the fresh deadline well clear of the mailbox
+      # check, so only a stale tick could be waiting there.
+      armed = Loop.arm(rate_loop(1))
+      Process.cancel_timer(armed.tick_ref)
+      send(self(), :tick)
 
-      armed
-      |> Loop.cancel()
-      |> Loop.arm()
+      rearmed =
+        armed
+        |> Loop.cancel()
+        |> Loop.arm()
 
-      # Without the discard, the stale tick would be waiting already.
-      refute_receive :tick, 2
-      assert_receive :tick, @receive_timeout
+      refute_received :tick
+      assert is_integer(Process.read_timer(rearmed.tick_ref))
     end
 
     test "is a no-op for an external clock" do
@@ -342,7 +349,7 @@ defmodule BB.LoopTest do
       assert_receive :tick, @receive_timeout
       {nil, _skipped, _loop} = Loop.tick(loop)
 
-      refute_receive {:telemetry, [:bb, :loop, :tick], _measurements, _metadata}, 50
+      refute_received {:telemetry, [:bb, :loop, :tick], _measurements, _metadata}
     end
 
     test "emits for an externally-clocked loop" do
@@ -354,6 +361,13 @@ defmodule BB.LoopTest do
       assert measurements == %{dt: 0.002, skipped: 0, deadline_error: 0}
       assert metadata.clock == :external
     end
+  end
+
+  # Stands in for a handler that spent `periods` periods working since its last
+  # tick, without the test having to spend them too.
+  defp overrun(loop, periods) do
+    lag_ns = periods * loop.period_ns
+    %{loop | last_ns: loop.last_ns - lag_ns, deadline_ns: loop.deadline_ns - lag_ns}
   end
 
   defp drain_until(loop, until_ms) do

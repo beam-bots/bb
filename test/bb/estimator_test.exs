@@ -12,6 +12,8 @@ defmodule BB.EstimatorTest do
   alias BB.Message
   alias BB.Message.Sensor.Imu
 
+  @an_hour_ns System.convert_time_unit(3600, :second, :nanosecond)
+
   describe "DSL - sensor-nested" do
     defmodule SensorNestedRobot do
       @moduledoc false
@@ -332,7 +334,8 @@ defmodule BB.EstimatorTest do
 
         assert_receive {:dropped, %{reason: :cross_node}}, 500
         assert_receive {:transition, %{to: :degraded, reason: :cross_node}}, 500
-        refute_receive {:bb, ^out_path, _}, 100
+        await_estimator(EchoRobot, :orientation)
+        refute_received {:bb, ^out_path, _}
       after
         :telemetry.detach(handler_id)
       end
@@ -396,7 +399,8 @@ defmodule BB.EstimatorTest do
         BB.publish(FanInRobot, [:sensor, :imu], imu_msg)
 
         assert_receive {:dropped, %{reason: :sync_miss}}, 500
-        refute_receive {:multi_input, _}, 100
+        await_estimator(FanInRobot, :pose)
+        refute_received {:multi_input, _}
       after
         :telemetry.detach(handler_id)
       end
@@ -423,7 +427,8 @@ defmodule BB.EstimatorTest do
         BB.publish(FanInRobot, [:sensor, :imu], imu_msg)
 
         assert_receive {:dropped, %{source_input: :odom, reason: :sync_miss}}, 500
-        refute_receive {:multi_input, _}, 100
+        await_estimator(FanInRobot, :pose)
+        refute_received {:multi_input, _}
       after
         :telemetry.detach(handler_id)
       end
@@ -494,7 +499,8 @@ defmodule BB.EstimatorTest do
 
         assert_receive {:dropped, %{reason: :stale_input}}, 500
         assert_receive {:transition, %{to: :degraded, reason: :stale_input}}, 500
-        refute_receive {:bb, ^out_path, _}, 100
+        await_estimator(FreshnessRobot, :orientation)
+        refute_received {:bb, ^out_path, _}
 
         {:ok, fresh} = build_imu_message()
         BB.publish(FreshnessRobot, [:sensor, :base_link, :imu], fresh)
@@ -527,7 +533,8 @@ defmodule BB.EstimatorTest do
         {:ok, imu_msg} = build_imu_message_with_offset(-100_000_000)
         BB.publish(PerInputFreshnessRobot, [:sensor, :imu], imu_msg)
 
-        refute_receive {:dropped, %{source_input: :imu, reason: :stale_input}}, 100
+        await_estimator(PerInputFreshnessRobot, :pose)
+        refute_received {:dropped, %{source_input: :imu, reason: :stale_input}}
       after
         :telemetry.detach(handler_id)
       end
@@ -550,13 +557,20 @@ defmodule BB.EstimatorTest do
         {:ok, odom_msg} = build_imu_message()
         BB.publish(PerInputFreshnessRobot, [:sensor, :odom], odom_msg)
 
-        Process.sleep(40)
+        PerInputFreshnessRobot
+        |> BB.Process.whereis(:pose)
+        |> :sys.replace_state(fn state ->
+          update_in(state.last_messages.odom.monotonic_time, &(&1 - 40_000_000))
+        end)
+
+        refute_received {:dropped, %{source_input: :odom}}
 
         {:ok, imu_msg} = build_imu_message()
         BB.publish(PerInputFreshnessRobot, [:sensor, :imu], imu_msg)
 
         assert_receive {:dropped, %{source_input: :odom, reason: :stale_input}}, 500
-        refute_receive {:multi_input, _}, 100
+        await_estimator(PerInputFreshnessRobot, :pose)
+        refute_received {:multi_input, _}
       after
         :telemetry.detach(handler_id)
       end
@@ -614,25 +628,6 @@ defmodule BB.EstimatorTest do
   end
 
   describe "Runtime - health transitions" do
-    defmodule SlowEstimator do
-      @moduledoc false
-      use BB.Estimator
-
-      @impl BB.Estimator
-      def init(opts) do
-        sleep_ms = :persistent_term.get(:slow_estimator_sleep_ms, 0)
-        {:ok, %{bb: Keyword.fetch!(opts, :bb), sleep_ms: sleep_ms}}
-      end
-
-      @impl BB.Estimator
-      def handle_input(%BB.Message{} = msg, state) do
-        if state.sleep_ms > 0, do: Process.sleep(state.sleep_ms)
-        {:reply, [out: msg], state}
-      end
-
-      def handle_input(_other, state), do: {:noreply, state}
-    end
-
     defmodule HealthRobot do
       @moduledoc false
       use BB
@@ -652,7 +647,7 @@ defmodule BB.EstimatorTest do
       topology do
         link :base_link do
           sensor :imu, MySensor do
-            estimator :orientation, SlowEstimator do
+            estimator :orientation, EchoEstimator do
               latency_budget(~u(10 millisecond))
               lost_after(~u(2 second))
               recover_after(2)
@@ -693,16 +688,10 @@ defmodule BB.EstimatorTest do
           estimator :pose, MultiInputEstimator do
             input :imu, [:sensor, :imu], driver?: true
             input :odom, [:sensor, :odom]
-            lost_after(~u(150 millisecond))
+            lost_after(~u(3600 second))
           end
         end
       end
-    end
-
-    setup do
-      :persistent_term.put(:slow_estimator_sleep_ms, 0)
-      on_exit(fn -> :persistent_term.erase(:slow_estimator_sleep_ms) end)
-      :ok
     end
 
     test "a live non-driver input does not keep a dead driver alive" do
@@ -718,13 +707,18 @@ defmodule BB.EstimatorTest do
 
       try do
         start_supervised!({DriverLivenessRobot, []})
+        pid = BB.Process.whereis(DriverLivenessRobot, :pose)
+        %{lost_timer_ref: armed_ref} = :sys.get_state(pid)
 
         for _ <- 1..15 do
           {:ok, msg} = build_imu_message()
           BB.publish(DriverLivenessRobot, [:sensor, :odom], msg)
-          Process.sleep(20)
         end
 
+        assert %{lost_timer_ref: ^armed_ref} = :sys.get_state(pid)
+        assert is_integer(Process.read_timer(armed_ref))
+
+        send(pid, :bb_estimator_lost_check)
         assert_receive {:transition, %{to: :lost, reason: :lost}}, 500
       after
         :telemetry.detach(handler_id)
@@ -744,13 +738,18 @@ defmodule BB.EstimatorTest do
 
       try do
         start_supervised!({DriverLivenessRobot, []})
+        pid = BB.Process.whereis(DriverLivenessRobot, :pose)
+        %{lost_timer_ref: initial_ref} = :sys.get_state(pid)
 
         for _ <- 1..15 do
           {:ok, msg} = build_imu_message()
           BB.publish(DriverLivenessRobot, [:sensor, :imu], msg)
-          Process.sleep(20)
         end
 
+        %{lost_timer_ref: reset_ref} = :sys.get_state(pid)
+        assert is_integer(Process.read_timer(reset_ref))
+        refute reset_ref == initial_ref
+        assert Process.read_timer(initial_ref) == false
         refute_received {:transition, %{to: :lost}}
       after
         :telemetry.detach(handler_id)
@@ -769,8 +768,8 @@ defmodule BB.EstimatorTest do
       )
 
       try do
-        :persistent_term.put(:slow_estimator_sleep_ms, 50)
         start_supervised!({HealthRobot, []})
+        force_every_dispatch_to_overrun(HealthRobot, :orientation)
 
         {:ok, msg} = build_imu_message()
         BB.publish(HealthRobot, [:sensor, :base_link, :imu], msg)
@@ -818,6 +817,10 @@ defmodule BB.EstimatorTest do
 
         assert_receive {:transition, %{to: :lost, reason: :lost}}, 500
 
+        LostRobot
+        |> BB.Process.whereis(:orientation)
+        |> :sys.replace_state(&%{&1 | lost_after_ns: @an_hour_ns})
+
         for _ <- 1..2 do
           {:ok, msg} = build_imu_message()
           BB.publish(LostRobot, [:sensor, :base_link, :imu], msg)
@@ -842,22 +845,21 @@ defmodule BB.EstimatorTest do
       )
 
       try do
-        :persistent_term.put(:slow_estimator_sleep_ms, 50)
         start_supervised!({HealthRobot, []})
+        force_every_dispatch_to_overrun(HealthRobot, :orientation)
 
         {:ok, msg} = build_imu_message()
         BB.publish(HealthRobot, [:sensor, :base_link, :imu], msg)
 
         assert_receive {:transition, %{to: :degraded}}, 500
 
-        :persistent_term.put(:slow_estimator_sleep_ms, 0)
-        pid = BB.Process.whereis(HealthRobot, :orientation)
-        :sys.replace_state(pid, fn s -> %{s | user_state: %{s.user_state | sleep_ms: 0}} end)
+        HealthRobot
+        |> BB.Process.whereis(:orientation)
+        |> :sys.replace_state(&%{&1 | latency_budget_ns: @an_hour_ns})
 
         for _ <- 1..3 do
           {:ok, m} = build_imu_message()
           BB.publish(HealthRobot, [:sensor, :base_link, :imu], m)
-          Process.sleep(2)
         end
 
         assert_receive {:transition, %{to: :healthy, reason: :recovered}}, 500
@@ -865,6 +867,18 @@ defmodule BB.EstimatorTest do
         :telemetry.detach(handler_id)
       end
     end
+  end
+
+  defp await_estimator(robot, name) do
+    :sys.get_state(BB.Process.whereis(robot, name))
+  end
+
+  # Handle-input duration is wall time, so the overrun is forced through the
+  # budget rather than by a callback that is slow enough on a quiet machine.
+  defp force_every_dispatch_to_overrun(robot, name) do
+    pid = BB.Process.whereis(robot, name)
+    assert %{latency_budget_ns: 10_000_000} = :sys.get_state(pid)
+    :sys.replace_state(pid, &%{&1 | latency_budget_ns: -1})
   end
 
   defp build_imu_message do

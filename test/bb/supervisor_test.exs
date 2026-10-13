@@ -5,6 +5,7 @@
 defmodule BB.SupervisorTest do
   use ExUnit.Case, async: true
   alias BB.Process, as: BBProcess
+  alias BB.StateMachine.Transition
 
   defmodule TestSensor do
     @moduledoc """
@@ -295,25 +296,17 @@ defmodule BB.SupervisorTest do
       end
     end
 
-    defp eventually(fun, attempts \\ 50) do
-      cond do
-        fun.() -> true
-        attempts == 0 -> false
-        true -> Process.sleep(20) && eventually(fun, attempts - 1)
-      end
-    end
-
     setup do
       root = start_supervised!(GivingUpRobot)
+      BB.PubSub.subscribe(GivingUpRobot, [:state_machine])
       topology = BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor)
+      topology_ref = Process.monitor(topology)
 
       Supervisor.which_children(topology)
       |> Enum.find_value(fn {_id, pid, _type, _mods} -> if is_pid(pid), do: pid end)
       |> Process.exit(:kill)
 
-      assert eventually(fn ->
-               BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor) == :undefined
-             end)
+      assert_receive {:DOWN, ^topology_ref, :process, ^topology, _reason}, 1_000
 
       %{root: root}
     end
@@ -321,25 +314,25 @@ defmodule BB.SupervisorTest do
     test "the hardware subtree stays down rather than restarting into the same failure", %{
       root: root
     } do
-      refute eventually(
-               fn -> BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor) != :undefined end,
-               10
-             )
+      assert {BB.TopologySupervisor, :undefined, :supervisor, _modules} =
+               root
+               |> Supervisor.which_children()
+               |> List.keyfind(BB.TopologySupervisor, 0)
 
       assert Process.alive?(root)
     end
 
     test "the root survives, so the robot is still there to say it faulted", %{root: root} do
+      assert_receive {:bb, [:state_machine], %BB.Message{payload: %Transition{to: :error}}},
+                     1_000
+
       assert Process.alive?(root)
-      assert eventually(fn -> BB.Safety.state(GivingUpRobot) == :error end)
+      assert BB.Safety.state(GivingUpRobot) == :error
     end
 
     test "the child spec is kept, so acknowledging the fault can start it again" do
-      assert {:ok, _child} = Supervisor.restart_child(GivingUpRobot, BB.TopologySupervisor)
-
-      assert eventually(fn ->
-               BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor) != :undefined
-             end)
+      assert {:ok, child} = Supervisor.restart_child(GivingUpRobot, BB.TopologySupervisor)
+      assert BBProcess.whereis(GivingUpRobot, BB.TopologySupervisor) == child
     end
   end
 end

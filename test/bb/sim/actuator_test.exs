@@ -175,7 +175,12 @@ defmodule BB.Sim.ActuatorTest do
 
       assert_receive {:bb, _path, %Message{payload: %BeginMotion{}}}, 1000
 
-      Process.sleep(50)
+      RapidRobot
+      |> BB.Process.whereis(:motor)
+      |> :sys.replace_state(fn server ->
+        update_in(server.user_state.segment.command_time, &(&1 - 1000))
+      end)
+
       # Second command: should NOT report initial_position=1.0 (the previous
       # commanded target); it should report a position partway between 0 and
       # 1.0 reflecting elapsed interpolation.

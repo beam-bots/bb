@@ -6,6 +6,7 @@ defmodule BB.Robot.RuntimeTest do
   use ExUnit.Case, async: true
   alias BB.Error.State.NotAllowed, as: StateError
   alias BB.Robot.Runtime
+  alias BB.StateMachine.Transition
 
   defmodule TestRobot do
     @moduledoc false
@@ -121,8 +122,6 @@ defmodule BB.Robot.RuntimeTest do
   end
 
   describe "pubsub integration" do
-    alias BB.StateMachine.Transition
-
     test "publishes state transitions to pubsub" do
       start_supervised!(TestRobot)
 
@@ -144,7 +143,7 @@ defmodule BB.Robot.RuntimeTest do
       # Already in :idle state, transitioning to :idle should not publish
       {:ok, :idle} = Runtime.transition(TestRobot, :idle)
 
-      refute_receive {:bb, [:state_machine], _}
+      refute_received {:bb, [:state_machine], _}
     end
   end
 
@@ -221,12 +220,15 @@ defmodule BB.Robot.RuntimeTest do
 
       {:ok, cmd} = Runtime.execute(RobotWithCommands, :async_cmd, %{notify: self()})
       assert_receive {:executing, ^cmd}, 500
+      BB.PubSub.subscribe(RobotWithCommands, [:state_machine])
 
       send(cmd, :complete)
       assert {:ok, :completed} = BB.Command.await(cmd)
 
-      # Give the runtime a moment to process the :DOWN message
-      Process.sleep(10)
+      assert_receive {:bb, [:state_machine],
+                      %BB.Message{payload: %Transition{from: :executing, to: :idle}}},
+                     500
+
       assert Runtime.state(RobotWithCommands) == :idle
     end
 

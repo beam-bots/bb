@@ -188,26 +188,28 @@ defmodule BB.BridgeTest do
       bridge_a: bridge_a,
       bridge_b: bridge_b
     } do
+      ParameterBridge.register_test_process(bridge_b, self())
+
       # Simulate remote client changing value via bridge_a
       :ok = ParameterBridge.set_param(bridge_a, [:value], 100)
 
-      # bridge_a (registered as test process) should receive the change
       assert_receive {:bridge_change, changed}, 1000
       assert changed.path == [:value]
       assert changed.new_value == 100
+      assert_receive {:bridge_change, %{path: [:value], new_value: 100}}, 1000
 
-      # bridge_b should also have recorded a handle_change call
-      Process.sleep(50)
       calls_b = ParameterBridge.get_calls(bridge_b)
       handle_change_calls = Enum.filter(calls_b, fn {name, _} -> name == :handle_change end)
       assert handle_change_calls != []
     end
 
     test "local changes are broadcast to all bridges", %{bridge_a: bridge_a, bridge_b: bridge_b} do
+      ParameterBridge.register_test_process(bridge_b, self())
+
       :ok = Parameter.set(RobotWithMultipleBridges, [:value], 200)
 
-      # Wait for PubSub delivery
-      Process.sleep(50)
+      assert_receive {:bridge_change, %{path: [:value], new_value: 200}}, 1000
+      assert_receive {:bridge_change, %{path: [:value], new_value: 200}}, 1000
 
       calls_a = ParameterBridge.get_calls(bridge_a)
       calls_b = ParameterBridge.get_calls(bridge_b)
