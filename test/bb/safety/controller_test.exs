@@ -79,7 +79,7 @@ defmodule BB.Safety.ControllerTest do
     end
   end
 
-  defmodule RobotWithSlowActuator do
+  defmodule RobotWithHangingActuator do
     @moduledoc false
     use BB
     import BB.Unit
@@ -88,7 +88,7 @@ defmodule BB.Safety.ControllerTest do
       link :base do
         joint :joint1 do
           type :revolute
-          actuator :slow, {BB.Test.FailingActuator, fail_mode: :slow}
+          actuator :hanging, {BB.Test.FailingActuator, fail_mode: :hang}
 
           limit do
             effort(~u(10 newton_meter))
@@ -253,17 +253,17 @@ defmodule BB.Safety.ControllerTest do
   end
 
   describe "timeout handling" do
-    @tag timeout: 10_000
-    test "slow callback times out and transitions to error state" do
-      start_supervised!(RobotWithSlowActuator)
+    test "a callback that never returns times out and transitions to error state" do
+      start_supervised!(RobotWithHangingActuator)
 
-      :ok = BB.Safety.arm(RobotWithSlowActuator)
+      :ok = BB.Safety.arm(RobotWithHangingActuator)
 
-      {:error, {:disarm_failed, failures}} = BB.Safety.disarm(RobotWithSlowActuator)
+      {:error, {:disarm_failed, failures}} =
+        BB.Safety.disarm(RobotWithHangingActuator, timeout: 50)
 
-      assert BB.Safety.state(RobotWithSlowActuator) == :error
+      assert BB.Safety.state(RobotWithHangingActuator) == :error
       assert length(failures) == 1
-      assert {:unknown, {:timeout, 5000}} in failures
+      assert {:unknown, {:timeout, 50}} in failures
     end
   end
 
@@ -313,6 +313,7 @@ defmodule BB.Safety.ControllerTest do
     test "does not disarm an armed robot" do
       start_supervised!(RobotForReporting)
       :ok = BB.Safety.arm(RobotForReporting)
+      BB.PubSub.subscribe(RobotForReporting, [:state_machine])
 
       BB.Safety.report_error(
         RobotForReporting,
@@ -320,9 +321,10 @@ defmodule BB.Safety.ControllerTest do
         {:hardware_error, 0x04}
       )
 
-      Process.sleep(50)
+      :sys.get_state(BB.Safety.Controller)
 
       assert BB.Safety.armed?(RobotForReporting)
+      refute_received {:bb, [:state_machine], _}
     end
   end
 

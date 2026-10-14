@@ -140,7 +140,8 @@ defmodule BB.Actuator.CommandPayloadsTest do
       message = Message.new!(Bespoke, :wide, pattern: :wave)
       :ok = BB.publish(Robot, [:actuator, :base, :shoulder, :wide], message)
 
-      refute_receive {:commanded, _}, 200
+      await_actuator(:wide)
+      refute_received {:commanded, _}
     end
 
     test "the built-ins still work alongside it" do
@@ -159,12 +160,13 @@ defmodule BB.Actuator.CommandPayloadsTest do
       assert {:error, %UnsupportedCommand{actuator: :narrow, command: Command.Position}} =
                BB.Actuator.set_position(Robot, :narrow, 0.5, timeout: 500)
 
-      refute_receive {:commanded, _}, 200
+      refute_received {:commanded, _}
     end
 
     test "narrowing holds on the direct transport, not just the published one" do
       :ok = BB.Actuator.set_position(Robot, :narrow, 0.5, delivery: :direct)
-      refute_receive {:commanded, _}, 200
+      await_actuator(:narrow)
+      refute_received {:commanded, _}
     end
 
     test "the error names what the actuator does accept" do
@@ -176,7 +178,8 @@ defmodule BB.Actuator.CommandPayloadsTest do
       # Stop is a motion command, not a safety mechanism, so it has no special
       # standing here. A driver that never declared it can't be handed it.
       :ok = BB.Actuator.stop(Robot, :narrow)
-      refute_receive {:commanded, _}, 200
+      await_actuator(:narrow)
+      refute_received {:commanded, _}
     end
 
     test "and is refused with a structured error when the caller waits" do
@@ -200,5 +203,9 @@ defmodule BB.Actuator.CommandPayloadsTest do
 
       assert_receive {:telemetry, %{reason: :unsupported_command, actuator: :narrow}}, 500
     end
+  end
+
+  defp await_actuator(name) do
+    :sys.get_state(BB.Process.whereis(Robot, name))
   end
 end

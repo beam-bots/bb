@@ -55,7 +55,7 @@ defmodule BB.Safety.ArmEpochTest do
     end
   end
 
-  defmodule RobotWithSlowActuator do
+  defmodule RobotWithGatedActuator do
     @moduledoc false
     use BB
     import BB.Unit
@@ -64,7 +64,7 @@ defmodule BB.Safety.ArmEpochTest do
       link :base do
         joint :joint1 do
           type :revolute
-          actuator :slow, {BB.Test.FailingActuator, fail_mode: :slow}
+          actuator :gated, {BB.Test.FailingActuator, fail_mode: :gated}
 
           limit do
             effort(~u(10 newton_meter))
@@ -132,19 +132,22 @@ defmodule BB.Safety.ArmEpochTest do
     end
 
     test "the epoch is gone before the disarm callbacks run" do
-      start_supervised!(RobotWithSlowActuator)
+      :persistent_term.put({BB.Test.FailingActuator, RobotWithGatedActuator}, self())
+      on_exit(fn -> :persistent_term.erase({BB.Test.FailingActuator, RobotWithGatedActuator}) end)
 
-      :ok = BB.Safety.arm(RobotWithSlowActuator)
-      assert {:ok, _} = BB.Safety.epoch(RobotWithSlowActuator)
+      start_supervised!(RobotWithGatedActuator)
 
-      # The slow actuator sleeps for longer than the disarm timeout, so the
-      # robot sits in `:disarming` while this task runs.
-      task = Task.async(fn -> BB.Safety.disarm(RobotWithSlowActuator) end)
+      :ok = BB.Safety.arm(RobotWithGatedActuator)
+      assert {:ok, _} = BB.Safety.epoch(RobotWithGatedActuator)
 
-      assert eventually(fn -> BB.Safety.disarming?(RobotWithSlowActuator) end)
-      assert :error = BB.Safety.epoch(RobotWithSlowActuator)
+      task = Task.async(fn -> BB.Safety.disarm(RobotWithGatedActuator) end)
 
-      Task.shutdown(task, :brutal_kill)
+      assert_receive {:disarming, gate}, 1_000
+      assert BB.Safety.disarming?(RobotWithGatedActuator)
+      assert :error = BB.Safety.epoch(RobotWithGatedActuator)
+
+      send(gate, :release)
+      assert :ok = Task.await(task)
     end
 
     test "a failed disarm leaves no epoch either" do
@@ -179,18 +182,6 @@ defmodule BB.Safety.ArmEpochTest do
 
       assert BB.Safety.state(Robot) == :disarmed
       assert :error = BB.Safety.epoch(Robot)
-    end
-  end
-
-  defp eventually(fun, remaining \\ 100)
-  defp eventually(_fun, 0), do: false
-
-  defp eventually(fun, remaining) do
-    if fun.() do
-      true
-    else
-      Process.sleep(10)
-      eventually(fun, remaining - 1)
     end
   end
 end

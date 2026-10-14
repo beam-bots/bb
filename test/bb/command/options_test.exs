@@ -289,9 +289,7 @@ defmodule BB.Command.OptionsTest do
 
       # Start command that waits
       {:ok, cmd} = ParamOptionsRobot.with_param_opts(wait_for_update: true)
-
-      # Wait for command to start
-      Process.sleep(50)
+      :sys.get_state(cmd)
 
       # Verify initial state
       events = StateTracker.get_events()
@@ -316,9 +314,7 @@ defmodule BB.Command.OptionsTest do
         )
 
       PubSub.publish(ParamOptionsRobot, [:param, :control, :gain], message)
-
-      # Wait for handle_options to be called
-      Process.sleep(50)
+      :sys.get_state(cmd)
 
       events = StateTracker.get_events()
       handle_opts_event = Enum.find(events, &match?({:param_handle_options, _}, &1))

@@ -15,7 +15,8 @@ defmodule BB.Test.FailingActuator do
       :error -> {:error, :hardware_failure}
       :raise -> raise "Hardware communication failed"
       :throw -> throw(:hardware_timeout)
-      :slow -> Process.sleep(10_000)
+      :hang -> Process.sleep(:infinity)
+      :gated -> await_release(opts[:robot])
       _ -> :ok
     end
   end
@@ -27,7 +28,7 @@ defmodule BB.Test.FailingActuator do
     BB.Safety.register(__MODULE__,
       robot: bb.robot,
       path: bb.path,
-      opts: [fail_mode: opts[:fail_mode]]
+      opts: [fail_mode: opts[:fail_mode], robot: bb.robot]
     )
 
     {:ok, %{}}
@@ -35,4 +36,14 @@ defmodule BB.Test.FailingActuator do
 
   @impl BB.Actuator
   def handle_command(_message, state), do: {:noreply, state}
+
+  # Holds the disarm callback open until the test process registered under
+  # `{BB.Test.FailingActuator, robot}` in `:persistent_term` sends `:release`.
+  defp await_release(robot) do
+    send(:persistent_term.get({__MODULE__, robot}), {:disarming, self()})
+
+    receive do
+      :release -> :ok
+    end
+  end
 end

@@ -191,9 +191,9 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
       state = %{
         state
         | target_position: 1.0,
-          expected_arrival: now + 1000,
+          expected_arrival: now + 900_000,
           initial_position: 0.0,
-          command_time: now - 100,
+          command_time: now - 100_000,
           tick_ref: make_ref()
       }
 
@@ -278,13 +278,11 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
       state = %{
         state
         | target_position: 1.0,
-          expected_arrival: now + 1000,
+          expected_arrival: now + 900_000,
           initial_position: 0.0,
-          command_time: now,
+          command_time: now - 100_000,
           tick_ref: make_ref()
       }
-
-      Process.sleep(100)
 
       expect(BB.PubSub, :publish, fn _robot, _path, message ->
         send(test_pid, {:position, hd(message.payload.positions)})
@@ -306,13 +304,11 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
       state = %{
         state
         | target_position: -1.0,
-          expected_arrival: now + 1000,
+          expected_arrival: now + 900_000,
           initial_position: 0.0,
-          command_time: now,
+          command_time: now - 100_000,
           tick_ref: make_ref()
       }
-
-      Process.sleep(100)
 
       expect(BB.PubSub, :publish, fn _robot, _path, message ->
         send(test_pid, {:position, hd(message.payload.positions)})
@@ -357,9 +353,9 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
       linear_state = %{
         linear_state
         | target_position: 1.0,
-          expected_arrival: now + 800,
+          expected_arrival: now + 800_000,
           initial_position: 0.0,
-          command_time: now - 200,
+          command_time: now - 200_000,
           tick_ref: make_ref()
       }
 
@@ -368,9 +364,9 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
       quad_state = %{
         quad_state
         | target_position: 1.0,
-          expected_arrival: now + 800,
+          expected_arrival: now + 800_000,
           initial_position: 0.0,
-          command_time: now - 200,
+          command_time: now - 200_000,
           tick_ref: make_ref()
       }
 
@@ -398,9 +394,9 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
       linear_state = %{
         linear_state
         | target_position: 1.0,
-          expected_arrival: now + 800,
+          expected_arrival: now + 800_000,
           initial_position: 0.0,
-          command_time: now - 200,
+          command_time: now - 200_000,
           tick_ref: make_ref()
       }
 
@@ -409,9 +405,9 @@ defmodule BB.Sensor.OpenLoopPositionEstimatorTest do
       quad_state = %{
         quad_state
         | target_position: 1.0,
-          expected_arrival: now + 800,
+          expected_arrival: now + 800_000,
           initial_position: 0.0,
-          command_time: now - 200,
+          command_time: now - 200_000,
           tick_ref: make_ref()
       }
 

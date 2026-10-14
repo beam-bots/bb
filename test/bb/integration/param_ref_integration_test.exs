@@ -149,9 +149,6 @@ defmodule BB.Integration.ParamRefIntegrationTest do
 
       PubSub.publish(ParamRefRobot, [:param, :motion, :max_effort], message)
 
-      # Give the Runtime time to process
-      Process.sleep(50)
-
       # Check that the robot struct was updated
       robot = Runtime.get_robot(ParamRefRobot)
       new_effort = robot.joints.shoulder.limits.effort

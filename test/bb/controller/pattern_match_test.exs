@@ -123,7 +123,7 @@ defmodule BB.Controller.PatternMatchTest do
         build_state(
           match: fn _msg -> true end,
           action: Action.command(:test_action),
-          cooldown_ms: 100
+          cooldown_ms: :timer.minutes(1)
         )
 
       msg = build_message(%{})
@@ -140,7 +140,7 @@ defmodule BB.Controller.PatternMatchTest do
         build_state(
           match: fn _msg -> true end,
           action: Action.command(:test_action),
-          cooldown_ms: 10
+          cooldown_ms: :timer.minutes(1)
         )
 
       msg = build_message(%{})
@@ -148,7 +148,7 @@ defmodule BB.Controller.PatternMatchTest do
       {:noreply, state} = PatternMatch.handle_info({:bb, [:sensor, :test], msg}, state)
       assert_received :action_triggered
 
-      Process.sleep(15)
+      state = %{state | last_triggered: state.last_triggered - :timer.minutes(1)}
 
       {:noreply, _state} = PatternMatch.handle_info({:bb, [:sensor, :test], msg}, state)
       assert_received :action_triggered

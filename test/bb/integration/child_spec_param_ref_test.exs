@@ -230,9 +230,6 @@ defmodule BB.Integration.ChildSpecParamRefTest do
     test "param is resolved at startup" do
       start_supervised!(ParamActuatorRobot)
 
-      # Give time for actuator to initialize
-      Process.sleep(100)
-
       events = StateTracker.get_events()
       init_event = Enum.find(events, fn {type, _} -> type == :actuator_init end)
 
@@ -247,9 +244,6 @@ defmodule BB.Integration.ChildSpecParamRefTest do
 
     test "handle_options is called when param changes" do
       start_supervised!(ParamActuatorRobot)
-
-      # Wait for init
-      Process.sleep(100)
       StateTracker.clear()
 
       # Change the parameter
@@ -266,9 +260,7 @@ defmodule BB.Integration.ChildSpecParamRefTest do
         )
 
       PubSub.publish(ParamActuatorRobot, [:param, :motion, :max_effort], message)
-
-      # Wait for handle_options callback
-      Process.sleep(100)
+      :sys.get_state(BB.Process.whereis(ParamActuatorRobot, :motor))
 
       events = StateTracker.get_events()
       handle_opts_event = Enum.find(events, fn {type, _} -> type == :actuator_handle_options end)
@@ -286,9 +278,6 @@ defmodule BB.Integration.ChildSpecParamRefTest do
     test "param is resolved at startup" do
       start_supervised!(ParamSensorRobot)
 
-      # Give time for sensor to initialize
-      Process.sleep(100)
-
       events = StateTracker.get_events()
       init_event = Enum.find(events, fn {type, _} -> type == :sensor_init end)
 
@@ -303,9 +292,6 @@ defmodule BB.Integration.ChildSpecParamRefTest do
 
     test "handle_options is called when param changes" do
       start_supervised!(ParamSensorRobot)
-
-      # Wait for init
-      Process.sleep(100)
       StateTracker.clear()
 
       # Change the parameter
@@ -322,9 +308,7 @@ defmodule BB.Integration.ChildSpecParamRefTest do
         )
 
       PubSub.publish(ParamSensorRobot, [:param, :sensors, :sample_rate], message)
-
-      # Wait for handle_options callback
-      Process.sleep(100)
+      :sys.get_state(BB.Process.whereis(ParamSensorRobot, :imu))
 
       events = StateTracker.get_events()
       handle_opts_event = Enum.find(events, fn {type, _} -> type == :sensor_handle_options end)
@@ -342,9 +326,6 @@ defmodule BB.Integration.ChildSpecParamRefTest do
     test "param is resolved at startup" do
       start_supervised!(ParamControllerRobot)
 
-      # Give time for controller to initialize
-      Process.sleep(100)
-
       events = StateTracker.get_events()
       init_event = Enum.find(events, fn {type, _} -> type == :controller_init end)
 
@@ -357,9 +338,6 @@ defmodule BB.Integration.ChildSpecParamRefTest do
 
     test "handle_options is called when param changes" do
       start_supervised!(ParamControllerRobot)
-
-      # Wait for init
-      Process.sleep(100)
       StateTracker.clear()
 
       # Change the parameter
@@ -376,9 +354,7 @@ defmodule BB.Integration.ChildSpecParamRefTest do
         )
 
       PubSub.publish(ParamControllerRobot, [:param, :control, :gain], message)
-
-      # Wait for handle_options callback
-      Process.sleep(100)
+      :sys.get_state(BB.Process.whereis(ParamControllerRobot, :position))
 
       events = StateTracker.get_events()
 

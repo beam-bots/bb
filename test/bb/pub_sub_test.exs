@@ -282,7 +282,7 @@ defmodule BB.PubSubTest do
       PubSub.publish(TestRobot, pose_path, pose_msg)
 
       assert_receive {:bb, ^imu_path, ^imu_msg}
-      refute_receive {:bb, ^pose_path, _}, 50
+      refute_received {:bb, ^pose_path, _}
     end
 
     test "subscriber without message_types filter receives all types" do
@@ -385,7 +385,7 @@ defmodule BB.PubSubTest do
         )
 
       PubSub.publish(TestRobot, path, message2)
-      refute_receive {:bb, ^path, _}, 50
+      refute_received {:bb, ^path, _}
     end
   end
 
@@ -412,22 +412,36 @@ defmodule BB.PubSubTest do
       start_supervised!(TestRobot)
       path = [:sensor, :base_link, :imu]
 
+      test_pid = self()
+
       pid =
         spawn(fn ->
           {:ok, _} = PubSub.subscribe(TestRobot, path)
+          send(test_pid, :subscribed)
 
           receive do
             :done -> :ok
           end
         end)
 
-      Process.sleep(10)
+      assert_receive :subscribed
       assert [{^pid, []}] = PubSub.subscribers(TestRobot, path)
 
+      ref = Process.monitor(pid)
       Process.exit(pid, :kill)
-      Process.sleep(10)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+      await_registry_partitions(PubSub.registry_name(TestRobot))
 
       assert PubSub.subscribers(TestRobot, path) == []
     end
+  end
+
+  # Registry drops a dead process's entries when its partition handles the
+  # exit signal, which is after the `:DOWN` reaches the test. A call through
+  # every partition lands behind that signal.
+  defp await_registry_partitions(registry) do
+    registry
+    |> Supervisor.which_children()
+    |> Enum.each(fn {_id, partition, _type, _modules} -> :sys.get_state(partition) end)
   end
 end
