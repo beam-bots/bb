@@ -5,6 +5,7 @@
 defmodule BB.Actuator.DeliveryTest do
   use ExUnit.Case
 
+  alias BB.Error.State.ActuatorNotRunning
   alias BB.Error.State.NotArmed
   alias BB.Error.State.StaleEpoch
   alias BB.Error.State.UnsupportedCommand
@@ -77,6 +78,44 @@ defmodule BB.Actuator.DeliveryTest do
     end
   end
 
+  defmodule IgnoredActuator do
+    @moduledoc false
+    use BB.Actuator, options_schema: []
+
+    @impl BB.Actuator
+    def disarm(_opts), do: :ok
+
+    @impl BB.Actuator
+    def capabilities(_opts), do: [:position_feedback]
+
+    @impl BB.Actuator
+    def init(_opts), do: :ignore
+
+    @impl BB.Actuator
+    def handle_command(_message, state), do: {:noreply, state}
+  end
+
+  defmodule IgnoredRobot do
+    use BB
+
+    topology do
+      link :base do
+        joint :shoulder do
+          type :revolute
+
+          limit do
+            effort(~u(10 newton_meter))
+            velocity(~u(180 degree_per_second))
+          end
+
+          actuator :motor, BB.Actuator.DeliveryTest.IgnoredActuator
+
+          link :arm
+        end
+      end
+    end
+  end
+
   @actuator_topic [:actuator, :base, :shoulder, :motor]
 
   @waypoints [[position: 0.1, time_from_start: 100], [position: 0.2, time_from_start: 200]]
@@ -95,6 +134,11 @@ defmodule BB.Actuator.DeliveryTest do
 
   defp send_command(robot, fun, args, opts),
     do: apply(BB.Actuator, fun, [robot, :motor] ++ args ++ [opts])
+
+  # A message is handled before a later call from the same sender, so once this
+  # returns anything the motor sent while handling the test's earlier casts is
+  # already in the test's mailbox.
+  defp settle_motor(robot), do: :sys.get_state(BB.Process.whereis(robot, :motor))
 
   defp start_robot(robot_module) do
     :persistent_term.put({BB.Test.RecordingActuator, robot_module}, self())
@@ -143,7 +187,8 @@ defmodule BB.Actuator.DeliveryTest do
         BB.subscribe(Robot, @actuator_topic)
 
         assert :ok = send_command(Robot, unquote(fun), unquote(args), delivery: :direct)
-        refute_receive {:bb, @actuator_topic, _}, 200
+        settle_motor(Robot)
+        refute_received {:bb, @actuator_topic, _}
       end
     end
   end
@@ -331,12 +376,14 @@ defmodule BB.Actuator.DeliveryTest do
                )
 
       assert_receive {:received, :command, %Message{}}, 500
-      refute_receive {:bb, :command_rejected, _, _, _}, 200
+      settle_motor(Robot)
+      refute_received {:bb, :command_rejected, _, _, _}
     end
 
     test "nothing is sent to a caller that didn't ask" do
       assert :ok = BB.Actuator.set_position(Robot, :motor, 0.5, delivery: :direct)
-      refute_receive {:bb, :command_rejected, _, _, _}, 200
+      settle_motor(Robot)
+      refute_received {:bb, :command_rejected, _, _, _}
     end
 
     for {name, _payload, fun, args} <- @commands, name != "position" do
@@ -349,6 +396,28 @@ defmodule BB.Actuator.DeliveryTest do
 
         assert_receive {:bb, :command_rejected, :motor, nil, %NotArmed{}}, 500
       end
+    end
+  end
+
+  describe "an actuator that isn't running" do
+    setup do
+      start_supervised!(IgnoredRobot)
+      :ok = BB.Safety.arm(IgnoredRobot)
+      BB.subscribe(IgnoredRobot, @actuator_topic)
+      :ok
+    end
+
+    test "is reported under :pubsub rather than exiting the caller" do
+      assert {:error, %ActuatorNotRunning{actuator: :motor, command: Command.Position} = error} =
+               BB.Actuator.set_position(IgnoredRobot, :motor, 0.5)
+
+      assert BB.Error.severity(error) == :error
+    end
+
+    test "is not published to under :pubsub, since nothing will execute the command" do
+      {:error, %ActuatorNotRunning{}} = BB.Actuator.set_position(IgnoredRobot, :motor, 0.5)
+
+      refute_received {:bb, @actuator_topic, _}
     end
   end
 

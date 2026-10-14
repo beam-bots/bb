@@ -7,6 +7,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
   import ExUnit.CaptureLog
 
+  alias BB.Error.State.CommandPending
   alias BB.Error.State.NotArmed
   alias BB.Error.State.StaleEpoch
   alias BB.Message
@@ -69,7 +70,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
             velocity(~u(180 degree_per_second))
           end
 
-          actuator :motor, {BB.Test.RecordingActuator, delay_ms: 300}
+          actuator :motor, {BB.Test.RecordingActuator, gated: true}
 
           link :arm
         end
@@ -114,6 +115,11 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
   defp position(robot, value), do: Commands.stamp(robot, position(value))
 
+  # A message is handled before a later call from the same sender, so once this
+  # returns anything the motor sent while handling the test's earlier casts and
+  # publishes is already in the test's mailbox.
+  defp settle_motor(robot), do: :sys.get_state(BB.Process.whereis(robot, :motor))
+
   describe "transports" do
     setup do
       start_robot(ArmedRobot)
@@ -148,7 +154,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       :ok = BB.Actuator.set_position(ArmedRobot, [:base, :shoulder, :motor], 0.25)
 
       assert_receive {:received, :command, %Message{payload: %Command.Position{}}}, 500
-      refute_receive {:received, :command, %Message{payload: %Command.Position{}}}, 200
+      refute_received {:received, :command, %Message{payload: %Command.Position{}}}
     end
 
     test "delivery: :direct reaches the driver without waiting" do
@@ -183,7 +189,8 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
 
       :ok = BB.publish(ArmedRobot, @actuator_topic, begin_motion)
 
-      refute_receive {:received, _kind, %Message{payload: %BeginMotion{}}}, 200
+      settle_motor(ArmedRobot)
+      refute_received {:received, _kind, %Message{payload: %BeginMotion{}}}
     end
   end
 
@@ -195,14 +202,38 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     end
 
     test ":timeout bounds how long the caller waits for a slow driver" do
-      assert {:timeout, _} =
-               catch_exit(BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50))
+      assert {:error,
+              %CommandPending{actuator: :motor, command: Command.Position, timeout_ms: 50}} =
+               BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50)
+
+      release(SlowRobot, :motor)
+    end
+
+    test "a command the caller stopped waiting for is still applied" do
+      {:error, %CommandPending{} = error} =
+        BB.Actuator.set_position(SlowRobot, :motor, 0.5, timeout: 50)
+
+      assert BB.Error.severity(error) == :warning
+      refute_received {:received, :command, _message}
+
+      release(SlowRobot, :motor)
+
+      assert_receive {:received, :command, %Message{payload: %Command.Position{position: 0.5}}},
+                     1000
     end
 
     test "and the default is long enough for one that merely takes its time" do
-      assert :ok = BB.Actuator.set_position(SlowRobot, :motor, 0.5)
+      caller = Task.async(fn -> BB.Actuator.set_position(SlowRobot, :motor, 0.5) end)
+
+      assert_receive {:received, :holding, %Message{}}, 1000
+      release(SlowRobot, :motor)
+
+      assert :ok = Task.await(caller)
     end
   end
+
+  defp release(robot_module, actuator),
+    do: send(BB.Process.whereis(robot_module, actuator), :release)
 
   describe "arm gating" do
     setup do
@@ -213,21 +244,23 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     test "a published command is dropped while disarmed" do
       :ok = BB.publish(DisarmedRobot, @actuator_topic, position(0.5))
 
-      refute_receive {:received, :command, _message}, 200
+      settle_motor(DisarmedRobot)
+      refute_received {:received, :command, _message}
     end
 
     test "set_position/4 reports the refusal rather than leaving the caller guessing" do
       assert {:error, %NotArmed{actuator: :motor, command: Command.Position}} =
                BB.Actuator.set_position(DisarmedRobot, :motor, 0.5, timeout: 500)
 
-      refute_receive {:received, :command, _message}, 200
+      refute_received {:received, :command, _message}
     end
 
     test "a refusal is logged, whichever transport delivered the command" do
       log =
         capture_log(fn ->
           :ok = BB.Actuator.set_position(DisarmedRobot, :motor, 0.5, delivery: :direct)
-          refute_receive {:received, :command, _message}, 200
+          settle_motor(DisarmedRobot)
+          refute_received {:received, :command, _message}
         end)
 
       assert log =~ "refused"
@@ -238,14 +271,15 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
     test "a cast command is dropped while disarmed" do
       :ok = Commands.cast(DisarmedRobot, :motor, position(0.5))
 
-      refute_receive {:received, :command, _message}, 200
+      settle_motor(DisarmedRobot)
+      refute_received {:received, :command, _message}
     end
 
     test "a call command is refused with a structured error while disarmed" do
       assert {:error, %NotArmed{actuator: :motor, command: Command.Position}} =
                BB.call(DisarmedRobot, :motor, {:command, position(0.5)}, 500)
 
-      refute_receive {:received, :command, _message}, 200
+      refute_received {:received, :command, _message}
     end
 
     test "Stop is refused while disarmed, like every other command" do
@@ -254,13 +288,15 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       # there's nothing for it to do, and no reason to exempt it from the gate.
       :ok = Commands.cast(DisarmedRobot, :motor, Message.new!(Command.Stop, :motor, []))
 
-      refute_receive {:received, :command, _message}, 200
+      settle_motor(DisarmedRobot)
+      refute_received {:received, :command, _message}
     end
 
     test "Hold is refused while disarmed too" do
       :ok = Commands.cast(DisarmedRobot, :motor, Message.new!(Command.Hold, :motor, []))
 
-      refute_receive {:received, :command, _message}, 200
+      settle_motor(DisarmedRobot)
+      refute_received {:received, :command, _message}
     end
 
     test "commands flow once the robot is armed" do
@@ -306,13 +342,14 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       assert {:error, %StaleEpoch{actuator: :motor, command: Command.Position, epoch: nil}} =
                BB.call(DisarmedRobot, :motor, {:command, position(0.5)}, 500)
 
-      refute_receive {:received, :command, _message}, 200
+      refute_received {:received, :command, _message}
     end
 
     test "an unstamped published command is dropped" do
       :ok = BB.publish(DisarmedRobot, @actuator_topic, position(0.5))
 
-      refute_receive {:received, :command, _message}, 200
+      settle_motor(DisarmedRobot)
+      refute_received {:received, :command, _message}
     end
 
     test "a command stamped in an earlier arming session is refused in a later one" do
@@ -328,7 +365,7 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       assert is_integer(current)
       refute stamped == current
 
-      refute_receive {:received, :command, _message}, 200
+      refute_received {:received, :command, _message}
     end
 
     test "a command stamped in the current session is applied" do
@@ -362,7 +399,8 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       log =
         capture_log(fn ->
           :ok = Commands.cast(DisarmedRobot, :motor, stale)
-          refute_receive {:received, :command, _message}, 200
+          settle_motor(DisarmedRobot)
+          refute_received {:received, :command, _message}
         end)
 
       assert log =~ "refused"
@@ -410,7 +448,8 @@ defmodule BB.Actuator.ServerCommandPipelineTest do
       :ok = BB.publish(SubscribingRobot, [:sensor, :probe], position(0.5))
 
       assert_receive {:received, :info, %Message{payload: %Command.Position{position: 0.5}}}, 500
-      refute_receive {:received, :command, _message}, 200
+      settle_motor(SubscribingRobot)
+      refute_received {:received, :command, _message}
     end
 
     test "while commands on its own topic still get the transmission" do

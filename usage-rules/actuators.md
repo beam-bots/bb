@@ -33,14 +33,24 @@ numbers in SI base units (radians here).
 
 - Every function accepts **either** the actuator's unique name or its full
   path — a name is resolved with `BB.Robot.actuator_path/2`. Naming an
-  actuator the robot doesn't have raises rather than publishing to a topic
-  nothing listens on. A full path must be complete: every link and joint from
+  actuator the robot doesn't have raises `ArgumentError` under every delivery,
+  rather than sending the command where nothing listens. A full path must be
+  complete, and raises the same way if it isn't: every link and joint from
   the root, not just the joint.
 - Every command — `set_position`, `set_velocity`, `set_effort`,
   `follow_trajectory`, `stop` and `hold` — takes the same `:delivery` option:
   - `:pubsub` publishes the command for observers **and** waits for the
     actuator, returning `:ok` or `{:error, reason}`. Match on it: a refusal
-    means the joint is not moving.
+    means the joint is not moving. Two errors don't come from the actuator:
+    - `BB.Error.State.CommandPending` (severity `:warning`) — the actuator
+      didn't answer within `:timeout`. The command is **still queued and will
+      be applied late**; it is not a rollback. Commands aren't coalesced, so
+      a loop that sends its next target on top queues behind it.
+    - `BB.Error.State.ActuatorNotRunning` — nothing received the command, and
+      it wasn't published.
+
+    Neither exits the caller. An actuator that **crashes** mid-command still
+    does, as `GenServer.call/3` would.
   - `:broadcast` publishes and doesn't wait.
   - `:direct` casts, publishing nothing, for control paths that can't afford
     the round trip.

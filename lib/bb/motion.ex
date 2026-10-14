@@ -73,6 +73,7 @@ defmodule BB.Motion do
   alias BB.Actuator
   alias BB.Command.Context
   alias BB.Error.Kinematics.MultiFailed
+  alias BB.Error.Severity
   alias BB.IK.Solver
   alias BB.Robot.Runtime
 
@@ -88,7 +89,10 @@ defmodule BB.Motion do
 
   @typedoc """
   Why a motion stopped: either the solver couldn't reach the target, or an
-  actuator refused the command it was sent.
+  actuator didn't take the command it was sent. It refused it, it didn't answer
+  within `:timeout` (`BB.Error.State.CommandPending`, a `:warning` - the command
+  is still queued and will most likely be applied late), or it wasn't running
+  (`BB.Error.State.ActuatorNotRunning`).
   """
   @type motion_error :: kinematics_error() | BB.Error.t()
 
@@ -119,7 +123,7 @@ defmodule BB.Motion do
   Optional:
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
     each command and waits for the actuator to accept it, reporting the first
-    refusal; `:broadcast` publishes each command and waits for nothing;
+    actuator error; `:broadcast` publishes each command and waits for nothing;
     `:direct` casts to each actuator and waits for nothing. Under the latter
     two a refusal is never reported, so both always return `:ok`
   - `:reply_on_reject?` - Under `:direct`, have each actuator send
@@ -130,9 +134,9 @@ defmodule BB.Motion do
   - `:command_id` - Correlation ID for feedback tracking (passed to actuators)
   - `:timeout` - How long to wait for each actuator to accept its command, in
     milliseconds (default 5000). Used only under `:pubsub`; neither of the
-    others waits. A timeout exits the caller, as `GenServer.call/3` does — a
-    loop that would rather skip a late step than die wants `:broadcast` or
-    `:direct`
+    others waits. An actuator that doesn't answer in time is reported as
+    `BB.Error.State.CommandPending`, which is not a rollback: its command is
+    still queued and will most likely be applied late
   - `:max_iterations` - Maximum solver iterations (passed to solver)
   - `:tolerance` - Convergence tolerance in metres (passed to solver)
   - `:respect_limits` - Whether to clamp to joint limits (passed to solver)
@@ -141,8 +145,8 @@ defmodule BB.Motion do
 
   - `{:ok, meta}` - Successfully moved; meta contains solver info (iterations, residual, etc.)
   - `{:error, error}` - Failed; either a struct from `BB.Error.Kinematics` if
-    the target couldn't be solved, or the actuator's own error if one refused
-    the command it was sent
+    the target couldn't be solved, or an actuator error if one didn't take the
+    command it was sent (see `t:motion_error/0`)
 
   ## Examples
 
@@ -274,7 +278,7 @@ defmodule BB.Motion do
   Optional:
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
     each command and waits for the actuator to accept it, reporting the first
-    refusal; `:broadcast` publishes each command and waits for nothing;
+    actuator error; `:broadcast` publishes each command and waits for nothing;
     `:direct` casts to each actuator and waits for nothing. Under the latter
     two a refusal is never reported, so both always return `:ok`
   - `:reply_on_reject?` - Under `:direct`, have each actuator send
@@ -285,9 +289,9 @@ defmodule BB.Motion do
   - `:command_id` - Correlation ID for feedback tracking (passed to actuators)
   - `:timeout` - How long to wait for each actuator to accept its command, in
     milliseconds (default 5000). Used only under `:pubsub`; neither of the
-    others waits. A timeout exits the caller, as `GenServer.call/3` does — a
-    loop that would rather skip a late step than die wants `:broadcast` or
-    `:direct`
+    others waits. An actuator that doesn't answer in time is reported as
+    `BB.Error.State.CommandPending`, which is not a rollback: its command is
+    still queued and will most likely be applied late
   - `:max_iterations` - Maximum solver iterations (passed to solver)
   - `:tolerance` - Convergence tolerance in metres (passed to solver)
   - `:respect_limits` - Whether to clamp to joint limits (passed to solver)
@@ -298,9 +302,10 @@ defmodule BB.Motion do
   - `{:error, %BB.Error.Kinematics.MultiFailed{}}` - A target failed to solve.
     The error names the link that failed, carries the underlying kinematics
     error, and keeps the results of the targets solved before it
-  - `{:error, error}` - Every target solved, but an actuator refused the command
-    it was sent. That failure isn't kinematic, so it arrives as the actuator's
-    own error rather than wrapped in `MultiFailed`
+  - `{:error, error}` - Every target solved, but an actuator didn't take the
+    command it was sent (see `t:motion_error/0`). That failure isn't kinematic,
+    so it arrives as the actuator error itself rather than wrapped in
+    `MultiFailed`
 
   ## Examples
 
@@ -318,7 +323,7 @@ defmodule BB.Motion do
           IO.puts("Failed to reach \#{link}: \#{Exception.message(error)}")
 
         {:error, error} ->
-          IO.puts("An actuator refused: \#{Exception.message(error)}")
+          IO.puts("An actuator didn't take its command: \#{Exception.message(error)}")
       end
   """
   @spec move_to_multi(robot_or_context(), targets(), keyword()) :: multi_motion_result()
@@ -340,8 +345,8 @@ defmodule BB.Motion do
         :ok ->
           {:ok, results}
 
-        # Not wrapped in `MultiFailed`: every target solved, and the command was
-        # refused on the way out, so nothing about this failure is kinematic.
+        # Not wrapped in `MultiFailed`: every target solved, and the command
+        # failed on the way out, so nothing about this failure is kinematic.
         {:error, error} ->
           {:error, error}
       end
@@ -427,7 +432,7 @@ defmodule BB.Motion do
 
   - `:delivery` - How to send actuator commands. `:pubsub` (default) publishes
     each command and waits for the actuator to accept it, reporting the first
-    refusal; `:broadcast` publishes each command and waits for nothing;
+    actuator error; `:broadcast` publishes each command and waits for nothing;
     `:direct` casts to each actuator and waits for nothing. Under the latter
     two a refusal is never reported, so both always return `:ok`
   - `:reply_on_reject?` - Under `:direct`, have each actuator send
@@ -438,14 +443,21 @@ defmodule BB.Motion do
   - `:command_id` - Correlation ID for feedback tracking
   - `:timeout` - How long to wait for each actuator to accept its command, in
     milliseconds (default 5000). Used only under `:pubsub`; neither of the
-    others waits. A timeout exits the caller, as `GenServer.call/3` does — a
-    loop that would rather skip a late step than die wants `:broadcast` or
-    `:direct`
+    others waits. An actuator that doesn't answer in time is reported as
+    `BB.Error.State.CommandPending`, which is not a rollback: its command is
+    still queued and will most likely be applied late
 
   ## Returns
 
   - `:ok` - Every actuator accepted its command
-  - `{:error, error}` - One refused; the rest were still sent
+  - `{:error, error}` - One refused, didn't answer within `:timeout`, or isn't
+    running; the rest were still sent. See `BB.Actuator.set_position/4`. When
+    several did, a refusal or a missing actuator is reported ahead of a late one,
+    since a late command will most likely still be applied
+
+  An actuator that crashes while handling its command exits the caller, as it
+  would from `BB.Actuator.set_position/4` itself. The exit can be caught, and
+  arrives only once every other joint has answered.
 
   ## Examples
 
@@ -502,7 +514,7 @@ defmodule BB.Motion do
   defp send_positions_to_actuators(robot_module, robot, positions, delivery, opts) do
     positions
     |> Enum.flat_map(&actuators_for_joint(robot, &1))
-    |> send_to_actuators(robot_module, robot, delivery, opts)
+    |> send_to_actuators(robot_module, delivery, opts)
   end
 
   defp actuators_for_joint(robot, {joint_name, position}) do
@@ -515,30 +527,53 @@ defmodule BB.Motion do
   # The joints of one motion are meant to move together, so they are commanded
   # together: waiting on each in turn would cost a round trip per joint, and
   # nothing downstream is ordered by the order they were sent in.
-  defp send_to_actuators(commands, robot_module, robot, :pubsub, opts) do
+  #
+  # The tasks are not linked to the caller: a linked task's crash would kill it
+  # outside any `try`. Every joint is waited for before a crash is passed on, so
+  # it reaches the caller as it would from a single `Actuator.set_position/4`,
+  # and no late reply is left behind in the caller's mailbox.
+  defp send_to_actuators(commands, robot_module, :pubsub, opts) do
+    task_supervisor = BB.Process.via(robot_module, BB.TaskSupervisor)
+
     commands
     |> Enum.map(fn {actuator_name, position} ->
-      # The name came from the joint's own actuator list, so the lookup cannot miss.
-      {:ok, path} = BB.Robot.actuator_path(robot, actuator_name)
-      Task.async(fn -> Actuator.set_position(robot_module, path, position, opts) end)
+      Task.Supervisor.async_nolink(task_supervisor, fn ->
+        Actuator.set_position(robot_module, actuator_name, position, opts)
+      end)
     end)
-    |> Task.await_many(:infinity)
-    |> first_refusal()
+    |> Task.yield_many(timeout: :infinity)
+    |> Enum.map(&task_result/1)
+    |> most_serious_error()
   end
 
   # Neither of these waits for an actuator, so there is no result to collect and
   # no reason to spend a task per joint on gathering one.
-  defp send_to_actuators(commands, robot_module, _robot, delivery, opts)
+  defp send_to_actuators(commands, robot_module, delivery, opts)
        when delivery in [:broadcast, :direct] do
     Enum.each(commands, fn {actuator_name, position} ->
       Actuator.set_position(robot_module, actuator_name, position, opts)
     end)
   end
 
-  defp first_refusal(results) do
-    case Enum.find(results, &match?({:error, _}, &1)) do
-      nil -> :ok
-      {:error, error} -> {:error, error}
+  defp task_result({_task, {:ok, result}}), do: result
+
+  defp task_result({_task, {:exit, {exception, stacktrace}}}) when is_exception(exception),
+    do: reraise(exception, stacktrace)
+
+  defp task_result({_task, {:exit, reason}}), do: exit(reason)
+
+  defp most_serious_error(results) do
+    errors = for {:error, error} <- results, do: error
+
+    case Enum.split_with(errors, &warning?/1) do
+      {[], []} -> :ok
+      {_warnings, [error | _]} -> {:error, error}
+      {[warning | _], []} -> {:error, warning}
     end
   end
+
+  # A driver may refuse with an error of its own that doesn't implement the
+  # severity protocol, and that is a refusal, not a warning.
+  defp warning?(error),
+    do: Severity.impl_for(error) != nil and Severity.severity(error) == :warning
 end

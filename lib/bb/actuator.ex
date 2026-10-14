@@ -203,8 +203,9 @@ defmodule BB.Actuator do
       BB.Actuator.set_position(MyRobot, :shoulder_servo, 1.57)
       BB.Actuator.set_position(MyRobot, [:base_link, :shoulder, :shoulder_servo], 1.57)
 
-  Naming an actuator the robot doesn't have raises `ArgumentError` rather than
-  publishing to a topic nothing is listening on.
+  Naming an actuator the robot doesn't have raises `ArgumentError`, whichever
+  delivery is used, rather than sending the command where nothing is listening.
+  So does a path that isn't the actuator's full path from the root.
 
   ### Examples
 
@@ -550,6 +551,8 @@ defmodule BB.Actuator do
   # API
   # ----------------------------------------------------------------------------
 
+  alias BB.Error.State.ActuatorNotRunning
+  alias BB.Error.State.CommandPending
   alias BB.Message
   alias BB.Message.Actuator.BeginMotion
   alias BB.Message.Actuator.Command
@@ -785,11 +788,26 @@ defmodule BB.Actuator do
 
   - `:ok` - Under `:pubsub`, that the actuator accepted the command. Under
     `:broadcast` and `:direct`, only that it was sent
-  - `{:error, reason}` - `:pubsub` only. The actuator refused, `reason` being a
-    `BB.Error` struct
+  - `{:error, reason}` - `:pubsub` only, `reason` being a `BB.Error` struct:
+    - The actuator refused the command - `BB.Error.State.NotArmed`,
+      `BB.Error.State.UnsupportedCommand`, `BB.Error.State.StaleEpoch`, or an
+      error of the driver's own
+    - `BB.Error.State.CommandPending` - the actuator didn't answer within
+      `:timeout`. Its severity is `:warning`: see below
+    - `BB.Error.State.ActuatorNotRunning` - nothing received the command, and
+      it was not published
 
-  Under `delivery: :pubsub`, exits if the actuator isn't running or doesn't
-  answer within `:timeout`, like any other `GenServer.call/3`.
+  Under `delivery: :pubsub`, an actuator that crashes while handling the
+  command exits the caller, as `GenServer.call/3` does.
+
+  > #### A late command is not a cancelled one {: .warning}
+  >
+  > `CommandPending` means the caller stopped waiting, not that the command was
+  > dropped. It is already in the actuator's mailbox and will be applied when
+  > the actuator gets to it. Commands are not coalesced, so a loop that answers
+  > it by sending its next target queues that target behind the late one, and
+  > an actuator that keeps falling behind works through a growing backlog of
+  > targets that are out of date by the time they are applied.
 
   > #### `:broadcast` and `:direct` cannot report a refusal {: .warning}
   >
@@ -817,9 +835,10 @@ defmodule BB.Actuator do
 
   Three things to know before reaching for that:
 
-  - `Task.async/1` **links**. From a long-lived process - a controller loop -
-    use `Task.Supervisor.async_nolink/3` instead, or an actuator that has died
-    takes the caller down with it.
+  - `Task.async/1` **links**. An actuator that crashes mid-command exits its
+    task, and a linked task's exit kills the caller outside any `try`. From a
+    long-lived process - a controller loop - use
+    `Task.Supervisor.async_nolink/3` instead.
   - `Task.await_many/2` applies one deadline to the whole set and kills the
     stragglers when it expires. It isn't "collect as they land".
   - Each command publishes from inside its own task, so observers see the
@@ -1107,19 +1126,22 @@ defmodule BB.Actuator do
 
   # The actuator is excluded from the publication because it is about to be
   # handed the same command directly: it subscribes to its own command topic,
-  # and would otherwise drive the hardware twice for one call.
+  # and would otherwise drive the hardware twice for one call. An actuator that
+  # isn't running is reported before publishing, so observers aren't told about
+  # a command nothing will execute.
   defp deliver(:pubsub, robot, target, opts, build) do
     path = actuator_path!(robot, target)
     actuator_name = List.last(path)
     message = stamp(robot, build.(actuator_name))
 
-    BB.publish(robot, [:actuator | path], message,
-      except: [BB.Process.whereis(robot, actuator_name)]
-    )
+    case BB.Process.whereis(robot, actuator_name) do
+      :undefined ->
+        {:error, actuator_not_running(robot, actuator_name, message)}
 
-    robot
-    |> BB.call(actuator_name, {:command, message}, Keyword.fetch!(opts, :timeout))
-    |> command_result()
+      pid ->
+        BB.publish(robot, [:actuator | path], message, except: [pid])
+        call_actuator(robot, actuator_name, message, Keyword.fetch!(opts, :timeout))
+    end
   end
 
   defp deliver(:broadcast, robot, target, _opts, build) do
@@ -1129,7 +1151,7 @@ defmodule BB.Actuator do
   end
 
   defp deliver(:direct, robot, target, opts, build) do
-    actuator_name = actuator_name!(robot, target)
+    actuator_name = robot |> actuator_path!(target) |> List.last()
     message = stamp(robot, build.(actuator_name))
     BB.cast(robot, actuator_name, {:command, message, reply_target(opts)})
   end
@@ -1197,6 +1219,36 @@ defmodule BB.Actuator do
     end
   end
 
+  # A late or missing actuator is a runtime condition the caller has to handle,
+  # and an exit would take it down instead. Any other exit means the actuator
+  # crashed while handling the command, and still propagates.
+  @spec call_actuator(module(), atom(), Message.t(), timeout()) :: :ok | {:error, term()}
+  defp call_actuator(robot, actuator_name, message, timeout) do
+    robot
+    |> BB.call(actuator_name, {:command, message}, timeout)
+    |> command_result()
+  catch
+    :exit, {:timeout, {GenServer, :call, _}} ->
+      {:error,
+       CommandPending.exception(
+         robot: robot,
+         actuator: actuator_name,
+         command: message.payload.__struct__,
+         timeout_ms: timeout
+       )}
+
+    :exit, {:noproc, {GenServer, :call, _}} ->
+      {:error, actuator_not_running(robot, actuator_name, message)}
+  end
+
+  defp actuator_not_running(robot, actuator_name, message),
+    do:
+      ActuatorNotRunning.exception(
+        robot: robot,
+        actuator: actuator_name,
+        command: message.payload.__struct__
+      )
+
   # A driver may answer `c:handle_command/2` with anything it likes; only a
   # refusal changes what the caller should do next.
   @spec command_result(term()) :: :ok | {:error, term()}
@@ -1210,9 +1262,21 @@ defmodule BB.Actuator do
   # Pubsub delivery needs the actuator's full path, because that is the topic its
   # server subscribes to. A bare name is resolved against the robot rather than
   # passed through: `[:actuator | :servo]` is an improper list, which slips past
-  # `BB.publish/3`'s `is_list` guard and then dies inside `Enum.scan/3`.
+  # `BB.publish/3`'s `is_list` guard and then dies inside `Enum.scan/3`. A path is
+  # checked against the one its last element resolves to, since a wrong or partial
+  # one names a topic the actuator doesn't subscribe to.
   @spec actuator_path!(module(), target()) :: [atom()]
-  defp actuator_path!(_robot, path) when is_list(path), do: path
+  defp actuator_path!(robot, path) when is_list(path) do
+    case actuator_path!(robot, List.last(path)) do
+      ^path ->
+        path
+
+      full_path ->
+        raise ArgumentError,
+              "#{inspect(path)} is not the path to #{inspect(List.last(path))} on " <>
+                "#{inspect(robot)}. Its full path is #{inspect(full_path)}"
+    end
+  end
 
   defp actuator_path!(robot, name) when is_atom(name) do
     case Robot.actuator_path(robot.robot(), name) do
@@ -1225,10 +1289,4 @@ defmodule BB.Actuator do
                 "Known actuators: #{inspect(Map.keys(robot.robot().actuators))}"
     end
   end
-
-  # Direct and synchronous delivery go through the registry, which is keyed by
-  # the actuator's unique name.
-  @spec actuator_name!(module(), target()) :: atom()
-  defp actuator_name!(_robot, name) when is_atom(name), do: name
-  defp actuator_name!(_robot, path) when is_list(path), do: List.last(path)
 end
