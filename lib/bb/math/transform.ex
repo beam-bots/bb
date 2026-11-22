@@ -556,6 +556,38 @@ defmodule BB.Math.Transform do
   end
 
   @doc """
+  Interpolate between two rigid transforms.
+
+  Translation is interpolated linearly and rotation by slerp along the shorter
+  arc. `t` should be between 0.0 and 1.0.
+
+  This decomposes both rotations to quaternions and rebuilds a matrix from the
+  result, so it is not exact at the endpoints: expect `interpolate(a, b, 0.0)`
+  to differ from `a` in the last few bits.
+
+  ## Examples
+
+      iex> a = BB.Math.Transform.identity()
+      iex> b = BB.Math.Transform.compose(
+      ...>   BB.Math.Transform.translation(BB.Math.Vec3.new(2, 0, 0)),
+      ...>   BB.Math.Transform.rotation_z(:math.pi() / 2)
+      ...> )
+      iex> mid = BB.Math.Transform.interpolate(a, b, 0.5)
+      iex> mid |> BB.Math.Transform.get_translation() |> BB.Math.Vec3.to_list()
+      [1.0, 0.0, 0.0]
+      iex> {_axis, angle} = mid |> BB.Math.Transform.get_quaternion() |> BB.Math.Quaternion.to_axis_angle()
+      iex> Float.round(angle, 6)
+      0.785398
+  """
+  @spec interpolate(t(), t(), number()) :: t()
+  def interpolate(%__MODULE__{} = a, %__MODULE__{} = b, t) when t >= 0 and t <= 1 do
+    translation = Vec3.lerp(get_translation(a), get_translation(b), t)
+    rotation = Quaternion.slerp(get_quaternion(a), get_quaternion(b), t)
+
+    from_position_quaternion(translation, rotation)
+  end
+
+  @doc """
   Get the forward vector (Z-axis) from a transformation matrix.
 
   The forward vector is the third column of the rotation matrix,

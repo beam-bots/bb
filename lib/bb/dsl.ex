@@ -881,9 +881,78 @@ defmodule BB.Dsl do
     ]
   }
 
+  @joint_history %Entity{
+    name: :joint_history,
+    describe: """
+    How much joint-state history the robot keeps.
+
+    Every joint configuration the runtime receives is recorded against the
+    `monotonic_time` of the message that carried it, so the robot can answer
+    "where was every joint at time T?" with
+    `BB.Robot.State.get_all_configurations_at/2`. That is what lets a consumer
+    with latency of its own - a camera frame that took 40ms to decode, say -
+    be paired with the pose the robot had when it was captured, rather than
+    whatever pose it has by the time the frame arrives.
+
+    History is on by default, so declaring this is only necessary to change
+    it. `joint_history false` turns it off; with it off, no other option
+    matters and none needs a value.
+
+    A joint that sends nothing new is taken not to have moved: a lookup later
+    than a joint's newest sample returns that sample rather than an error.
+    Lookups in the future, or older than a joint's oldest retained sample, are
+    errors.
+    """,
+    examples: [
+      """
+      settings do
+        joint_history false
+      end
+      """,
+      """
+      settings do
+        joint_history do
+          keep ~u(30 second)
+          max_gap ~u(250 millisecond)
+        end
+      end
+      """
+    ],
+    target: BB.Dsl.JointHistory,
+    args: [{:optional, :enabled?, %BB.Dsl.JointHistory{}.enabled?}],
+    schema: [
+      enabled?: [
+        type: :boolean,
+        default: %BB.Dsl.JointHistory{}.enabled?,
+        doc:
+          "Whether joint-state history is recorded at all. When `false`, `BB.Robot.State.get_all_configurations_at/2` returns an error and the other options are ignored."
+      ],
+      keep: [
+        type: unit_type(compatible: :second, min: ~u(0 second)),
+        default: %BB.Dsl.JointHistory{}.keep,
+        doc:
+          "How far back each joint's history reaches, measured from that joint's newest sample. Older samples are discarded as new ones arrive, except the newest sample before the cutoff, which is kept so a joint that has been still for longer than `keep` can still be answered for."
+      ],
+      interpolation?: [
+        type: :boolean,
+        default: %BB.Dsl.JointHistory{}.interpolation?,
+        doc:
+          "Whether a lookup between two samples interpolates between them. When `false`, it returns the earlier sample - the joint's configuration as last reported. Revolute and prismatic joints interpolate linearly, continuous joints along the shorter arc, planar joints linearly in `x`/`y` and along the shorter arc in `theta`, and floating joints linearly in translation and by slerp in rotation."
+      ],
+      max_gap: [
+        type: unit_type(compatible: :second, min: ~u(0 second)),
+        default: %BB.Dsl.JointHistory{}.max_gap,
+        doc:
+          "The largest gap between two samples that is interpolated across. Wider gaps return the earlier sample instead. Many joint-state producers only publish when a joint moves, so a wide gap usually means the joint was still and then moved - interpolating across it would invent a slow motion that never happened. Ignored when `interpolation?` is `false`."
+      ]
+    ]
+  }
+
   @settings %Section{
     name: :settings,
     describe: "System-wide settings",
+    entities: [@joint_history],
+    singleton_entity_keys: [:joint_history],
     schema: [
       name: [
         type: :atom,

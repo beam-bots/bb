@@ -166,6 +166,32 @@ defmodule BB.Math.Transform2D do
     basis(Vec3.normalise(normal))
   end
 
+  @doc """
+  Interpolate between two planar transforms.
+
+  `x` and `y` are interpolated linearly and `theta` along the shorter arc, so
+  interpolating from just below `π` to just above `-π` passes through `π`
+  rather than sweeping back through zero. `t` should be between 0.0 and 1.0.
+
+  ## Examples
+
+      iex> a = BB.Math.Transform2D.new(0.0, 0.0, 3.0)
+      iex> b = BB.Math.Transform2D.new(2.0, 4.0, -3.0)
+      iex> mid = BB.Math.Transform2D.interpolate(a, b, 0.5)
+      iex> {mid.x, mid.y, Float.round(abs(mid.theta), 6)}
+      {1.0, 2.0, 3.141593}
+  """
+  @spec interpolate(t(), t(), number()) :: t()
+  def interpolate(%__MODULE__{} = a, %__MODULE__{} = b, t) when t >= 0 and t <= 1 do
+    shortest_turn = :math.atan2(:math.sin(b.theta - a.theta), :math.cos(b.theta - a.theta))
+
+    %__MODULE__{
+      x: a.x + (b.x - a.x) * t,
+      y: a.y + (b.y - a.y) * t,
+      theta: a.theta + shortest_turn * t
+    }
+  end
+
   # The seed is whichever cardinal axis is least aligned with the normal, which
   # keeps the cross product well-conditioned.
   defp basis(%Vec3{} = n) do

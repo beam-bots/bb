@@ -51,10 +51,47 @@ defmodule BB.Robot.State do
 
       # Clean up when done
       :ok = BB.Robot.State.delete(state)
+
+  ## History
+
+  A state created with the `:history` option also records every configuration
+  written to it against a `System.monotonic_time(:nanosecond)` timestamp, so
+  `get_all_configurations_at/2` can say where every joint was at a past
+  moment. A running robot's state has history unless the robot is configured
+  with `joint_history false`; see `BB.Dsl.JointHistory`.
+
+  This is for consumers with latency of their own. A camera frame captured at
+  `t` and delivered 40ms later should be paired with the robot's configuration
+  at `t`, not at delivery.
+
+  Each joint's history is its own series, kept for `keep` nanoseconds back from
+  its newest sample. The newest sample older than that is kept too, so a joint
+  that has been still for longer than `keep` can still be answered for. Fixed
+  joints have no history, since they have nothing to record.
+
+  A lookup resolves each joint independently:
+
+  - **At a sample** - that sample.
+  - **Between two samples** - interpolated, if interpolation is enabled and
+    the samples are no more than `max_gap` apart; otherwise the earlier
+    sample.
+  - **After the joint's newest sample** - the newest sample. Joint-state
+    producers commonly publish only when a joint moves, so silence means it
+    hasn't. This is also what a lookup gets when the sample that would answer
+    it is still in flight.
+  - **Before the joint's oldest sample** - a `BB.Error.State.OutsideJointHistory`
+    error.
+
+  A lookup later than now is refused outright, rather than extrapolated.
+
+  Timestamps are node-local, so a time taken on another node is meaningless
+  here.
   """
 
   alias BB.Error.Invalid.JointConfig
   alias BB.Error.Kinematics.UnknownJoint
+  alias BB.Error.State.JointHistoryDisabled
+  alias BB.Error.State.OutsideJointHistory
   alias BB.Math.Transform
   alias BB.Math.Transform2D
   alias BB.Math.Vec3
@@ -63,12 +100,31 @@ defmodule BB.Robot.State do
   alias BB.Parameter.Type, as: ParameterType
   alias BB.Robot
 
-  defstruct [:table, :robot]
+  defstruct [:table, :robot, :history]
 
   @type t :: %__MODULE__{
           table: :ets.table(),
-          robot: Robot.t()
+          robot: Robot.t(),
+          history: history() | nil
         }
+
+  @typedoc """
+  How history is kept, with durations in integer nanoseconds.
+
+  `BB.Dsl.Info.joint_history/1` returns this shape from a robot's DSL.
+  """
+  @type history_options :: %{
+          keep: non_neg_integer(),
+          interpolation?: boolean(),
+          max_gap: non_neg_integer()
+        }
+
+  @typep history :: %{
+           table: :ets.table(),
+           keep: non_neg_integer(),
+           interpolation?: boolean(),
+           max_gap: non_neg_integer()
+         }
 
   @typedoc """
   A joint's configuration, shaped to its type.
@@ -83,10 +139,15 @@ defmodule BB.Robot.State do
   @doc """
   Create a new state table for a robot.
 
+  ## Options
+
+  - `:history` - a `t:history_options/0` map to record configuration history,
+    or `nil` (the default) not to. See "History" in the module documentation.
+
   Returns `{:ok, state}` on success.
   """
-  @spec new(Robot.t()) :: {:ok, t()}
-  def new(%Robot{} = robot) do
+  @spec new(Robot.t(), [{:history, history_options() | nil}]) :: {:ok, t()}
+  def new(%Robot{} = robot, opts \\ []) do
     table =
       :ets.new(:robot_state, [
         :set,
@@ -95,7 +156,11 @@ defmodule BB.Robot.State do
         write_concurrency: false
       ])
 
-    state = %__MODULE__{table: table, robot: robot}
+    state = %__MODULE__{
+      table: table,
+      robot: robot,
+      history: new_history(Keyword.get(opts, :history))
+    }
 
     initialise_joints(state)
 
@@ -106,8 +171,9 @@ defmodule BB.Robot.State do
   Delete a state table and free resources.
   """
   @spec delete(t()) :: :ok
-  def delete(%__MODULE__{table: table}) do
+  def delete(%__MODULE__{table: table, history: history}) do
     :ets.delete(table)
+    if history, do: :ets.delete(history.table)
     :ok
   end
 
@@ -132,17 +198,30 @@ defmodule BB.Robot.State do
   The value's shape must match the joint's type, so a `BB.Math.Transform2D`
   aimed at a revolute joint is an error rather than a wrong pose.
 
+  `monotonic_time` is when the configuration was true, in
+  `System.monotonic_time(:nanosecond)`, and is what history records it
+  against. Pass the measurement's own time where there is one - a
+  `BB.Message`'s `monotonic_time`, say - rather than letting it default to
+  now.
+
   ## Examples
 
       :ok = BB.Robot.State.set_configuration(state, :shoulder, 0.5)
       :ok = BB.Robot.State.set_configuration(state, :base, transform)
+      :ok = BB.Robot.State.set_configuration(state, :shoulder, 0.5, message.monotonic_time)
   """
-  @spec set_configuration(t(), atom(), configuration()) ::
+  @spec set_configuration(t(), atom(), configuration(), integer()) ::
           :ok | {:error, UnknownJoint.t() | JointConfig.t()}
-  def set_configuration(%__MODULE__{table: table} = state, joint_name, value) do
+  def set_configuration(
+        %__MODULE__{table: table} = state,
+        joint_name,
+        value,
+        monotonic_time \\ System.monotonic_time(:nanosecond)
+      ) do
     with {:ok, joint} <- fetch_joint(state, joint_name),
          {:ok, encoded} <- encode(joint, :configuration, value) do
       :ets.insert(table, {{:configuration, joint_name}, encoded})
+      record(state, joint, encoded, monotonic_time)
       :ok
     end
   end
@@ -190,10 +269,53 @@ defmodule BB.Robot.State do
   def get_all_velocities(%__MODULE__{} = state), do: read_all(state, :velocity)
 
   @doc """
+  Get every joint's configuration as it was at `monotonic_time`.
+
+  `monotonic_time` is a `System.monotonic_time(:nanosecond)` value. Every joint
+  in the robot is present, shaped to its own type, as with
+  `get_all_configurations/1`. See "History" in the module documentation for
+  how each joint is resolved.
+
+  Returns `BB.Error.State.JointHistoryDisabled` for a state with no history,
+  and `BB.Error.State.OutsideJointHistory` for a time later than now or older
+  than some joint's oldest sample.
+
+  ## Examples
+
+      {:ok, configurations} =
+        BB.Robot.State.get_all_configurations_at(state, frame.monotonic_time)
+  """
+  @spec get_all_configurations_at(t(), integer()) ::
+          {:ok, %{atom() => configuration()}}
+          | {:error, JointHistoryDisabled.t() | OutsideJointHistory.t()}
+  def get_all_configurations_at(%__MODULE__{history: nil}, _monotonic_time) do
+    {:error, JointHistoryDisabled.exception([])}
+  end
+
+  def get_all_configurations_at(%__MODULE__{} = state, monotonic_time)
+      when is_integer(monotonic_time) do
+    now = System.monotonic_time(:nanosecond)
+
+    if monotonic_time > now do
+      {:error,
+       OutsideJointHistory.exception(
+         direction: :future,
+         requested_time: monotonic_time,
+         boundary_time: now
+       )}
+    else
+      configurations_at(state, monotonic_time)
+    end
+  end
+
+  @doc """
   Set multiple joint configurations at once.
 
   Every value is validated before anything is written, so a rejected map leaves
   the table untouched rather than applying part of itself.
+
+  `monotonic_time` is recorded in history against every configuration in the
+  map, as in `set_configuration/4`.
 
   ## Examples
 
@@ -203,10 +325,19 @@ defmodule BB.Robot.State do
         base: transform
       })
   """
-  @spec set_configurations(t(), %{atom() => configuration()}) ::
+  @spec set_configurations(t(), %{atom() => configuration()}, integer()) ::
           :ok | {:error, UnknownJoint.t() | JointConfig.t()}
-  def set_configurations(%__MODULE__{} = state, configurations) when is_map(configurations) do
-    write_all(state, :configuration, configurations)
+  def set_configurations(
+        %__MODULE__{robot: robot} = state,
+        configurations,
+        monotonic_time \\ System.monotonic_time(:nanosecond)
+      )
+      when is_map(configurations) do
+    with {:ok, entries} <- write_all(state, :configuration, configurations) do
+      Enum.each(entries, fn {{:configuration, joint_name}, encoded} ->
+        record(state, Map.fetch!(robot.joints, joint_name), encoded, monotonic_time)
+      end)
+    end
   end
 
   @doc """
@@ -215,7 +346,7 @@ defmodule BB.Robot.State do
   @spec set_velocities(t(), %{atom() => velocity()}) ::
           :ok | {:error, UnknownJoint.t() | JointConfig.t()}
   def set_velocities(%__MODULE__{} = state, velocities) when is_map(velocities) do
-    write_all(state, :velocity, velocities)
+    with {:ok, _entries} <- write_all(state, :velocity, velocities), do: :ok
   end
 
   @doc """
@@ -415,7 +546,7 @@ defmodule BB.Robot.State do
     }
   end
 
-  defp initialise_joints(%__MODULE__{table: table, robot: robot}) do
+  defp initialise_joints(%__MODULE__{table: table, robot: robot} = state) do
     joint_entries =
       Enum.flat_map(robot.joints, fn {joint_name, joint} ->
         [
@@ -427,6 +558,12 @@ defmodule BB.Robot.State do
     # Internal state is :idle/:executing (armed/disarmed is in BB.Safety.Controller)
     entries = [{:robot_state, :idle} | joint_entries]
     :ets.insert(table, entries)
+
+    now = System.monotonic_time(:nanosecond)
+
+    Enum.each(robot.joints, fn {_joint_name, joint} ->
+      record(state, joint, encoded_default(joint.type, :configuration), now)
+    end)
   end
 
   defp fetch_joint(%__MODULE__{robot: robot}, joint_name), do: Robot.get_joint(robot, joint_name)
@@ -449,7 +586,7 @@ defmodule BB.Robot.State do
   defp write_all(%__MODULE__{table: table} = state, kind, values) do
     with {:ok, entries} <- encode_all(state, kind, values) do
       :ets.insert(table, entries)
-      :ok
+      {:ok, entries}
     end
   end
 
@@ -462,6 +599,165 @@ defmodule BB.Robot.State do
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+  end
+
+  # ----------------------------------------------------------------------------
+  # History
+  #
+  # An ordered set keyed by `{joint_name, monotonic_time}`, so each joint's
+  # samples sit together in time order and the samples either side of any
+  # moment are one `prev`/`next` away. Values use the same storage encoding as
+  # the main table. A second write at the same time replaces the first.
+  # ----------------------------------------------------------------------------
+
+  defp new_history(nil), do: nil
+
+  defp new_history(%{keep: keep, interpolation?: interpolation?, max_gap: max_gap}) do
+    table = :ets.new(:robot_joint_history, [:ordered_set, :public, read_concurrency: true])
+    %{table: table, keep: keep, interpolation?: interpolation?, max_gap: max_gap}
+  end
+
+  defp record(%__MODULE__{history: nil}, _joint, _encoded, _monotonic_time), do: :ok
+  defp record(_state, %{type: :fixed}, _encoded, _monotonic_time), do: :ok
+
+  defp record(%__MODULE__{history: history}, joint, encoded, monotonic_time) do
+    :ets.insert(history.table, {{joint.name, monotonic_time}, encoded})
+    prune(history, joint.name, monotonic_time - history.keep)
+  end
+
+  # Samples older than the cutoff go, except the newest of them: it is what the
+  # joint's configuration was *at* the cutoff, and without it a joint that has
+  # been still for longer than `keep` would have no history at all. Pruning on
+  # every insert keeps each pass down to the one or two samples that have just
+  # aged out.
+  defp prune(history, joint_name, cutoff) do
+    case sample_key_before(history.table, joint_name, cutoff) do
+      nil -> :ok
+      retained -> delete_older(history.table, joint_name, retained)
+    end
+  end
+
+  defp delete_older(table, joint_name, key) do
+    case :ets.prev(table, key) do
+      {^joint_name, _time} = older ->
+        :ets.delete(table, older)
+        delete_older(table, joint_name, older)
+
+      _other_joint_or_end ->
+        :ok
+    end
+  end
+
+  defp configurations_at(%__MODULE__{robot: robot, history: history}, monotonic_time) do
+    Enum.reduce_while(robot.joints, {:ok, %{}}, fn {joint_name, joint}, {:ok, configurations} ->
+      case configuration_at(history, joint, monotonic_time) do
+        {:ok, configuration} -> {:cont, {:ok, Map.put(configurations, joint_name, configuration)}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp configuration_at(_history, %{type: :fixed}, _monotonic_time) do
+    {:ok, decode(:fixed, :configuration, encoded_default(:fixed, :configuration))}
+  end
+
+  defp configuration_at(history, joint, monotonic_time) do
+    case sample_at_or_before(history.table, joint.name, monotonic_time) do
+      nil ->
+        {:error,
+         OutsideJointHistory.exception(
+           direction: :past,
+           joint: joint.name,
+           requested_time: monotonic_time,
+           boundary_time: oldest_time_after(history.table, joint.name, monotonic_time)
+         )}
+
+      {^monotonic_time, encoded} ->
+        {:ok, decode(joint.type, :configuration, encoded)}
+
+      earlier ->
+        later = sample_after(history.table, joint.name, monotonic_time)
+        {:ok, resolve(history, joint.type, earlier, later, monotonic_time)}
+    end
+  end
+
+  defp resolve(history, joint_type, {earlier_time, earlier}, {later_time, later}, monotonic_time)
+       when history.interpolation? and later_time - earlier_time <= history.max_gap do
+    ratio = (monotonic_time - earlier_time) / (later_time - earlier_time)
+    interpolate(joint_type, earlier, later, ratio)
+  end
+
+  defp resolve(_history, joint_type, {_earlier_time, earlier}, _later, _monotonic_time) do
+    decode(joint_type, :configuration, earlier)
+  end
+
+  defp interpolate(type, earlier, later, ratio) when type in [:revolute, :prismatic] do
+    earlier + (later - earlier) * ratio
+  end
+
+  # A continuous joint has no limits, so its reported angle may wrap: going
+  # from 3.1 to -3.1 is a short step forward, not most of a turn backward.
+  defp interpolate(:continuous, earlier, later, ratio) do
+    earlier + :math.atan2(:math.sin(later - earlier), :math.cos(later - earlier)) * ratio
+  end
+
+  defp interpolate(:planar, earlier, later, ratio) do
+    Transform2D.interpolate(
+      decode(:planar, :configuration, earlier),
+      decode(:planar, :configuration, later),
+      ratio
+    )
+  end
+
+  defp interpolate(:floating, earlier, later, ratio) do
+    Transform.interpolate(
+      decode(:floating, :configuration, earlier),
+      decode(:floating, :configuration, later),
+      ratio
+    )
+  end
+
+  # The keys found by `prev`/`next` can be pruned before their values are read,
+  # so a key without a value is treated as a sample that isn't there.
+  defp sample_at_or_before(table, joint_name, monotonic_time) do
+    case :ets.lookup(table, {joint_name, monotonic_time}) do
+      [{_key, encoded}] -> {monotonic_time, encoded}
+      [] -> table |> sample_key_before(joint_name, monotonic_time) |> sample(table)
+    end
+  end
+
+  defp sample_after(table, joint_name, monotonic_time) do
+    table |> sample_key_after(joint_name, monotonic_time) |> sample(table)
+  end
+
+  defp oldest_time_after(table, joint_name, monotonic_time) do
+    case sample_key_after(table, joint_name, monotonic_time) do
+      {^joint_name, time} -> time
+      nil -> nil
+    end
+  end
+
+  defp sample_key_before(table, joint_name, monotonic_time) do
+    case :ets.prev(table, {joint_name, monotonic_time}) do
+      {^joint_name, _time} = key -> key
+      _other_joint_or_end -> nil
+    end
+  end
+
+  defp sample_key_after(table, joint_name, monotonic_time) do
+    case :ets.next(table, {joint_name, monotonic_time}) do
+      {^joint_name, _time} = key -> key
+      _other_joint_or_end -> nil
+    end
+  end
+
+  defp sample(nil, _table), do: nil
+
+  defp sample({_joint_name, time} = key, table) do
+    case :ets.lookup(table, key) do
+      [{^key, encoded}] -> {time, encoded}
+      [] -> nil
+    end
   end
 
   # ----------------------------------------------------------------------------

@@ -230,6 +230,28 @@ defmodule BB.Robot.Units do
   end
 
   @doc """
+  Convert a duration to whole nanoseconds (integer).
+
+  Not SI base seconds like the rest of this module: durations are compared
+  against `System.monotonic_time(:nanosecond)` and `BB.Message` timestamps,
+  which are integer nanoseconds.
+
+  ## Examples
+
+      iex> import BB.Unit
+      iex> BB.Robot.Units.to_nanoseconds(~u(1.5 millisecond))
+      1_500_000
+  """
+  @spec to_nanoseconds(Localize.Unit.t()) :: integer()
+  def to_nanoseconds(%Localize.Unit{} = unit) do
+    unit
+    |> Localize.Unit.convert!("second")
+    |> extract_float()
+    |> Kernel.*(1_000_000_000)
+    |> round()
+  end
+
+  @doc """
   Extract the numeric value from a `Localize.Unit` as a float.
 
   Handles integer, float, and `Decimal` values.
@@ -297,4 +319,8 @@ defmodule BB.Robot.Units do
   @spec to_rotational_damping_or_nil(Localize.Unit.t() | nil) :: float() | nil
   def to_rotational_damping_or_nil(nil), do: nil
   def to_rotational_damping_or_nil(unit), do: to_rotational_damping(unit)
+
+  @spec to_nanoseconds_or_nil(Localize.Unit.t() | nil) :: integer() | nil
+  def to_nanoseconds_or_nil(nil), do: nil
+  def to_nanoseconds_or_nil(unit), do: to_nanoseconds(unit)
 end

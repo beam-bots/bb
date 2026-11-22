@@ -17,6 +17,8 @@ defmodule BB.Dsl.Info do
       :states
     ]
 
+  alias BB.Dsl.JointHistory
+  alias BB.Robot.Units
   alias Spark.Dsl.Extension
 
   @doc """
@@ -45,6 +47,21 @@ defmodule BB.Dsl.Info do
         Extension.get_opt(robot_module, [:settings], :topology_max_restarts, 3),
       topology_max_seconds: Extension.get_opt(robot_module, [:settings], :topology_max_seconds, 5)
     }
+  end
+
+  @doc """
+  Returns the robot's joint-history settings, with durations in integer
+  nanoseconds, or `nil` when history is turned off.
+
+  A robot that never declares `joint_history` gets the defaults.
+  """
+  @spec joint_history(module) ::
+          %{keep: non_neg_integer, interpolation?: boolean, max_gap: non_neg_integer} | nil
+  def joint_history(robot_module) do
+    robot_module
+    |> Extension.get_entities([:settings])
+    |> Enum.find(%JointHistory{}, &is_struct(&1, JointHistory))
+    |> resolve_joint_history()
   end
 
   @doc """
@@ -91,5 +108,15 @@ defmodule BB.Dsl.Info do
   @spec category_limits(module) :: %{atom => pos_integer}
   def category_limits(robot_module) do
     robot_module.__bb_category_limits__()
+  end
+
+  defp resolve_joint_history(%JointHistory{enabled?: false}), do: nil
+
+  defp resolve_joint_history(%JointHistory{} = history) do
+    %{
+      keep: Units.to_nanoseconds(history.keep),
+      interpolation?: history.interpolation?,
+      max_gap: Units.to_nanoseconds(history.max_gap)
+    }
   end
 end
