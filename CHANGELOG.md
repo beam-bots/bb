@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.33.1](https://github.com/beam-bots/bb/compare/v0.33.0...v0.33.1) (2026-11-23)
+
+
+
+
+### Improvements:
+
+* record joint-state history and look up configurations at a past time (#329) by James Harton
+
 ## [v0.33.0](https://github.com/beam-bots/bb/compare/v0.32.0...v0.33.0) (2026-10-14)
 ### Breaking Changes:
 
