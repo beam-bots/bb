@@ -86,7 +86,7 @@ defmodule BB.Estimator.Wiring do
           name: :parent,
           path: parent_sensor_path,
           driver?: true,
-          max_input_age_ns: duration_to_ns(est.max_input_age)
+          max_input_age_ns: Units.to_nanoseconds_or_nil(est.max_input_age)
         }
       ],
       sync_tolerance_ns: nil
@@ -110,7 +110,7 @@ defmodule BB.Estimator.Wiring do
   # ----------------------------------------------------------------------------
 
   defp link_nested_inputs(%Estimator{inputs: declared} = est) do
-    default_max_age_ns = duration_to_ns(est.max_input_age)
+    default_max_age_ns = Units.to_nanoseconds_or_nil(est.max_input_age)
 
     specs =
       Enum.map(declared, fn input ->
@@ -118,14 +118,14 @@ defmodule BB.Estimator.Wiring do
           name: input.name,
           path: input.path,
           driver?: input.driver?,
-          max_input_age_ns: duration_to_ns(input.max_input_age) || default_max_age_ns
+          max_input_age_ns: Units.to_nanoseconds_or_nil(input.max_input_age) || default_max_age_ns
         }
       end)
 
     %{
       mode: if(length(declared) <= 1, do: :single, else: :multi),
       inputs: specs,
-      sync_tolerance_ns: duration_to_ns(est.sync_tolerance)
+      sync_tolerance_ns: Units.to_nanoseconds_or_nil(est.sync_tolerance)
     }
   end
 
@@ -141,23 +141,13 @@ defmodule BB.Estimator.Wiring do
 
   defp build_health(%Estimator{} = est) do
     %{
-      latency_budget_ns: duration_to_ns(est.latency_budget),
-      lost_after_ns: duration_to_ns(est.lost_after),
+      latency_budget_ns: Units.to_nanoseconds_or_nil(est.latency_budget),
+      lost_after_ns: Units.to_nanoseconds_or_nil(est.lost_after),
       recover_after: est.recover_after,
       on_degraded: est.on_degraded,
       on_lost: est.on_lost,
       on_recovered: est.on_recovered
     }
-  end
-
-  defp duration_to_ns(nil), do: nil
-
-  defp duration_to_ns(unit) do
-    unit
-    |> Localize.Unit.convert!("second")
-    |> Units.extract_float()
-    |> Kernel.*(1_000_000_000)
-    |> round()
   end
 
   defp build_child_spec(

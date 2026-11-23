@@ -371,7 +371,7 @@ defmodule BB.Robot.Runtime do
     :ok = SafetyController.register_robot(robot_module)
 
     robot = robot_module.robot()
-    {:ok, robot_state} = RobotState.new(robot)
+    {:ok, robot_state} = RobotState.new(robot, history: Info.joint_history(robot_module))
 
     commands =
       robot_module
@@ -744,8 +744,8 @@ defmodule BB.Robot.Runtime do
     end
   end
 
-  def handle_info({:bb, _path, %Message{payload: %JointState{} = joint_state}}, state) do
-    update_joint_state(state.robot_state, joint_state)
+  def handle_info({:bb, _path, %Message{payload: %JointState{}} = message}, state) do
+    update_joint_state(state.robot_state, message)
     {:noreply, state}
   end
 
@@ -1014,11 +1014,15 @@ defmodule BB.Robot.Runtime do
   # A publisher can name a joint this robot doesn't have, or report a value whose
   # shape doesn't match the joint's type. Neither is grounds for taking the
   # runtime down, so a rejected entry is dropped and the rest are applied.
-  defp update_joint_state(robot_state, %JointState{} = joint_state) do
+  #
+  # History records each configuration at the message's own time rather than at
+  # arrival, which is the nearest thing to when it was measured that arrives
+  # with it.
+  defp update_joint_state(robot_state, %Message{payload: %JointState{} = joint_state} = message) do
     names = joint_state.names || []
 
     Enum.each(names |> Enum.zip(joint_state.positions || []), fn {name, configuration} ->
-      RobotState.set_configuration(robot_state, name, configuration)
+      RobotState.set_configuration(robot_state, name, configuration, message.monotonic_time)
     end)
 
     Enum.each(names |> Enum.zip(joint_state.velocities || []), fn {name, velocity} ->

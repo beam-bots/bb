@@ -1340,6 +1340,8 @@ Target: `BB.Dsl.Joint`
 ## settings
 System-wide settings
 
+### Nested DSLs
+ * [joint_history](#settings-joint_history)
 
 
 
@@ -1358,6 +1360,75 @@ System-wide settings
 | [`topology_max_seconds`](#settings-topology_max_seconds){: #settings-topology_max_seconds } | `pos_integer` | `5` | Time window (in seconds) over which `topology_max_restarts` is counted. |
 
 
+
+### settings.joint_history
+```elixir
+joint_history enabled? \\ true
+```
+
+
+How much joint-state history the robot keeps.
+
+Every joint configuration the runtime receives is recorded against the
+`monotonic_time` of the message that carried it, so the robot can answer
+"where was every joint at time T?" with
+`BB.Robot.State.get_all_configurations_at/2`. That is what lets a consumer
+with latency of its own - a camera frame that took 40ms to decode, say -
+be paired with the pose the robot had when it was captured, rather than
+whatever pose it has by the time the frame arrives.
+
+History is on by default, so declaring this is only necessary to change
+it. `joint_history false` turns it off; with it off, no other option
+matters and none needs a value.
+
+A joint that sends nothing new is taken not to have moved: a lookup later
+than a joint's newest sample returns that sample rather than an error.
+Lookups in the future, or older than a joint's oldest retained sample, are
+errors.
+
+
+
+
+### Examples
+```
+settings do
+  joint_history false
+end
+
+```
+
+```
+settings do
+  joint_history do
+    keep ~u(30 second)
+    max_gap ~u(250 millisecond)
+  end
+end
+
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`enabled?`](#settings-joint_history-enabled?){: #settings-joint_history-enabled? } | `boolean` | `true` | Whether joint-state history is recorded at all. When `false`, `BB.Robot.State.get_all_configurations_at/2` returns an error and the other options are ignored. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`keep`](#settings-joint_history-keep){: #settings-joint_history-keep } | `any` | `Localize.Unit.new!(10, "second")` | How far back each joint's history reaches, measured from that joint's newest sample. Older samples are discarded as new ones arrive, except the newest sample before the cutoff, which is kept so a joint that has been still for longer than `keep` can still be answered for. |
+| [`interpolation?`](#settings-joint_history-interpolation?){: #settings-joint_history-interpolation? } | `boolean` | `true` | Whether a lookup between two samples interpolates between them. When `false`, it returns the earlier sample - the joint's configuration as last reported. Revolute and prismatic joints interpolate linearly, continuous joints along the shorter arc, planar joints linearly in `x`/`y` and along the shorter arc in `theta`, and floating joints linearly in translation and by slerp in rotation. |
+| [`max_gap`](#settings-joint_history-max_gap){: #settings-joint_history-max_gap } | `any` | `Localize.Unit.new!(1, "second")` | The largest gap between two samples that is interpolated across. Wider gaps return the earlier sample instead. Many joint-state producers only publish when a joint moves, so a wide gap usually means the joint was still and then moved - interpolating across it would invent a slow motion that never happened. Ignored when `interpolation?` is `false`. |
+
+
+
+
+
+### Introspection
+
+Target: `BB.Dsl.JointHistory`
 
 
 
