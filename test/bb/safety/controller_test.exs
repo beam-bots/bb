@@ -11,6 +11,8 @@ defmodule BB.Safety.ControllerTest do
   """
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias __MODULE__.Hardware
   alias BB.StateMachine.Transition
 
@@ -313,12 +315,16 @@ defmodule BB.Safety.ControllerTest do
 
       :ok = BB.Safety.arm(RobotWithHangingActuator)
 
-      {:error, {:disarm_failed, failures}} =
-        BB.Safety.disarm(RobotWithHangingActuator, timeout: 50)
+      log =
+        capture_safety_controller_log(fn ->
+          {:error, {:disarm_failed, failures}} =
+            BB.Safety.disarm(RobotWithHangingActuator, timeout: 50)
 
-      assert BB.Safety.state(RobotWithHangingActuator) == :error
-      assert length(failures) == 1
-      assert {:unknown, {:timeout, 50}} in failures
+          assert BB.Safety.state(RobotWithHangingActuator) == :error
+          assert failures == [{[:base, :joint1, :hanging], {:timeout, 50}}]
+        end)
+
+      assert log =~ "Disarm failed for [:base, :joint1, :hanging]: timed out after 50ms"
     end
   end
 
@@ -418,6 +424,13 @@ defmodule BB.Safety.ControllerTest do
       :ok
     end
 
+    test "losing the hardware logs why each piece stopped" do
+      log = capture_safety_controller_log(&lose_hardware/0)
+
+      assert log =~ "(stop) :hardware_lost"
+      assert log =~ "Topology supervisor for #{inspect(RobotWithHardwareController)} has stopped"
+    end
+
     test "force_disarm/1 restarts the topology so the robot can be armed again" do
       lose_hardware()
       Agent.update(Hardware, fn _ -> :present end)
@@ -434,8 +447,13 @@ defmodule BB.Safety.ControllerTest do
       lose_hardware()
       Agent.update(Hardware, fn _ -> :missing end)
 
-      assert {:error, {:topology_restart_failed, _reason}} =
-               BB.Safety.force_disarm(RobotWithHardwareController)
+      log =
+        capture_safety_controller_log(fn ->
+          assert {:error, {:topology_restart_failed, _reason}} =
+                   BB.Safety.force_disarm(RobotWithHardwareController)
+        end)
+
+      assert log =~ "component [:hardware] failed to start: :hardware_missing"
 
       assert BB.Safety.state(RobotWithHardwareController) == :error
 
@@ -473,5 +491,15 @@ defmodule BB.Safety.ControllerTest do
     # restart it. Acknowledge through the controller alone to reach :disarmed
     # with no topology behind it.
     :ok = GenServer.call(BB.Safety.Controller, {:force_disarm, RobotWithHardwareController})
+  end
+
+  # `test_helper.exs` filters out the safety controller's log output to keep
+  # the suite quiet; lift that for tests asserting on what it logs. Safe here
+  # because this module is `async: false`.
+  defp capture_safety_controller_log(fun) do
+    :ok = :logger.remove_primary_filter(:test_filter)
+    capture_log(fun)
+  after
+    :logger.add_primary_filter(:test_filter, {&TestLogFilter.log/2, []})
   end
 end

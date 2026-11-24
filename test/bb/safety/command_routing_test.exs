@@ -12,6 +12,8 @@ defmodule BB.Safety.CommandRoutingTest do
   """
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias BB.Robot.Runtime
 
   defmodule HomeAndArmHandler do
@@ -412,11 +414,15 @@ defmodule BB.Safety.CommandRoutingTest do
       :ok = BB.Safety.arm(FailingDisarmRobot)
       assert BB.Safety.state(FailingDisarmRobot) == :armed
 
-      assert {:error, {:disarm_command_failed, :motion_to_home_failed}} =
-               BB.Safety.disarm(FailingDisarmRobot)
+      log =
+        capture_log(fn ->
+          assert {:error, {:disarm_command_failed, :motion_to_home_failed}} =
+                   BB.Safety.disarm(FailingDisarmRobot)
+        end)
 
       assert BB.Safety.state(FailingDisarmRobot) == :error
       assert BB.Safety.in_error?(FailingDisarmRobot)
+      assert log =~ "failed: :motion_to_home_failed"
     end
 
     test "force_disarm/1 recovers from disarm-command-failed escalation" do

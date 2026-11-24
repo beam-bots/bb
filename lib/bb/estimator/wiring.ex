@@ -176,8 +176,8 @@ defmodule BB.Estimator.Wiring do
     %{
       id: estimator_name,
       start:
-        {BB.Estimator.Server, :start_link,
-         [init_arg, [name: BB.Process.via(robot_module, estimator_name)]]}
+        {BB.Process, :start_link,
+         [BB.Estimator.Server, init_arg, [name: BB.Process.via(robot_module, estimator_name)]]}
     }
   end
 

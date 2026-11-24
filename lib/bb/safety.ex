@@ -79,6 +79,8 @@ defmodule BB.Safety do
   alias BB.Robot.Runtime
   alias BB.Safety.Controller
 
+  require Logger
+
   # --- API (delegates to Controller) ---
 
   @doc """
@@ -227,19 +229,24 @@ defmodule BB.Safety do
     case Runtime.execute(robot_module, command_name, %{}) do
       {:ok, pid} ->
         result = BB.Command.await(pid, await_timeout(robot_module, command_name))
-        handle_disarm_result(robot_module, result)
+        handle_disarm_result(robot_module, command_name, result)
 
       {:error, _} = error ->
         error
     end
   end
 
-  defp handle_disarm_result(_robot_module, {:ok, _}), do: :ok
-  defp handle_disarm_result(_robot_module, {:ok, _, _opts}), do: :ok
+  defp handle_disarm_result(_robot_module, _command_name, {:ok, _}), do: :ok
+  defp handle_disarm_result(_robot_module, _command_name, {:ok, _, _opts}), do: :ok
 
-  defp handle_disarm_result(robot_module, {:error, reason}) do
+  defp handle_disarm_result(robot_module, command_name, {:error, reason}) do
     case Controller.state(robot_module) do
       state when state in [:armed, :disarming] ->
+        Logger.error(
+          "Disarm command #{inspect(command_name)} for #{inspect(robot_module)} failed: " <>
+            inspect(reason)
+        )
+
         # Disarm command failed before safety state reached a terminal value —
         # park the robot in :error so the operator has to acknowledge it.
         :ok = Controller.transition_to_error(robot_module)

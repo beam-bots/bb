@@ -477,7 +477,7 @@ defmodule BB.Safety.Controller do
   end
 
   def handle_cast({:report_error, robot_module, path, error}, state) do
-    Logger.warning(
+    Logger.error(
       "Hardware error reported for #{inspect(robot_module)} at #{inspect(path)}: #{inspect(error)}"
     )
 
@@ -487,13 +487,13 @@ defmodule BB.Safety.Controller do
   end
 
   @impl GenServer
-  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
+  def handle_info({:DOWN, ref, :process, pid, reason}, state) do
     cond do
       Map.has_key?(state.topology_monitors, ref) ->
-        handle_topology_down(ref, state)
+        handle_topology_down(ref, reason, state)
 
       match?([[_]], :ets.match(@robots_table, {:"$1", :_, ref, :_})) ->
-        handle_root_down(ref, state)
+        handle_root_down(ref, reason, state)
 
       Map.has_key?(state.handler_monitors, ref) ->
         handle_handler_down(ref, pid, state)
@@ -503,7 +503,7 @@ defmodule BB.Safety.Controller do
     end
   end
 
-  defp handle_topology_down(ref, state) do
+  defp handle_topology_down(ref, reason, state) do
     {robot_module, topology_monitors} = Map.pop(state.topology_monitors, ref)
 
     if robot_shutting_down?(robot_module) do
@@ -511,15 +511,16 @@ defmodule BB.Safety.Controller do
         "Topology supervisor for #{inspect(robot_module)} stopped during robot shutdown - ignoring"
       )
     else
-      force_disarm_for_topology_failure(robot_module)
+      force_disarm_for_topology_failure(robot_module, reason)
     end
 
     {:noreply, %{state | topology_monitors: topology_monitors}}
   end
 
-  defp force_disarm_for_topology_failure(robot_module) do
+  defp force_disarm_for_topology_failure(robot_module, reason) do
     Logger.critical(
-      "Topology supervisor for #{inspect(robot_module)} has stopped - force-disarming"
+      "Topology supervisor for #{inspect(robot_module)} has stopped " <>
+        "(#{Exception.format_exit(reason)}) - force-disarming"
     )
 
     previous_state = state(robot_module)
@@ -554,10 +555,14 @@ defmodule BB.Safety.Controller do
     end
   end
 
-  defp handle_root_down(ref, state) do
+  defp handle_root_down(ref, reason, state) do
     [[robot_module]] = :ets.match(@robots_table, {:"$1", :_, ref, :_})
 
-    Logger.warning("Robot #{inspect(robot_module)} supervisor crashed, disarming all handlers")
+    Logger.log(
+      root_down_log_level(reason),
+      "Robot #{inspect(robot_module)} supervisor stopped (#{Exception.format_exit(reason)}), " <>
+        "disarming all handlers"
+    )
 
     case disarm_all_handlers(robot_module, @default_disarm_timeout_ms) do
       :ok ->
@@ -580,6 +585,10 @@ defmodule BB.Safety.Controller do
 
     {:noreply, %{state | topology_monitors: topology_monitors}}
   end
+
+  defp root_down_log_level(reason) when reason in [:normal, :shutdown], do: :warning
+  defp root_down_log_level({:shutdown, _}), do: :warning
+  defp root_down_log_level(_reason), do: :error
 
   defp handle_handler_down(ref, pid, state) do
     {{robot, ^pid}, handler_monitors} = Map.pop(state.handler_monitors, ref)
@@ -646,12 +655,19 @@ defmodule BB.Safety.Controller do
         end,
         timeout: timeout,
         on_timeout: :kill_task,
-        ordered: false
+        ordered: false,
+        zip_input_on_exit: true
       )
       |> Enum.reduce([], fn
-        {:ok, {_path, :ok}}, acc -> acc
-        {:ok, {path, {:error, error}}}, acc -> [{path, error} | acc]
-        {:exit, :timeout}, acc -> [{:unknown, {:timeout, timeout}} | acc]
+        {:ok, {_path, :ok}}, acc ->
+          acc
+
+        {:ok, {path, {:error, error}}}, acc ->
+          [{path, error} | acc]
+
+        {:exit, {{_robot, _module, path, _opts, _pid}, :timeout}}, acc ->
+          Logger.error("Disarm failed for #{inspect(path)}: timed out after #{timeout}ms")
+          [{path, {:timeout, timeout}} | acc]
       end)
 
     case failures do
