@@ -11,6 +11,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## [v0.33.2](https://github.com/beam-bots/bb/compare/v0.33.1...v0.33.2) (2026-11-24)
+
+
+
+
+### Improvements:
+
+* recover from topology failure with a single `force_disarm/1`, and log why a robot faulted (#331) by James Harton
+
 ## [v0.33.1](https://github.com/beam-bots/bb/compare/v0.33.0...v0.33.1) (2026-11-23)
 
 
