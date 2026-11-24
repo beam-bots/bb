@@ -7,8 +7,34 @@ defmodule BB.Process do
   Helper functions for building child specs and looking up processes in the robot's registry.
   """
 
+  require Logger
+
   @type key :: term
   @type process_type :: :actuator | :sensor | :controller
+
+  # Every component child spec starts through here. When a supervisor restarts
+  # a child whose `init/1` fails - even by raising - OTP reports it only as a
+  # supervisor report, which Elixir's Logger discards unless
+  # `handle_sasl_reports` is on. Without this, hardware still missing when the
+  # restart comes round would fail without a word in the log.
+  @doc false
+  @spec start_link(module, Keyword.t(), GenServer.options()) :: GenServer.on_start()
+  def start_link(server_module, init_arg, opts) do
+    case GenServer.start_link(server_module, init_arg, opts) do
+      {:error, reason} = error ->
+        %{robot: robot_module, path: path} = Keyword.fetch!(init_arg, :bb)
+
+        Logger.error(
+          "#{inspect(robot_module)} component #{inspect(path)} failed to start: " <>
+            Exception.format_exit(reason)
+        )
+
+        error
+
+      started_or_ignored ->
+        started_or_ignored
+    end
+  end
 
   @doc """
   Build a child_spec that registers the process in the robot's registry.
@@ -63,8 +89,9 @@ defmodule BB.Process do
     %{
       id: name,
       start:
-        {wrapper_module, :start_link,
+        {__MODULE__, :start_link,
          [
+           wrapper_module,
            init_arg,
            [name: via(robot_module, name)]
          ]}
@@ -82,8 +109,9 @@ defmodule BB.Process do
     %{
       id: name,
       start:
-        {BB.Actuator.Server, :start_link,
+        {__MODULE__, :start_link,
          [
+           BB.Actuator.Server,
            init_arg,
            [name: via(robot_module, name)]
          ]}
@@ -114,7 +142,7 @@ defmodule BB.Process do
     %{
       id: name,
       start:
-        {GenServer, :start_link,
+        {__MODULE__, :start_link,
          [
            module,
            init_arg,

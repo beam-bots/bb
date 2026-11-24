@@ -154,6 +154,24 @@ Escalation is the supervisor's job. When a process detects an unrecoverable hard
 
 This means there is no single "auto-disarm on error" switch. Instead, the restart budget on the topology supervisor (configurable via the `topology_max_restarts` and `topology_max_seconds` settings) controls how much failure the robot will tolerate before giving up.
 
+### Recovering from topology failure
+
+The topology supervisor stays stopped, but the rest of the robot — registry, PubSub, runtime, bridges — keeps running, so the failure can be observed and acknowledged. Once the hardware has been checked, a single call brings the robot back:
+
+```elixir
+:ok = BB.Safety.force_disarm(MyRobot)
+```
+
+This resets the robot to `:disarmed` and starts the topology supervisor again, which starts its sensors, controllers and actuators. If they can't start — the hardware is still missing, say — the robot goes back to `:error` and the reason is returned:
+
+```elixir
+{:error, {:topology_restart_failed, reason}} = BB.Safety.force_disarm(MyRobot)
+```
+
+If the hardware starts and then fails again, the topology gives up again and the robot latches `:error` as before.
+
+A robot cannot be armed while its topology supervisor isn't running, whatever its safety state says. `BB.Safety.arm/1` returns `{:error, :topology_not_running}`, both directly and through an `arm`-flagged command.
+
 Subscribers to `[:safety, :error]` can implement custom monitoring or alerting without affecting the escalation path.
 
 ## The Safety Hierarchy
@@ -312,6 +330,8 @@ Always design physical systems assuming software may not execute cleanup.
 | Are robots disarmed on shutdown? | Yes, best-effort during controller terminate |
 | What happens when a hardware error is reported? | Event is published to `[:safety, :error]`; no state change. Components escalate by crashing. |
 | How is the robot force-disarmed on persistent failure? | When the topology supervisor exhausts its restart budget and stops, the safety controller force-disarms and transitions to `:error`. |
+| How do I recover after the topology supervisor stops? | Call `force_disarm/1`; it acknowledges the fault and restarts the topology. |
+| Can I arm a robot whose topology supervisor isn't running? | No, arming returns `{:error, :topology_not_running}` |
 | How do I tune how much failure the robot tolerates? | Set `topology_max_restarts` and `topology_max_seconds` in settings. |
 
 ## Related Documentation

@@ -78,5 +78,13 @@ when things have already gone wrong, possibly after the process has crashed.
 Disarm callbacks run concurrently with a 5-second timeout; a failure moves the
 robot to `:error`, which needs `BB.Safety.force_disarm/1` to clear.
 
+When the topology supervisor exhausts its restart budget it stops and the robot
+latches `:error`. `BB.Safety.force_disarm/1` is the whole recovery: it resets
+the robot to `:disarmed` and restarts the topology. Don't call
+`Supervisor.restart_child/2` yourself. If the topology can't start, the robot
+returns to `:error` and you get `{:error, {:topology_restart_failed, reason}}`.
+A robot whose topology isn't running can't be armed:
+`{:error, :topology_not_running}`.
+
 See [Commands and State Machine](https://hexdocs.pm/bb/05-commands.html) and
 [Understanding Safety](https://hexdocs.pm/bb/understanding-safety.html).

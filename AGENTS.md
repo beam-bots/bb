@@ -134,7 +134,7 @@ Key points:
 - `disarm/1` is called with the opts given at registration and must work without GenServer state (process may have crashed)
 - Safety states: `:disarmed` → `:armed` → `:disarming` → `:disarmed` (or `:error` on failure)
 - Disarm callbacks run concurrently with 5 second timeout
-- The `:error` state means hardware may not be safe - requires `force_disarm/1` to recover
+- The `:error` state means hardware may not be safe - requires `force_disarm/1` to recover, which also restarts a stopped topology supervisor
 
 ### Structured Errors
 
