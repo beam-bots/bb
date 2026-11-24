@@ -53,10 +53,13 @@ defmodule BB.Supervisor do
 
   Stopping instead leaves the root standing, so the robot stays registered and
   the `:error` the safety controller latches on the way down survives to be read.
-  The arm is gone; the robot still knows it had one. Recovery is deliberate —
-  `Supervisor.restart_child(robot_module, BB.TopologySupervisor)` once the
-  operator has acknowledged the fault, which is also what re-arms the monitor for
-  next time.
+  The arm is gone; the robot still knows it had one. Recovery is deliberate: once
+  the operator has checked the hardware, `BB.Safety.force_disarm/1` acknowledges
+  the fault and starts the topology supervisor again, which also re-arms the
+  monitor for next time. If the hardware is still missing and the topology cannot
+  start, the robot goes back to `:error` and `force_disarm/1` returns the reason.
+  Until the topology is running again the robot cannot be armed —
+  `BB.Safety.arm/1` returns `{:error, :topology_not_running}`.
   """
 
   alias BB.Dsl.Info

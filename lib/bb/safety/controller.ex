@@ -207,8 +207,15 @@ defmodule BB.Safety.Controller do
 
   Goes through GenServer to ensure proper state transitions and event publishing.
   Cannot arm if robot is in `:error` state - must call `force_disarm/1` first.
+
+  Cannot arm while the robot's `BB.TopologySupervisor` is not running, whatever
+  the safety state says - there would be no sensors, controllers or actuators
+  behind it. Returns `{:error, :topology_not_running}` in that case.
   """
-  @spec arm(module()) :: :ok | {:error, :already_armed | :in_error | :not_registered}
+  @spec arm(module()) ::
+          :ok
+          | {:error,
+             :already_armed | :disarming | :in_error | :not_registered | :topology_not_running}
   def arm(robot_module), do: GenServer.call(__MODULE__, {:arm, robot_module})
 
   @doc """
@@ -239,15 +246,27 @@ defmodule BB.Safety.Controller do
   @doc """
   Force disarm from error state.
 
-  Use this function to acknowledge a failed disarm operation and reset the
-  robot to `:disarmed` state. This should only be called after manually
+  Use this function to acknowledge the fault that put the robot in `:error`
+  and reset it to `:disarmed` state. This should only be called after manually
   verifying that hardware is in a safe state.
+
+  If the robot's `BB.TopologySupervisor` has stopped - because its restart
+  budget was exhausted - it is restarted once the robot is `:disarmed`, so a
+  single call brings the robot back. A topology that is still running is left
+  alone. If the restart fails (for example the hardware is still missing), the
+  robot is put back in `:error` and `{:error, {:topology_restart_failed,
+  reason}}` is returned.
 
   **WARNING**: This bypasses safety checks. Only use when you have manually
   verified that all actuators are disabled and the robot is safe.
   """
-  @spec force_disarm(module()) :: :ok | {:error, :not_in_error | :not_registered}
-  def force_disarm(robot_module), do: GenServer.call(__MODULE__, {:force_disarm, robot_module})
+  @spec force_disarm(module()) ::
+          :ok | {:error, :not_in_error | :not_registered | {:topology_restart_failed, term()}}
+  def force_disarm(robot_module) do
+    with :ok <- GenServer.call(__MODULE__, {:force_disarm, robot_module}) do
+      ensure_topology_running(robot_module)
+    end
+  end
 
   @doc """
   Transition the robot to `:error` state.
@@ -332,9 +351,7 @@ defmodule BB.Safety.Controller do
   def handle_call({:arm, robot_module}, _from, state) do
     case :ets.lookup(@robots_table, robot_module) do
       [{^robot_module, :disarmed, ref, _}] ->
-        :ets.insert(@robots_table, {robot_module, :armed, ref, allocate_epoch()})
-        publish_transition(robot_module, :disarmed, :armed)
-        {:reply, :ok, state}
+        {:reply, arm_disarmed(robot_module, ref, state), state}
 
       [{^robot_module, :armed, _, _}] ->
         {:reply, {:error, :already_armed}, state}
@@ -427,6 +444,27 @@ defmodule BB.Safety.Controller do
 
       [] ->
         {:reply, {:error, :not_registered}, state}
+    end
+  end
+
+  def handle_call({:topology_restart_failed, robot_module, reason}, _from, state) do
+    case :ets.lookup(@robots_table, robot_module) do
+      [{^robot_module, :error, _, _}] ->
+        # The failed topology's :DOWN got here first and has already latched it.
+        {:reply, :ok, state}
+
+      [{^robot_module, current, ref, _}] ->
+        Logger.critical(
+          "Restarting the topology supervisor for #{inspect(robot_module)} failed - " <>
+            "returning to :error: #{inspect(reason)}"
+        )
+
+        :ets.insert(@robots_table, {robot_module, :error, ref, nil})
+        publish_transition(robot_module, current, :error)
+        {:reply, :ok, state}
+
+      [] ->
+        {:reply, :ok, state}
     end
   end
 
@@ -555,6 +593,45 @@ defmodule BB.Safety.Controller do
   # deregistered and came back, nor reused across a controller restart.
   @spec allocate_epoch() :: epoch()
   defp allocate_epoch, do: System.unique_integer([:monotonic, :positive])
+
+  defp arm_disarmed(robot_module, ref, state) do
+    if topology_running?(robot_module, state) do
+      :ets.insert(@robots_table, {robot_module, :armed, ref, allocate_epoch()})
+      publish_transition(robot_module, :disarmed, :armed)
+      :ok
+    else
+      {:error, :topology_not_running}
+    end
+  end
+
+  defp topology_running?(robot_module, state) do
+    robot_module in Map.values(state.topology_monitors)
+  end
+
+  # Runs in the caller of `force_disarm/1`, never in the controller:
+  # `BB.TopologySupervisor.init/1` calls `register_topology_supervisor/1`, so
+  # restarting it from inside a `handle_call` would deadlock.
+  defp ensure_topology_running(robot_module) do
+    case Supervisor.restart_child(robot_module, BB.TopologySupervisor) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, :running} ->
+        :ok
+
+      {:error, reason} ->
+        :ok = GenServer.call(__MODULE__, {:topology_restart_failed, robot_module, reason})
+        {:error, {:topology_restart_failed, reason}}
+    end
+  catch
+    # The root supervisor has gone or is shutting down, taking the robot's
+    # registration with it.
+    :exit, {reason, _call} when reason in [:noproc, :normal, :shutdown] ->
+      {:error, :not_registered}
+
+    :exit, {{:shutdown, _}, _call} ->
+      {:error, :not_registered}
+  end
 
   defp disarm_all_handlers(robot_module, timeout) do
     # Bag table: each row is {robot_module, module, path, opts, pid}

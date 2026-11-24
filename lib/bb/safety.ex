@@ -23,6 +23,17 @@ defmodule BB.Safety do
   Disarm callbacks run concurrently with a timeout. If any callback fails or times out,
   the robot transitions to `:error` state.
 
+  ## Recovering from Hardware Failure
+
+  When the robot's `BB.TopologySupervisor` exhausts its restart budget it stops,
+  and the robot is disarmed and latched in `:error`. `force_disarm/1` is the
+  whole recovery: it resets the robot to `:disarmed` and starts the topology
+  supervisor again. If the topology cannot start, the robot goes back to
+  `:error`.
+
+  A robot whose topology supervisor is not running cannot be armed, whatever its
+  safety state: `arm/1` returns `{:error, :topology_not_running}`.
+
   ## Implementing Disarm Callbacks
 
   Controllers and actuators implement the `disarm/1` callback via their behaviours:
@@ -142,9 +153,11 @@ defmodule BB.Safety do
   safety controller's direct state-flip behaviour — the historical default.
 
   Cannot arm if the robot is in `:error` state; call `force_disarm/1` first.
+  Cannot arm while the robot's topology supervisor is not running, whichever
+  path is taken.
 
   Returns `:ok` or `{:error, :already_armed | :in_error | :not_registered |
-  term()}`. When routed through a command, the error reason is whatever the
+  :topology_not_running | term()}`. When routed through a command, the error reason is whatever the
   command returned (typically a `BB.Error.State` exception or a
   `:command_failed` tuple).
   """
@@ -260,14 +273,22 @@ defmodule BB.Safety do
   @doc """
   Force disarm from error state.
 
-  Use this function to acknowledge a failed disarm operation and reset the
-  robot to `:disarmed` state. This should only be called after manually
-  verifying that hardware is in a safe state.
+  Use this function to acknowledge the fault that put the robot in `:error` —
+  a failed disarm, or a topology supervisor that gave up — and reset the robot
+  to `:disarmed` state. This should only be called after manually verifying
+  that hardware is in a safe state.
+
+  If the robot's topology supervisor has stopped, it is started again, so a
+  single call brings the robot back. A topology that is still running (after a
+  failed disarm callback, say) is left alone. If the restart fails because the
+  hardware is still missing, the robot goes back to `:error` and
+  `{:error, {:topology_restart_failed, reason}}` is returned.
 
   **WARNING**: This bypasses safety checks. Only use when you have manually
   verified that all actuators are disabled and the robot is safe.
 
-  Returns `:ok` or `{:error, :not_in_error | :not_registered}`.
+  Returns `:ok` or `{:error, :not_in_error | :not_registered |
+  {:topology_restart_failed, term()}}`.
   """
   defdelegate force_disarm(robot_module), to: BB.Safety.Controller
 
