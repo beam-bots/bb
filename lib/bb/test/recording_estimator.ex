@@ -4,7 +4,8 @@
 
 defmodule BB.Test.RecordingEstimator do
   @moduledoc """
-  Estimator that forwards every input it is given to a test process.
+  Test double: an estimator that forwards every input it is given to a test
+  process.
 
   Before starting the robot, put the recipient pid into persistent term:
 

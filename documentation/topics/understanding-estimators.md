@@ -137,11 +137,13 @@ If the command's `allowed_states` rejects the dispatch (e.g. `on_lost` tries to 
 
 ## Where estimators sit in supervision
 
-Sensor-nested estimators are started by the same supervisor as the parent sensor — the link supervisor (for link-attached sensors), the joint supervisor (for joint-attached sensors), or the robot-level sensor supervisor (for `sensors do … end` declarations). They appear as siblings to the parent sensor in the supervision tree, not as children.
+A sensor with nested estimators gets a small supervisor of its own, `BB.SensorEstimatorSupervisor`, which starts the sensor first and its estimators after it, with strategy `:rest_for_one`. That supervisor takes the sensor's place under the link supervisor (for link-attached sensors), the joint supervisor (for joint-attached sensors), or the robot-level sensor supervisor (for `sensors do … end` declarations). A sensor without nested estimators stays a direct child of that supervisor.
+
+When the sensor crashes, its estimators are stopped and started again after it, so each one subscribes to what the new sensor provides. That matters for a sensor whose readings don't travel over `BB.PubSub` - a camera, whose frames come from a hub that dies with it - and it applies to every sensor-nested estimator alike: an IMU crashing restarts the filter nested inside it, which starts again from its initial state.
 
 Link-nested estimators are started by the link supervisor.
 
-This means an estimator crash isolates the same way a sensor crash isolates: the supervisor restarts it, the rest of the robot keeps running. An estimator whose algorithm encounters something pathological (NaN in the input, for example) can `{:stop, reason, state}` and OTP will bring it back to a clean initial state.
+An estimator crash isolates the same way a sensor crash isolates: the supervisor restarts it, the rest of the robot keeps running. An estimator crashing does not restart its sensor. An estimator whose algorithm encounters something pathological (NaN in the input, for example) can `{:stop, reason, state}` and OTP will bring it back to a clean initial state.
 
 ## What estimators are not
 

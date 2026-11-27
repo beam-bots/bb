@@ -29,6 +29,8 @@ defmodule BB.Dsl.Info do
           registry_options: keyword,
           supervisor_module: module,
           parameter_store: module | {module, keyword} | nil,
+          sensor_max_restarts: non_neg_integer,
+          sensor_max_seconds: pos_integer,
           topology_max_restarts: non_neg_integer,
           topology_max_seconds: pos_integer
         }
@@ -43,6 +45,8 @@ defmodule BB.Dsl.Info do
       supervisor_module:
         Extension.get_opt(robot_module, [:settings], :supervisor_module, Supervisor),
       parameter_store: Extension.get_opt(robot_module, [:settings], :parameter_store),
+      sensor_max_restarts: Extension.get_opt(robot_module, [:settings], :sensor_max_restarts, 3),
+      sensor_max_seconds: Extension.get_opt(robot_module, [:settings], :sensor_max_seconds, 5),
       topology_max_restarts:
         Extension.get_opt(robot_module, [:settings], :topology_max_restarts, 3),
       topology_max_seconds: Extension.get_opt(robot_module, [:settings], :topology_max_seconds, 5)

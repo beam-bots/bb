@@ -8,13 +8,14 @@ defmodule BB.SensorSupervisor do
 
   Groups all sensors defined in the `sensors` section under a single
   supervisor for fault isolation. A flapping sensor won't exhaust
-  the root supervisor's restart budget.
+  the root supervisor's restart budget. A sensor with nested estimators sits
+  under its own `BB.SensorEstimatorSupervisor`.
   """
 
   use Supervisor
 
   alias BB.Dsl.Info
-  alias BB.Estimator.Wiring
+  alias BB.SensorEstimatorSupervisor
 
   def start_link({robot_module, opts}) do
     Supervisor.start_link(__MODULE__, {robot_module, opts},
@@ -24,28 +25,11 @@ defmodule BB.SensorSupervisor do
 
   @impl true
   def init({robot_module, opts}) do
-    sensors = Info.sensors(robot_module)
+    children =
+      robot_module
+      |> Info.sensors()
+      |> Enum.map(&SensorEstimatorSupervisor.child_spec_for(robot_module, &1, [], opts))
 
-    sensor_children =
-      Enum.map(sensors, fn sensor ->
-        BB.Process.child_spec(robot_module, sensor.name, sensor.child_spec, [], :sensor, opts)
-      end)
-
-    estimator_children =
-      Enum.flat_map(sensors, fn sensor ->
-        sensor_path = [:sensor, sensor.name]
-
-        Enum.map(sensor.estimators, fn estimator ->
-          Wiring.sensor_nested_child_spec(
-            robot_module,
-            estimator,
-            sensor_path,
-            sensor.child_spec,
-            opts
-          )
-        end)
-      end)
-
-    Supervisor.init(sensor_children ++ estimator_children, strategy: :one_for_one)
+    Supervisor.init(children, strategy: :one_for_one)
   end
 end

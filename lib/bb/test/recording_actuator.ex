@@ -4,7 +4,8 @@
 
 defmodule BB.Test.RecordingActuator do
   @moduledoc """
-  Actuator that forwards every received command message to a test process.
+  Test double: an actuator that forwards every received command message to a
+  test process.
 
   Before starting the robot, put the recipient pid into persistent term:
 

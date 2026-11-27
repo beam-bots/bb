@@ -4,10 +4,12 @@
 
 defmodule BB.Test.MockSolver do
   @moduledoc """
-  Mock IK solver for testing BB.Motion without real IK computations.
+  Test double: an IK solver that returns whatever the test told it to, for
+  testing `BB.Motion` without real IK computations.
 
-  Configure behaviour via process dictionary:
-  - `:mock_solver_result` - the result to return from solve/6
+  The result and the last call are kept in the calling process's dictionary,
+  so set the result from the process that will call `solve/6`. Without one it
+  reports success with no joint positions.
 
   ## Examples
 

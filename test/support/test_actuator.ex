@@ -2,34 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule BB.Test.MockActuator do
-  @moduledoc """
-  Minimal mock actuator for testing.
+# Actuator modules named for the DSL tests that declare them. Like
+# `BB.Test.MockActuator`, each claims `:position_feedback`, so a fixture whose
+# subject isn't position feedback doesn't trip
+# `BB.Dsl.Verifiers.ValidatePositionFeedback`.
 
-  Every double in this file claims `:position_feedback`, standing in for a
-  smart servo that reads its own position back. Fixtures whose subject isn't
-  position feedback then don't trip
-  `BB.Dsl.Verifiers.ValidatePositionFeedback` for a sensor they have no use
-  for.
-  """
-  use BB.Actuator, options_schema: []
-
-  @impl BB.Actuator
-  def disarm(_opts), do: :ok
-
-  @impl BB.Actuator
-  def capabilities(_opts), do: [:position_feedback]
-
-  @impl BB.Actuator
-  def init(opts) do
-    {:ok, %{opts: opts}}
-  end
-
-  @impl BB.Actuator
-  def handle_command(_message, state), do: {:noreply, state}
-end
-
-# Aliases for various test module names
 defmodule ServoMotor do
   @moduledoc false
   use BB.Actuator,

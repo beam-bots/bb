@@ -4,7 +4,12 @@
 
 defmodule BB.Test.MockBridge do
   @moduledoc """
-  Minimal mock bridge for testing.
+  Test double: a bridge that accepts every parameter change and every call or
+  cast, and does nothing with them.
+
+  For a robot fixture that needs a bridge declared without the test being
+  about what it bridges to. For one that records what it was asked, see
+  `BB.Test.ParameterBridge`.
   """
   use BB.Bridge, options_schema: []
 

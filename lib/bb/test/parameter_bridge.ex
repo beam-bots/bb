@@ -4,9 +4,14 @@
 
 defmodule BB.Test.ParameterBridge do
   @moduledoc """
-  Reference implementation of `BB.Bridge` for testing.
+  Test double: a parameter bridge that records every call made to it and
+  serves a set of fake remote parameters the test controls.
 
-  Records all calls for test assertions and provides controllable responses.
+  It stands in for both ends of a bridge. Inbound, its client functions play
+  the remote system asking the robot for parameters. Outbound, it forwards
+  each parameter change to a registered test process, and publishes a
+  `BB.Test.ParameterBridge.RemoteParamValue` at `[:test_bridge, param]` when
+  a subscribed remote parameter changes.
 
   ## Usage
 
@@ -29,7 +34,10 @@ defmodule BB.Test.ParameterBridge do
   use BB.Bridge
 
   defmodule RemoteParamValue do
-    @moduledoc false
+    @moduledoc """
+    The payload `BB.Test.ParameterBridge` publishes when a remote parameter
+    it was asked to subscribe to changes.
+    """
     defstruct [:value]
   end
 

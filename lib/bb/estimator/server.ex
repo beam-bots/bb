@@ -32,9 +32,14 @@ defmodule BB.Estimator.Server do
     driver arrives, since they can age past their budget while they wait.
     This is independent of `latency_budget`, which measures callback
     execution time.
-  - Stops with `{:shutdown, {:source_ended, input_name, reason}}` when a
-    source reports it will deliver nothing more, so the supervisor starts
-    it again with a fresh subscription.
+  - Transitions to `:lost` with reason `:source_failed` when a source
+    reports that what feeds it has failed, and asks it again, so inputs
+    resuming recover the estimator as they would after `lost_after`.
+  - Transitions to `:lost` with reason `:source_ended` when a source
+    reports it will deliver nothing more, and stops asking it. The server
+    doesn't stop itself: a sensor-nested estimator is restarted with its
+    sensor by `BB.SensorEstimatorSupervisor`, against the new sensor's
+    source.
   - For multi-input estimators, enforces `sync_tolerance`: if any
     non-driver input is stale relative to the driver by more than the
     configured tolerance, the dispatch is dropped (with
@@ -341,8 +346,16 @@ defmodule BB.Estimator.Server do
     {:noreply, state}
   end
 
-  defp handle_source_event(state, source, {:ended, reason}) do
-    {:stop, {:shutdown, {:source_ended, source.name, reason}}, state}
+  defp handle_source_event(state, source, {:failed, _reason}) do
+    request_input(source)
+    {:noreply, transition_to(state, :lost, :source_failed, source.path)}
+  end
+
+  # The source can't be asked for anything more. A sensor-nested estimator is
+  # restarted with its sensor, which is what brings a new source into being,
+  # so stopping here would only race that restart.
+  defp handle_source_event(state, source, {:ended, _reason}) do
+    {:noreply, transition_to(state, :lost, :source_ended, source.path)}
   end
 
   defp request_input(source), do: source.module.request(source.state)

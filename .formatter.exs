@@ -114,6 +114,8 @@ spark_locals_without_parens = [
   scale: 1,
   sensor: 2,
   sensor: 3,
+  sensor_max_restarts: 1,
+  sensor_max_seconds: 1,
   simulation: 1,
   sphere: 0,
   sphere: 1,

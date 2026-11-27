@@ -999,6 +999,19 @@ defmodule BB.Dsl do
         doc: "Time window (in seconds) over which `topology_max_restarts` is counted.",
         required: false,
         default: 5
+      ],
+      sensor_max_restarts: [
+        type: :non_neg_integer,
+        doc:
+          "Maximum restarts allowed in the supervisor grouping a sensor with its nested estimators before it gives up and the failure escalates to the sensor's link, joint or robot-level supervisor. Sensors without nested estimators have no such supervisor.",
+        required: false,
+        default: 3
+      ],
+      sensor_max_seconds: [
+        type: :pos_integer,
+        doc: "Time window (in seconds) over which `sensor_max_restarts` is counted.",
+        required: false,
+        default: 5
       ]
     ]
   }

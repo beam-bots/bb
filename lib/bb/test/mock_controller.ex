@@ -4,7 +4,11 @@
 
 defmodule BB.Test.MockController do
   @moduledoc """
-  Minimal mock controller for testing.
+  Test double: a controller that answers every call with `:ok`, ignores every
+  cast, and drives nothing.
+
+  For a robot fixture that needs a controller declared without the test being
+  about what it controls.
   """
   use BB.Controller, options_schema: []
 

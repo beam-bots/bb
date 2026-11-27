@@ -27,6 +27,9 @@ defmodule BB.Supervisor do
       │   └── Controller1, Controller2...
       └── BB.LinkSupervisor(:base_link, :one_for_one)
           ├── LinkSensor (link sensors)
+          ├── BB.SensorEstimatorSupervisor(:imu, :rest_for_one)
+          │   ├── ImuSensor (a sensor with nested estimators)
+          │   └── ImuEstimator
           └── BB.JointSupervisor(:shoulder, :one_for_one)
               ├── JointSensor
               ├── JointActuator

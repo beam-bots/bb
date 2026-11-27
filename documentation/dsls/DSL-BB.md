@@ -1358,6 +1358,8 @@ System-wide settings
 | [`parameter_store`](#settings-parameter_store){: #settings-parameter_store } | `module \| {module, keyword}` |  | Optional parameter persistence backend. Use a module or `{Module, opts}` tuple. |
 | [`topology_max_restarts`](#settings-topology_max_restarts){: #settings-topology_max_restarts } | `non_neg_integer` | `3` | Maximum restarts allowed in the topology supervisor before it gives up and the robot force-disarms. |
 | [`topology_max_seconds`](#settings-topology_max_seconds){: #settings-topology_max_seconds } | `pos_integer` | `5` | Time window (in seconds) over which `topology_max_restarts` is counted. |
+| [`sensor_max_restarts`](#settings-sensor_max_restarts){: #settings-sensor_max_restarts } | `non_neg_integer` | `3` | Maximum restarts allowed in the supervisor grouping a sensor with its nested estimators before it gives up and the failure escalates to the sensor's link, joint or robot-level supervisor. Sensors without nested estimators have no such supervisor. |
+| [`sensor_max_seconds`](#settings-sensor_max_seconds){: #settings-sensor_max_seconds } | `pos_integer` | `5` | Time window (in seconds) over which `sensor_max_restarts` is counted. |
 
 
 

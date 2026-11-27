@@ -127,6 +127,8 @@ end
 
 Robot-level sensors and controllers are grouped under their own subsystem supervisors (`SensorSupervisor`, `ControllerSupervisor`) which sit under the topology supervisor alongside the link tree.
 
+A sensor with estimators nested inside it - at robot level or in the topology - is wrapped in a `SensorEstimatorSupervisor` with strategy `:rest_for_one`, the sensor first, so a sensor crash restarts its estimators after it. See [Understanding Estimators](understanding-estimators.md#where-estimators-sit-in-supervision).
+
 ## The Runtime Process
 
 `BB.Robot.Runtime` is special - it's the coordinator for the entire robot:

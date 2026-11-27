@@ -7,12 +7,15 @@ defmodule BB.LinkSupervisor do
   Supervisor for a link and its joints.
 
   Supervises:
-  - Link sensors
+  - Link sensors, each under a `BB.SensorEstimatorSupervisor` if it has
+    nested estimators
+  - Link-nested estimators
   - Joint supervisors for each joint attached to this link
   """
 
   alias BB.Dsl.Info
   alias BB.Estimator.Wiring
+  alias BB.SensorEstimatorSupervisor
 
   @doc """
   Starts the link supervisor.
@@ -48,29 +51,7 @@ defmodule BB.LinkSupervisor do
 
     sensor_children =
       Enum.map(link.sensors, fn sensor ->
-        BB.Process.child_spec(
-          robot_module,
-          sensor.name,
-          sensor.child_spec,
-          link_path,
-          :sensor,
-          opts
-        )
-      end)
-
-    sensor_estimator_children =
-      Enum.flat_map(link.sensors, fn sensor ->
-        sensor_path = [:sensor | link_path ++ [sensor.name]]
-
-        Enum.map(sensor.estimators, fn estimator ->
-          Wiring.sensor_nested_child_spec(
-            robot_module,
-            estimator,
-            sensor_path,
-            sensor.child_spec,
-            opts
-          )
-        end)
+        SensorEstimatorSupervisor.child_spec_for(robot_module, sensor, link_path, opts)
       end)
 
     estimator_children =
@@ -83,6 +64,6 @@ defmodule BB.LinkSupervisor do
         {BB.JointSupervisor, {robot_module, joint, link_path, opts}}
       end)
 
-    sensor_children ++ sensor_estimator_children ++ estimator_children ++ joint_children
+    sensor_children ++ estimator_children ++ joint_children
   end
 end

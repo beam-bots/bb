@@ -3,7 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule BB.Test.Commands do
-  @moduledoc false
+  @moduledoc """
+  Test helpers for delivering hand-built actuator commands.
+
+  `BB.Actuator`'s send functions stamp a command with the arm epoch and wrap
+  it in the transport's message shape. A test that exercises an actuator
+  directly - bypassing those functions - uses these to do the same.
+  """
 
   alias BB.Message
   alias BB.Safety

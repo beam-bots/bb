@@ -7,7 +7,7 @@ defmodule BB.Estimator.Wiring do
   Builds the supervisor `child_spec` for an `estimator` DSL entity.
 
   Used by `BB.LinkSupervisor` for link-nested estimators and by
-  `BB.Sensor.Server` for sensor-nested estimators. Centralises:
+  `BB.SensorEstimatorSupervisor` for sensor-nested estimators. Centralises:
 
   - Output-path resolution (auto-derived `:out` plus explicit `output`
     overrides).

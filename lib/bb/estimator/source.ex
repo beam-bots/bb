@@ -19,7 +19,8 @@ defmodule BB.Estimator.Source do
   estimator more than it has asked for. A source that can't be paced, such as
   PubSub, makes `c:request/1` a no-op.
 
-  The server requests again only for an input or a `:spent` event, so a source
+  The server requests again only for an input, a `:spent` event or a
+  `{:failed, reason}` event, so a source
   must tell the message that answers a request from one that merely
   accompanies it. Requesting on a message that arrives alongside an input -
   ahead of it in the mailbox - would leave a second request outstanding by the
@@ -43,14 +44,25 @@ defmodule BB.Estimator.Source do
   - `:spent` - the source's own message, which answered the outstanding
     request without an input - a stream pausing, say. The server requests
     again.
-  - `{:ended, reason}` - the source will deliver nothing more. The server
-    stops, and its supervisor starts it again with a fresh subscription.
+  - `{:failed, reason}` - the source's own message, which answered the
+    outstanding request with the news that whatever produces its inputs has
+    failed - a camera whose capture broke, say. Unlike `:spent`, nothing is
+    expected to follow soon. The server transitions the estimator to `:lost`
+    with reason `:source_failed`, firing `on_lost`, and requests again, so
+    inputs resuming recover it the way they would after `lost_after`.
+  - `{:ended, reason}` - the source will deliver nothing more; its
+    subscription is dead. The server transitions the estimator to `:lost`
+    with reason `:source_ended` and stops requesting, but doesn't stop
+    itself. A source ends because its sensor has gone, and
+    `BB.SensorEstimatorSupervisor` restarts a sensor's estimators after the
+    sensor, so each subscribes afresh to whatever the new sensor provides.
   - `nil` - not this source's message.
   """
   @type event ::
           {:input, input :: term(), monotonic_time :: integer(), node()}
           | :no_input
           | :spent
+          | {:failed, reason :: term()}
           | {:ended, reason :: term()}
           | nil
 

@@ -7,13 +7,14 @@ defmodule BB.JointSupervisor do
   Supervisor for a joint and its child link.
 
   Supervises:
-  - Joint sensors
+  - Joint sensors, each under a `BB.SensorEstimatorSupervisor` if it has
+    nested estimators
   - Joint actuators
   - Child link supervisor (if joint has a child link)
   """
 
   alias BB.Dsl.Info
-  alias BB.Estimator.Wiring
+  alias BB.SensorEstimatorSupervisor
 
   @doc """
   Starts the joint supervisor.
@@ -50,29 +51,7 @@ defmodule BB.JointSupervisor do
 
     sensor_children =
       Enum.map(joint.sensors, fn sensor ->
-        BB.Process.child_spec(
-          robot_module,
-          sensor.name,
-          sensor.child_spec,
-          joint_path,
-          :sensor,
-          opts
-        )
-      end)
-
-    sensor_estimator_children =
-      Enum.flat_map(joint.sensors, fn sensor ->
-        sensor_path = [:sensor | joint_path ++ [sensor.name]]
-
-        Enum.map(sensor.estimators, fn estimator ->
-          Wiring.sensor_nested_child_spec(
-            robot_module,
-            estimator,
-            sensor_path,
-            sensor.child_spec,
-            opts
-          )
-        end)
+        SensorEstimatorSupervisor.child_spec_for(robot_module, sensor, joint_path, opts)
       end)
 
     actuator_children =
@@ -101,8 +80,7 @@ defmodule BB.JointSupervisor do
         []
       end
 
-    sensor_children ++
-      sensor_estimator_children ++ auto_position_estimators ++ actuator_children ++ link_child
+    sensor_children ++ auto_position_estimators ++ actuator_children ++ link_child
   end
 
   defp build_auto_position_estimators(robot_module, joint, joint_path, opts) do

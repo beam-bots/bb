@@ -3,7 +3,24 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule BB.Test.FailingActuator do
-  @moduledoc false
+  @moduledoc """
+  Test double: an actuator whose `disarm/1` fails in a chosen way.
+
+  It registers with `BB.Safety` at init, and `fail_mode:` picks what its
+  `disarm/1` does:
+
+  - `:error` - returns `{:error, :hardware_failure}`.
+  - `:raise` - raises.
+  - `:throw` - throws `:hardware_timeout`.
+  - `:hang` - never returns.
+  - `:gated` - sends `{:disarming, pid}` to the process stored under
+    `{BB.Test.FailingActuator, robot}` in `:persistent_term`, then waits for
+    that process to send `pid` `:release` before succeeding. A test can then
+    hold a disarm open without guessing how long it takes.
+  - anything else, or nothing - succeeds.
+
+  Commands are accepted and ignored.
+  """
   use BB.Actuator, options_schema: [fail_mode: [type: :atom, required: false]]
 
   @impl BB.Actuator
@@ -37,8 +54,6 @@ defmodule BB.Test.FailingActuator do
   @impl BB.Actuator
   def handle_command(_message, state), do: {:noreply, state}
 
-  # Holds the disarm callback open until the test process registered under
-  # `{BB.Test.FailingActuator, robot}` in `:persistent_term` sends `:release`.
   defp await_release(robot) do
     send(:persistent_term.get({__MODULE__, robot}), {:disarming, self()})
 
