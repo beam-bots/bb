@@ -560,7 +560,7 @@ defmodule BB.EstimatorTest do
         PerInputFreshnessRobot
         |> BB.Process.whereis(:pose)
         |> :sys.replace_state(fn state ->
-          update_in(state.last_messages.odom.monotonic_time, &(&1 - 40_000_000))
+          update_in(state.last_inputs.odom.monotonic_time, &(&1 - 40_000_000))
         end)
 
         refute_received {:dropped, %{source_input: :odom}}

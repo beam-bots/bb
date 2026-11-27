@@ -29,6 +29,8 @@ defmodule BB.Sensor do
   ### Optional Callbacks
 
   - `disarm/1` - Make hardware safe (only for sensors with active hardware)
+  - `estimator_source/0` - Where nested estimators take their inputs from,
+    for a sensor that doesn't publish its readings on `BB.PubSub`
   - `handle_options/2` - React to parameter changes at runtime
   - `handle_call/3`, `handle_cast/2`, `handle_info/2` - Standard GenServer-style callbacks
   - `handle_continue/2`, `terminate/2` - Lifecycle callbacks
@@ -199,8 +201,19 @@ defmodule BB.Sensor do
   """
   @callback options_schema() :: Spark.Options.t()
 
+  @doc """
+  Where estimators nested inside this sensor take their inputs from.
+
+  Return a `BB.Estimator.Source` module, or `{module, args}` to have `args`
+  passed to its `c:BB.Estimator.Source.subscribe/3`. A sensor that doesn't
+  define this publishes its readings on `BB.PubSub`, and its estimators
+  receive them through `BB.Estimator.Source.PubSub`.
+  """
+  @callback estimator_source() :: module() | {module(), keyword()}
+
   @optional_callbacks [
     disarm: 1,
+    estimator_source: 0,
     handle_options: 2,
     handle_call: 3,
     handle_cast: 2,

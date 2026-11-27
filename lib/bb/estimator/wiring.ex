@@ -12,8 +12,9 @@ defmodule BB.Estimator.Wiring do
   - Output-path resolution (auto-derived `:out` plus explicit `output`
     overrides).
   - Input-spec resolution (sensor-nested: synthesised single implicit
-    input pointing at the parent sensor's path; link-nested: passed
-    through from the entity's declared `input` blocks).
+    input pointing at the parent sensor's path, from the source the
+    parent sensor names; link-nested: passed through from the entity's
+    declared `input` blocks, always over `BB.PubSub`).
   - `sync_tolerance` and `max_input_age` unit conversion to nanoseconds,
     resolving each input's `max_input_age` against the estimator-level
     default.
@@ -25,6 +26,7 @@ defmodule BB.Estimator.Wiring do
 
   alias BB.Dsl.Estimator
   alias BB.Estimator.Context
+  alias BB.Estimator.Source.PubSub, as: PubSubSource
   alias BB.Robot.Units
 
   @typedoc "Path components leading to the parent supervisor (link path)."
@@ -61,20 +63,23 @@ defmodule BB.Estimator.Wiring do
   @doc """
   Builds a child spec for a sensor-nested estimator. `parent_sensor_path`
   is the parent sensor's full publish path including the leading
-  `:sensor` atom (e.g. `[:sensor, :base_link, :imu]`).
+  `:sensor` atom (e.g. `[:sensor, :base_link, :imu]`), and
+  `sensor_child_spec` is the parent sensor's `Module` or `{Module, opts}`,
+  which decides where the estimator's inputs come from (see
+  `c:BB.Sensor.estimator_source/0`).
   """
   @spec sensor_nested_child_spec(
           module(),
           Estimator.t(),
           parent_sensor_path(),
-          atom(),
+          module() | {module(), Keyword.t()},
           Keyword.t()
         ) :: map()
   def sensor_nested_child_spec(
         robot_module,
         %Estimator{} = est,
         parent_sensor_path,
-        target_frame,
+        sensor_child_spec,
         opts
       ) do
     full_path = parent_sensor_path ++ [est.name]
@@ -86,7 +91,8 @@ defmodule BB.Estimator.Wiring do
           name: :parent,
           path: parent_sensor_path,
           driver?: true,
-          max_input_age_ns: Units.to_nanoseconds_or_nil(est.max_input_age)
+          max_input_age_ns: Units.to_nanoseconds_or_nil(est.max_input_age),
+          source: estimator_source(sensor_child_spec)
         }
       ],
       sync_tolerance_ns: nil
@@ -98,7 +104,7 @@ defmodule BB.Estimator.Wiring do
     context = %Context{
       robot: robot_module,
       path: full_path,
-      target_frame: target_frame,
+      target_frame: List.last(parent_sensor_path),
       transforms: %{}
     }
 
@@ -118,7 +124,9 @@ defmodule BB.Estimator.Wiring do
           name: input.name,
           path: input.path,
           driver?: input.driver?,
-          max_input_age_ns: Units.to_nanoseconds_or_nil(input.max_input_age) || default_max_age_ns
+          max_input_age_ns:
+            Units.to_nanoseconds_or_nil(input.max_input_age) || default_max_age_ns,
+          source: {PubSubSource, []}
         }
       end)
 
@@ -127,6 +135,17 @@ defmodule BB.Estimator.Wiring do
       inputs: specs,
       sync_tolerance_ns: Units.to_nanoseconds_or_nil(est.sync_tolerance)
     }
+  end
+
+  defp estimator_source(sensor_child_spec) do
+    {sensor_module, _sensor_args} = normalise(sensor_child_spec)
+
+    if Code.ensure_loaded?(sensor_module) and
+         function_exported?(sensor_module, :estimator_source, 0) do
+      normalise(sensor_module.estimator_source())
+    else
+      {PubSubSource, []}
+    end
   end
 
   defp build_outputs(%Estimator{outputs: declared}, full_path) do

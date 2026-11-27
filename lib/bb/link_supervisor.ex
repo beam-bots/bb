@@ -67,7 +67,7 @@ defmodule BB.LinkSupervisor do
             robot_module,
             estimator,
             sensor_path,
-            sensor.name,
+            sensor.child_spec,
             opts
           )
         end)

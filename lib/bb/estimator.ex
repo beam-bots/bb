@@ -82,6 +82,11 @@ defmodule BB.Estimator do
   the `input` declaration name, populated by the framework when the driver
   input arrives.
 
+  A sensor whose readings don't travel over `BB.PubSub` - a camera, say -
+  names a `BB.Estimator.Source` with `c:BB.Sensor.estimator_source/0`, and
+  estimators nested inside it receive whatever that source yields instead of
+  a `%BB.Message{}`.
+
   ### Auto-injected Options
 
   The `:bb` and `:estimator_context` options are auto-injected by the framework
@@ -95,8 +100,12 @@ defmodule BB.Estimator do
   @typedoc "An emitted output: `{output_name, message}`. `:out` is the conventional name for single-output estimators."
   @type output :: {atom(), Message.t()}
 
-  @typedoc "Input delivered to `handle_input/2`. Single-input estimators receive the bare message; multi-input estimators receive a map keyed by input name."
-  @type input :: Message.t() | %{atom() => Message.t()}
+  @typedoc """
+  Input delivered to `handle_input/2`. Single-input estimators receive the
+  bare message, or whatever their parent sensor's `BB.Estimator.Source`
+  yields; multi-input estimators receive a map keyed by input name.
+  """
+  @type input :: Message.t() | %{atom() => Message.t()} | term()
 
   # ----------------------------------------------------------------------------
   # Behaviour
